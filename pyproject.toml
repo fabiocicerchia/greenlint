@@ -1,0 +1,41 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "greenlint"
+version = "0.1.0"
+description = "Static analysis flagging energy-wasteful patterns across languages"
+readme = "README.md"
+license = { text = "Apache-2.0" }
+authors = [{ name = "Fabio Cicerchia" }]
+requires-python = ">=3.10"
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Environment :: Console",
+    "Intended Audience :: Developers",
+    "Intended Audience :: System Administrators",
+    "License :: OSI Approved :: Apache Software License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+]
+dependencies = []
+
+[project.optional-dependencies]
+dev = ["pytest>=8.0", "ruff>=0.4", "build>=1.2"]
+
+[project.urls]
+Homepage = "https://github.com/fabiocicerchia/greenlint"
+Issues = "https://github.com/fabiocicerchia/greenlint/issues"
+Changelog = "https://github.com/fabiocicerchia/greenlint/blob/main/CHANGELOG.md"
+
+[project.scripts]
+greenlint = "greenlint:main"
+
+[tool.setuptools]
+py-modules = ["greenlint"]
+
+[tool.ruff]
+line-length = 100
+# examples/ holds deliberately wasteful sample code for greenlint to flag.
+extend-exclude = ["examples"]

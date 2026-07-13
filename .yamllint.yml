@@ -1,0 +1,12 @@
+---
+extends: default
+
+rules:
+  # Pinned action SHAs plus their "# vN" comment run past 80 columns and
+  # cannot be shortened without dropping either the pin or the readability.
+  line-length:
+    max: 120
+  # GitHub workflow keys ("on:") and configs without "---" are idiomatic.
+  document-start: disable
+  truthy:
+    check-keys: false

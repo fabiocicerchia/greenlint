@@ -1,0 +1,35 @@
+# Secrets / local env
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# Build output
+dist/
+build/
+target/
+*.egg-info/
+
+# Python caches
+__pycache__/
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+coverage/
+*.coverage
+
+# greenlint scan output
+reports/
+
+# Docs site build
+site/
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp
