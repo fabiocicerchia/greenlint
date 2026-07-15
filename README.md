@@ -48,6 +48,16 @@ greenlint .                          # scan the repo
 greenlint --list-rules               # what it knows
 greenlint . --fail-on-findings       # CI gate
 greenlint . --format json            # tooling integration
+greenlint . --config path/to.toml    # override the .greenlint.toml lookup
+```
+
+### Config
+
+Drop a `.greenlint.toml` in the repo root to disable rules or ignore paths:
+
+```toml
+disable = ["GL002", "GL007"]
+ignore = ["vendor/*", "*/node_modules/*"]
 ```
 
 ## Rules
@@ -60,7 +70,7 @@ valuable contribution.
 ## Status & roadmap
 
 - [x] Rule engine, severity ordering, JSON output, CI gate
-- [ ] Per-repo config (`.greenlint.toml`: rule enable/disable, ignores)
+- [x] Per-repo config (`.greenlint.toml`: rule enable/disable, ignores)
 - [ ] AST-based rules for Python/JS (regex has false-positive limits)
 - [ ] Estimated gCO2e annotation per finding class
 - [ ] Pre-commit hook + GitHub annotation output

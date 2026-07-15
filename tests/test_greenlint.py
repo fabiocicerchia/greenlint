@@ -1,4 +1,4 @@
-from greenlint import scan
+from greenlint import load_config, scan
 
 
 def write(tmp_path, name, content):
@@ -33,3 +33,19 @@ def test_findings_sorted_high_first(tmp_path):
     write(tmp_path, "ci.yml", "cron: '* * * * *'\nfetch-depth: 0\n")
     sevs = [f["severity"] for f in scan([str(tmp_path)])]
     assert sevs == sorted(sevs, key=lambda s: {"high": 0, "medium": 1, "low": 2}[s])
+
+
+def test_config_disables_rule(tmp_path):
+    write(tmp_path, "q.sql", "SELECT * FROM users;\n")
+    cfg = write(tmp_path, ".greenlint.toml", 'disable = ["GL005"]\n')
+    assert "GL005" not in rule_ids(scan([str(tmp_path)], load_config(str(cfg))))
+
+
+def test_config_ignores_path(tmp_path):
+    write(tmp_path, "vendor/q.sql", "SELECT * FROM users;\n")
+    cfg = write(tmp_path, ".greenlint.toml", 'ignore = ["*/vendor/*"]\n')
+    assert scan([str(tmp_path)], load_config(str(cfg))) == []
+
+
+def test_missing_config_is_a_noop(tmp_path):
+    assert load_config(str(tmp_path / "nope.toml")) == {"disable": set(), "ignore": []}

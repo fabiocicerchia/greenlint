@@ -11,10 +11,13 @@ and what to do instead.
 """
 
 import argparse
+import fnmatch
 import json
 import re
 import sys
 from pathlib import Path
+
+CONFIG_FILENAME = ".greenlint.toml"
 
 RULES = [
     # id, languages, regex, message, suggestion, severity
@@ -87,6 +90,35 @@ RULES = [
 ]
 
 
+def _parse_simple_toml(text):
+    """Parse the flat subset of TOML greenlint's config needs: `key = "value"`
+    or `key = ["a", "b"]`, one per line, `#` comments. No tables, no nesting.
+    """
+    data = {}
+    for raw in text.splitlines():
+        line = raw.split("#", 1)[0].strip()
+        if not line or "=" not in line:
+            continue
+        key, _, value = line.partition("=")
+        key, value = key.strip(), value.strip()
+        if value.startswith("[") and value.endswith("]"):
+            data[key] = [v.strip().strip("\"'") for v in value[1:-1].split(",") if v.strip()]
+        else:
+            data[key] = value.strip("\"'")
+    return data
+
+
+def load_config(path=None):
+    """Load `.greenlint.toml` (rule disable list + ignore globs). Missing
+    file → no-op config. `path` overrides the default cwd lookup.
+    """
+    cfg_path = Path(path) if path else Path.cwd() / CONFIG_FILENAME
+    if not cfg_path.is_file():
+        return {"disable": set(), "ignore": []}
+    data = _parse_simple_toml(cfg_path.read_text())
+    return {"disable": set(data.get("disable", [])), "ignore": list(data.get("ignore", []))}
+
+
 def applicable(rule, path):
     """Return True if the rule targets the file's language/extension."""
     if path.name == "Dockerfile" and "Dockerfile" in rule["langs"]:
@@ -94,14 +126,14 @@ def applicable(rule, path):
     return path.suffix in rule["langs"]
 
 
-def scan_file(path):
-    """Yield findings for every rule that matches the file's contents."""
+def scan_file(path, disabled=frozenset()):
+    """Yield findings for every enabled rule that matches the file's contents."""
     try:
         text = path.read_text(errors="replace")
     except OSError:
         return
     for rule in RULES:
-        if not applicable(rule, path):
+        if rule["id"] in disabled or not applicable(rule, path):
             continue
         for m in rule["pattern"].finditer(text):
             line = text.count("\n", 0, m.start()) + 1
@@ -115,8 +147,9 @@ def scan_file(path):
             }
 
 
-def scan(paths):
+def scan(paths, config=None):
     """Scan files/directories and return findings sorted by severity."""
+    config = config or {"disable": set(), "ignore": []}
     findings = []
     for root in paths:
         p = Path(root)
@@ -130,7 +163,9 @@ def scan(paths):
             ]
         )
         for f in files:
-            findings.extend(scan_file(f))
+            if any(fnmatch.fnmatch(str(f), pat) for pat in config["ignore"]):
+                continue
+            findings.extend(scan_file(f, config["disable"]))
     order = {"high": 0, "medium": 1, "low": 2}
     findings.sort(key=lambda x: (order[x["severity"]], x["file"], x["line"]))
     return findings
@@ -145,6 +180,7 @@ def main(argv=None):
     p.add_argument("--list-rules", action="store_true")
     p.add_argument("--format", choices=["text", "json"], default="text")
     p.add_argument("--fail-on-findings", action="store_true")
+    p.add_argument("--config", help=f"path to config (default: ./{CONFIG_FILENAME} if present)")
     args = p.parse_args(argv)
 
     if args.list_rules:
@@ -154,7 +190,7 @@ def main(argv=None):
             )
         return 0
 
-    findings = scan(args.paths or ["."])
+    findings = scan(args.paths or ["."], load_config(args.config))
     if args.format == "json":
         json.dump(findings, sys.stdout, indent=2)
     else:
