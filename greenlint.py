@@ -20,6 +20,21 @@ from pathlib import Path
 
 CONFIG_FILENAME = ".greenlint.toml"
 
+# Rough, order-of-magnitude estimates per occurrence — not a measurement, a
+# steer for which findings are worth fixing first. Based on typical marginal
+# grid intensity (~400 gCO2e/kWh) and a plausible instance-hours-affected
+# guess per pattern; wildly workload-dependent, treat as relative not exact.
+CO2E_HINTS = {
+    "GL001": "~10-100s gCO2e/day per idle instance (continuous busy-poll CPU)",
+    "GL002": "~1-10s gCO2e/day per instance (elevated wake-up rate)",
+    "GL003": "~1-5 gCO2e per unnecessary run x 1440 runs/day saved by widening",
+    "GL004": "~1-3 gCO2e per full-history clone avoided",
+    "GL005": "~0.1-1 gCO2e per query x call volume (excess I/O/network)",
+    "GL006": "~5-20 gCO2e per pull avoided (smaller image, less transfer+storage)",
+    "GL007": "~0.01-0.1 gCO2e per call (extra allocation/GC churn)",
+    "GL008": "~100s-1000s gCO2e/day per oversized instance running idle",
+}
+
 RULES = [
     # id, languages, regex, message, suggestion, severity
     {
@@ -120,6 +135,18 @@ def load_config(path=None):
     return {"disable": set(data.get("disable", [])), "ignore": list(data.get("ignore", []))}
 
 
+def _finding(rule, path, line):
+    return {
+        "rule": rule["id"],
+        "severity": rule["severity"],
+        "file": str(path),
+        "line": line,
+        "message": rule["message"],
+        "suggestion": rule["suggestion"],
+        "co2e_estimate": CO2E_HINTS.get(rule["id"], ""),
+    }
+
+
 def _ast_busy_loop_findings(path, text):
     """AST-based replacement for GL001 on Python: the regex version flags
     `while True:` unless "sleep" appears *anywhere* in the file, which both
@@ -145,14 +172,7 @@ def _ast_busy_loop_findings(path, text):
             for n in ast.walk(body_node)
         )
         if not sleeps:
-            yield {
-                "rule": rule["id"],
-                "severity": rule["severity"],
-                "file": str(path),
-                "line": node.lineno,
-                "message": rule["message"],
-                "suggestion": rule["suggestion"],
-            }
+            yield _finding(rule, path, node.lineno)
 
 
 def applicable(rule, path):
@@ -175,14 +195,7 @@ def scan_file(path, disabled=frozenset()):
             continue
         for m in rule["pattern"].finditer(text):
             line = text.count("\n", 0, m.start()) + 1
-            yield {
-                "rule": rule["id"],
-                "severity": rule["severity"],
-                "file": str(path),
-                "line": line,
-                "message": rule["message"],
-                "suggestion": rule["suggestion"],
-            }
+            yield _finding(rule, path, line)
 
 
 def scan(paths, config=None):
@@ -235,6 +248,8 @@ def main(argv=None):
         for f in findings:
             print(f"{f['file']}:{f['line']}: [{f['rule']}/{f['severity']}] {f['message']}")
             print(f"    ↳ {f['suggestion']}")
+            if f["co2e_estimate"]:
+                print(f"    ~ {f['co2e_estimate']}")
         print(f"\ngreenlint: {len(findings)} finding(s)")
     return 1 if findings and args.fail_on_findings else 0
 

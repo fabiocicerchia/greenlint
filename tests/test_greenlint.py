@@ -73,3 +73,9 @@ def test_ast_busy_loop_respects_disable(tmp_path):
     cfg = write(tmp_path, ".greenlint.toml", 'disable = ["GL001"]\n')
     write(tmp_path, "a.py", "while True:\n    check()\n")
     assert "GL001" not in rule_ids(scan([str(tmp_path)], load_config(str(cfg))))
+
+
+def test_findings_carry_a_co2e_estimate(tmp_path):
+    write(tmp_path, "q.sql", "SELECT * FROM users;\n")
+    findings = scan([str(tmp_path)])
+    assert findings[0]["co2e_estimate"]
