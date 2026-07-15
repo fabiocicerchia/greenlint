@@ -1,0 +1,12 @@
+# Lets other repos use greenlint as a pre-commit hook:
+#   - repo: https://github.com/fabiocicerchia/greenlint
+#     rev: <tag>
+#     hooks:
+#       - id: greenlint
+- id: greenlint
+  name: greenlint
+  description: Flag energy-wasteful patterns (busy loops, SELECT *, full-fat base images, ...)
+  entry: greenlint
+  language: python
+  types: [text]
+  args: ["--fail-on-findings"]

@@ -229,7 +229,7 @@ def main(argv=None):
     )
     p.add_argument("paths", nargs="*", default=["."])
     p.add_argument("--list-rules", action="store_true")
-    p.add_argument("--format", choices=["text", "json"], default="text")
+    p.add_argument("--format", choices=["text", "json", "github"], default="text")
     p.add_argument("--fail-on-findings", action="store_true")
     p.add_argument("--config", help=f"path to config (default: ./{CONFIG_FILENAME} if present)")
     args = p.parse_args(argv)
@@ -244,6 +244,14 @@ def main(argv=None):
     findings = scan(args.paths or ["."], load_config(args.config))
     if args.format == "json":
         json.dump(findings, sys.stdout, indent=2)
+    elif args.format == "github":
+        # https://docs.github.com/actions/using-workflows/workflow-commands-for-github-actions#setting-a-notice-message
+        level = {"high": "error", "medium": "warning", "low": "notice"}
+        for f in findings:
+            print(
+                f"::{level[f['severity']]} file={f['file']},line={f['line']},"
+                f"title=greenlint {f['rule']}::{f['message']} — {f['suggestion']}"
+            )
     else:
         for f in findings:
             print(f"{f['file']}:{f['line']}: [{f['rule']}/{f['severity']}] {f['message']}")

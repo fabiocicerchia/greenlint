@@ -73,7 +73,7 @@ valuable contribution.
 - [x] Per-repo config (`.greenlint.toml`: rule enable/disable, ignores)
 - [ ] AST-based rules for Python/JS (regex has false-positive limits)
 - [x] Estimated gCO2e annotation per finding class
-- [ ] Pre-commit hook + GitHub annotation output
+- [x] Pre-commit hook + GitHub annotation output
 
 ## Development
 

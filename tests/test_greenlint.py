@@ -1,4 +1,4 @@
-from greenlint import load_config, scan
+from greenlint import load_config, main, scan
 
 
 def write(tmp_path, name, content):
@@ -79,3 +79,11 @@ def test_findings_carry_a_co2e_estimate(tmp_path):
     write(tmp_path, "q.sql", "SELECT * FROM users;\n")
     findings = scan([str(tmp_path)])
     assert findings[0]["co2e_estimate"]
+
+
+def test_cli_github_format_emits_workflow_commands(tmp_path, capsys):
+    write(tmp_path, "q.sql", "SELECT * FROM users;\n")
+    main([str(tmp_path), "--format", "github"])
+    out = capsys.readouterr().out
+    assert out.startswith("::")
+    assert "file=" in out and "line=" in out and "title=greenlint" in out
