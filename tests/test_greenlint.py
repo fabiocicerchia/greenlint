@@ -49,3 +49,27 @@ def test_config_ignores_path(tmp_path):
 
 def test_missing_config_is_a_noop(tmp_path):
     assert load_config(str(tmp_path / "nope.toml")) == {"disable": set(), "ignore": []}
+
+
+def test_ast_busy_loop_ignores_unrelated_sleep_elsewhere_in_file(tmp_path):
+    # regex GL001 looked for "sleep" anywhere in the file, so this busy loop
+    # was a false negative; the AST version only trusts a sleep call reachable
+    # from inside the loop body.
+    write(
+        tmp_path,
+        "a.py",
+        "def poll():\n    while True:\n        check()\n\n"
+        "def other():\n    time.sleep(1)\n",
+    )
+    assert "GL001" in rule_ids(scan([str(tmp_path)]))
+
+
+def test_ast_busy_loop_not_flagged_when_loop_actually_sleeps(tmp_path):
+    write(tmp_path, "a.py", "def poll():\n    while True:\n        time.sleep(1)\n")
+    assert "GL001" not in rule_ids(scan([str(tmp_path)]))
+
+
+def test_ast_busy_loop_respects_disable(tmp_path):
+    cfg = write(tmp_path, ".greenlint.toml", 'disable = ["GL001"]\n')
+    write(tmp_path, "a.py", "while True:\n    check()\n")
+    assert "GL001" not in rule_ids(scan([str(tmp_path)], load_config(str(cfg))))

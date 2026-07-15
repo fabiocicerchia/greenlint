@@ -27,6 +27,10 @@ paths → walk files → filter by extension → match rules → findings → re
 ## Decisions
 
 Rules are regex + context based rather than AST based: cheap, language-agnostic,
-and dependency-free, at the cost of some false positives. AST-based rules are a
-roadmap item for languages where the regex approach is too coarse. Record
+and dependency-free, at the cost of some false positives. GL001 (Python busy
+loop) is the first exception — it uses the stdlib `ast` module to check for a
+real `sleep()` call reachable from inside the loop body, instead of a
+"does the word sleep appear anywhere in the file" regex. JS has no stdlib
+parser, so an AST-based JS rule would need a new runtime dependency, which
+conflicts with the dependency-free guardrail — still regex for now. Record
 further significant choices here (or in a `docs/adr/` folder if they pile up).

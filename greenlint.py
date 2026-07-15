@@ -11,6 +11,7 @@ and what to do instead.
 """
 
 import argparse
+import ast
 import fnmatch
 import json
 import re
@@ -119,6 +120,41 @@ def load_config(path=None):
     return {"disable": set(data.get("disable", [])), "ignore": list(data.get("ignore", []))}
 
 
+def _ast_busy_loop_findings(path, text):
+    """AST-based replacement for GL001 on Python: the regex version flags
+    `while True:` unless "sleep" appears *anywhere* in the file, which both
+    misses loops whose sleep is in an unrelated function and flags loops that
+    do sleep but happen to share a file with the word "sleep" elsewhere.
+    Walking the loop body directly for a real sleep call fixes both.
+    """
+    try:
+        tree = ast.parse(text, filename=str(path))
+    except SyntaxError:
+        return
+    rule = next(r for r in RULES if r["id"] == "GL001")
+    for node in ast.walk(tree):
+        if not (isinstance(node, ast.While) and isinstance(node.test, ast.Constant) and node.test.value is True):
+            continue
+        sleeps = any(
+            isinstance(n, ast.Call)
+            and (
+                (isinstance(n.func, ast.Attribute) and n.func.attr == "sleep")
+                or (isinstance(n.func, ast.Name) and n.func.id == "sleep")
+            )
+            for body_node in node.body
+            for n in ast.walk(body_node)
+        )
+        if not sleeps:
+            yield {
+                "rule": rule["id"],
+                "severity": rule["severity"],
+                "file": str(path),
+                "line": node.lineno,
+                "message": rule["message"],
+                "suggestion": rule["suggestion"],
+            }
+
+
 def applicable(rule, path):
     """Return True if the rule targets the file's language/extension."""
     if path.name == "Dockerfile" and "Dockerfile" in rule["langs"]:
@@ -132,8 +168,10 @@ def scan_file(path, disabled=frozenset()):
         text = path.read_text(errors="replace")
     except OSError:
         return
+    if path.suffix == ".py" and "GL001" not in disabled:
+        yield from _ast_busy_loop_findings(path, text)
     for rule in RULES:
-        if rule["id"] in disabled or not applicable(rule, path):
+        if rule["id"] in disabled or rule["id"] == "GL001" or not applicable(rule, path):
             continue
         for m in rule["pattern"].finditer(text):
             line = text.count("\n", 0, m.start()) + 1
