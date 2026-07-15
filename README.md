@@ -22,6 +22,24 @@ src/db.py:44: [GL005/medium] SELECT * query
 greenlint: 2 finding(s)
 ```
 
+## Install
+
+```sh
+pipx install git+https://github.com/fabiocicerchia/greenlint
+```
+
+Or with pip:
+
+```sh
+pip install git+https://github.com/fabiocicerchia/greenlint
+```
+
+Or the one-line installer:
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/fabiocicerchia/greenlint/main/install.sh | bash
+```
+
 ## Usage
 
 ```sh
