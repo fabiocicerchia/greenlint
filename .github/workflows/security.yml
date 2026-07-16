@@ -44,6 +44,10 @@ jobs:
   codeql:
     name: codeql
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
+      actions: read
     strategy:
       matrix:
         language: [python]
