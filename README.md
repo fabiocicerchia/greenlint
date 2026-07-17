@@ -67,8 +67,10 @@ ignore = ["vendor/*", "*/node_modules/*"]
 38 rules (GL001–GL038, see `--list-rules`) spanning Python, JS/TS/JSX/TSX,
 Go, Rust, Java, Kotlin, Swift, C#, C/C++, PHP, Perl, Ruby, Bash, SQL, HTML,
 CSS, Dockerfile, Terraform/OpenTofu, Kubernetes, and docker-compose/Swarm.
-Rule development is deliberately open-ended — the rule set *is* the product.
-Proposals with an energy rationale are the most valuable contribution.
+See [`docs/rules.md`](docs/rules.md) for the full reference — what each rule
+detects, how it's triggered, and the remediation. Rule development is
+deliberately open-ended — the rule set *is* the product. Proposals with an
+energy rationale are the most valuable contribution.
 
 ## Status & roadmap
 
