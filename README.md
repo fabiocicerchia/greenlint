@@ -9,8 +9,10 @@
 
 Static analysis that flags **energy-wasteful patterns** across languages and
 configs — busy loops, sub-100ms polling, every-minute crons, `SELECT *`,
-full-history CI clones, full-fat base images, peak-sized instances. Every
-finding says *why it wastes energy* and what to do instead.
+full-history CI clones, full-fat base images, peak-sized instances, oversized
+autoscaling groups, missing Kubernetes/docker-compose resource limits, N+1
+network/DB calls, manual O(n²) sorts, and more. Every finding says *why it
+wastes energy* and what to do instead.
 
 ```console
 $ greenlint src/ .github/
@@ -62,15 +64,19 @@ ignore = ["vendor/*", "*/node_modules/*"]
 
 ## Rules
 
-34 rules across Python/JS/TS/SQL/YAML/HTML/CSS/C/C++/Dockerfile/
-Terraform+OpenTofu/Kubernetes/docker-compose (GL001–GL034, see
-`--list-rules`). Rule development is deliberately open-ended — the rule set
-*is* the product. Proposals with an energy rationale are the most valuable
-contribution.
+38 rules (GL001–GL038, see `--list-rules`) spanning Python, JS/TS/JSX/TSX,
+Go, Rust, Java, Kotlin, Swift, C#, C/C++, PHP, Perl, Ruby, Bash, SQL, HTML,
+CSS, Dockerfile, Terraform/OpenTofu, Kubernetes, and docker-compose/Swarm.
+Rule development is deliberately open-ended — the rule set *is* the product.
+Proposals with an energy rationale are the most valuable contribution.
 
 ## Status & roadmap
 
-- [ ] AST-based rules for Python/JS (regex has false-positive limits)
+- [x] AST-based rules for Python (GL001, GL018, GL023, GL030, GL031)
+- [ ] Broader AST-based rules beyond Python (regex has false-positive limits
+      for JS/Go/Rust/etc.)
+- [ ] C#, Ruby, Kotlin, Swift coverage is currently a single high-confidence
+      rule each — room to grow
 
 ## Development
 

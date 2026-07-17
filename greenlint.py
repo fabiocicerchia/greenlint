@@ -59,6 +59,10 @@ CO2E_HINTS = {
     "GL032": "~0.01-0.1 gCO2e per call (repeated allocator overhead per iteration)",
     "GL033": "~100s-1000s gCO2e/day per replica kept always-on instead of scaling down",
     "GL034": "~10s-100s gCO2e/day per unbounded service encouraging host over-provisioning",
+    "GL035": "~0.001-0.05 gCO2e per call x sequence length (full enumeration vs. short-circuit)",
+    "GL036": "~0.001-0.05 gCO2e per call x hash size (O(n) scan vs. O(1) lookup)",
+    "GL037": "~0.001-0.05 gCO2e per call x collection size (two passes vs. one)",
+    "GL038": "~0.001-0.01 gCO2e per render (extra allocation + defeated memoisation)",
 }
 
 RULES = [
@@ -73,10 +77,21 @@ RULES = [
     },
     {
         "id": "GL002",
-        "langs": {".py", ".js", ".ts"},
+        "langs": {
+            ".py", ".js", ".ts", ".sh", ".go", ".rs", ".java", ".php", ".pl",
+            ".c", ".h", ".cpp", ".cc", ".hpp", ".kt", ".swift", ".cs",
+        },
         "severity": "low",
         "pattern": re.compile(
-            r"setInterval\s*\(\s*[^,]+,\s*([0-9]{1,2})\s*\)|time\.sleep\s*\(\s*0?\.0*[0-9]\s*\)"
+            r"setInterval\s*\(\s*[^,]+,\s*([0-9]{1,2})\s*\)"
+            r"|time\.sleep\s*\(\s*0?\.0*[0-9]\s*\)"
+            r"|sleep\s+0?\.0*[0-9]\b"  # bash
+            r"|time\.Sleep\(\s*[0-9]{1,2}\s*\*\s*time\.Millisecond\s*\)"  # go
+            r"|thread::sleep\(\s*Duration::from_millis\(\s*[0-9]{1,2}\s*\)\s*\)"  # rust
+            r"|Thread\.sleep\(\s*[0-9]{1,2}\s*\)"  # java/kotlin/c#
+            r"|usleep\(\s*[0-9]{1,5}\s*\)"  # php/perl/c/c++ (microseconds, <100ms)
+            r"|\bdelay\(\s*[0-9]{1,2}\)"  # kotlin coroutines
+            r"|Timer\.scheduledTimer\(withTimeInterval:\s*0?\.0*[0-9]"  # swift
         ),
         "message": "sub-100ms polling interval",
         "suggestion": "tight polling burns CPU; prefer push/webhooks or longer intervals",
@@ -99,7 +114,10 @@ RULES = [
     },
     {
         "id": "GL005",
-        "langs": {".sql", ".py", ".php", ".go", ".js", ".ts"},
+        "langs": {
+            ".sql", ".py", ".php", ".go", ".js", ".ts", ".rs", ".java",
+            ".c", ".h", ".cpp", ".cc", ".hpp", ".pl", ".sh",
+        },
         "severity": "medium",
         "pattern": re.compile(r"SELECT\s+\*\s+FROM", re.I),
         "message": "SELECT * query",
@@ -351,6 +369,38 @@ RULES = [
         "pattern": None,  # whole-file check; see _compose_resources_findings
         "message": "docker-compose service(s) without resource limits",
         "suggestion": "unbounded containers can consume a whole host's CPU/RAM; set deploy.resources.limits (Swarm) or mem_limit/cpus (Compose v2) to right-size",
+    },
+    {
+        "id": "GL035",
+        "langs": {".cs"},
+        "severity": "low",
+        "pattern": re.compile(r"\.Count\(\)\s*(?:==\s*0|!=\s*0|>\s*0)"),
+        "message": "LINQ .Count() used just to check emptiness",
+        "suggestion": "Count() enumerates the whole sequence; use .Any() (or !sequence.Any()) which short-circuits on the first element",
+    },
+    {
+        "id": "GL036",
+        "langs": {".rb"},
+        "severity": "low",
+        "pattern": re.compile(r"\.(?:keys|values)\.include\?\("),
+        "message": "Hash membership check via keys/values.include?",
+        "suggestion": "materialises the whole keys/values array for an O(n) scan; use .key?/.value? for an O(1) hash lookup",
+    },
+    {
+        "id": "GL037",
+        "langs": {".rb"},
+        "severity": "low",
+        "pattern": re.compile(r"\.select\s*(?:\(&:\w+[?!]?\)|\{[^{}]*\})\s*\.map\s*(?:\(&:\w+[?!]?\)|\{[^{}]*\})"),
+        "message": "select().map() chain (two passes over the collection)",
+        "suggestion": "use filter_map to select and transform in a single pass instead of two full iterations",
+    },
+    {
+        "id": "GL038",
+        "langs": {".jsx", ".tsx"},
+        "severity": "low",
+        "pattern": re.compile(r"\w+=\{(?:\(\)\s*=>|\{)"),
+        "message": "inline function or object literal passed as a JSX prop",
+        "suggestion": "a new function/object is allocated every render, defeating memo/PureComponent; hoist it with useCallback/useMemo or move it outside the component",
     },
 ]
 

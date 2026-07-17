@@ -431,3 +431,86 @@ def test_detects_k8s_cronjob_schedule_every_minute(tmp_path):
         "apiVersion: batch/v1\nkind: CronJob\nspec:\n  schedule: '* * * * *'\n",
     )
     assert "GL003" in rule_ids(scan([str(tmp_path)]))
+
+
+def test_detects_sub_100ms_polling_across_languages(tmp_path):
+    write(tmp_path, "poll.sh", "sleep 0.05\n")
+    write(tmp_path, "poll.go", "time.Sleep(50 * time.Millisecond)\n")
+    write(tmp_path, "poll.rs", "thread::sleep(Duration::from_millis(50));\n")
+    write(tmp_path, "Poll.java", "Thread.sleep(50);\n")
+    write(tmp_path, "poll.c", "usleep(50000);\n")
+    ids = rule_ids(scan([str(tmp_path)]))
+    assert ids == {"GL002"}
+
+
+def test_normal_sleep_intervals_across_languages_not_flagged(tmp_path):
+    write(tmp_path, "poll.sh", "sleep 5\n")
+    write(tmp_path, "poll.go", "time.Sleep(5 * time.Second)\n")
+    write(tmp_path, "poll.rs", "thread::sleep(Duration::from_secs(5));\n")
+    assert rule_ids(scan([str(tmp_path)])) == set()
+
+
+def test_select_star_detected_in_c_and_rust(tmp_path):
+    write(tmp_path, "q.c", 'char *q = "SELECT * FROM users";\n')
+    write(tmp_path, "q.rs", 'let q = "SELECT * FROM users";\n')
+    assert rule_ids(scan([str(tmp_path)])) == {"GL005"}
+
+
+def test_detects_linq_count_zero_check(tmp_path):
+    write(tmp_path, "a.cs", "if (items.Count() == 0) { return; }\n")
+    assert "GL035" in rule_ids(scan([str(tmp_path)]))
+
+
+def test_linq_any_not_flagged(tmp_path):
+    write(tmp_path, "a.cs", "if (!items.Any()) { return; }\n")
+    assert "GL035" not in rule_ids(scan([str(tmp_path)]))
+
+
+def test_detects_ruby_hash_keys_include(tmp_path):
+    write(tmp_path, "a.rb", "if h.keys.include?(k)\n  puts k\nend\n")
+    assert "GL036" in rule_ids(scan([str(tmp_path)]))
+
+
+def test_ruby_hash_key_predicate_not_flagged(tmp_path):
+    write(tmp_path, "a.rb", "if h.key?(k)\n  puts k\nend\n")
+    assert "GL036" not in rule_ids(scan([str(tmp_path)]))
+
+
+def test_detects_ruby_select_map_chain(tmp_path):
+    write(tmp_path, "a.rb", "result = list.select(&:active?).map(&:name)\n")
+    assert "GL037" in rule_ids(scan([str(tmp_path)]))
+
+
+def test_ruby_filter_map_not_flagged(tmp_path):
+    write(tmp_path, "a.rb", "result = list.filter_map { |x| x.name if x.active? }\n")
+    assert "GL037" not in rule_ids(scan([str(tmp_path)]))
+
+
+def test_detects_inline_jsx_prop_allocation(tmp_path):
+    write(tmp_path, "Comp.jsx", "const A = () => <Foo onClick={() => doThing()} />;\n")
+    assert "GL038" in rule_ids(scan([str(tmp_path)]))
+
+
+def test_hoisted_jsx_prop_not_flagged(tmp_path):
+    write(tmp_path, "Comp.jsx", "const B = () => <Foo onClick={handleClick} />;\n")
+    assert "GL038" not in rule_ids(scan([str(tmp_path)]))
+
+
+def test_detects_kotlin_short_delay(tmp_path):
+    write(tmp_path, "Poll.kt", "suspend fun bad() { while (true) { delay(50) } }\n")
+    assert "GL002" in rule_ids(scan([str(tmp_path)]))
+
+
+def test_kotlin_long_delay_not_flagged(tmp_path):
+    write(tmp_path, "Poll.kt", "suspend fun good() { while (true) { delay(5000) } }\n")
+    assert "GL002" not in rule_ids(scan([str(tmp_path)]))
+
+
+def test_detects_swift_short_timer_interval(tmp_path):
+    write(tmp_path, "Poll.swift", "Timer.scheduledTimer(withTimeInterval: 0.05, repeats: true) { _ in tick() }\n")
+    assert "GL002" in rule_ids(scan([str(tmp_path)]))
+
+
+def test_swift_long_timer_interval_not_flagged(tmp_path):
+    write(tmp_path, "Poll.swift", "Timer.scheduledTimer(withTimeInterval: 5.0, repeats: true) { _ in tick() }\n")
+    assert "GL002" not in rule_ids(scan([str(tmp_path)]))
