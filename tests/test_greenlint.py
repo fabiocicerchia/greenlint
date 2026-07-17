@@ -351,3 +351,83 @@ def test_single_dockerfile_install_layer_not_flagged(tmp_path):
         "FROM debian:bookworm-slim\nRUN apt-get install -y curl && pip3 install -r requirements.txt\n",
     )
     assert "GL029" not in rule_ids(scan([str(tmp_path)]))
+
+
+def test_detects_dict_items_discarding_key_or_value(tmp_path):
+    write(tmp_path, "a.py", "def f(d):\n    for _, v in d.items():\n        print(v)\n")
+    assert "GL030" in rule_ids(scan([str(tmp_path)]))
+
+
+def test_dict_items_using_both_key_and_value_not_flagged(tmp_path):
+    write(tmp_path, "a.py", "def f(d):\n    for k, v in d.items():\n        print(k, v)\n")
+    assert "GL030" not in rule_ids(scan([str(tmp_path)]))
+
+
+def test_detects_try_except_in_loop(tmp_path):
+    write(
+        tmp_path,
+        "a.py",
+        "def f(items):\n    for i in items:\n        try:\n            g(i)\n        except ValueError:\n            pass\n",
+    )
+    assert "GL031" in rule_ids(scan([str(tmp_path)]))
+
+
+def test_try_except_around_loop_not_flagged(tmp_path):
+    write(
+        tmp_path,
+        "a.py",
+        "def f(items):\n    try:\n        for i in items:\n            g(i)\n    except ValueError:\n        pass\n",
+    )
+    assert "GL031" not in rule_ids(scan([str(tmp_path)]))
+
+
+def test_detects_malloc_in_loop(tmp_path):
+    write(tmp_path, "a.c", "void f(int n) {\n    for (int i = 0; i < n; i++) {\n        int *buf = malloc(100);\n    }\n}\n")
+    assert "GL032" in rule_ids(scan([str(tmp_path)]))
+
+
+def test_malloc_outside_loop_not_flagged(tmp_path):
+    write(tmp_path, "a.c", "void f(int n) {\n    int *buf = malloc(100 * n);\n    for (int i = 0; i < n; i++) {\n    }\n}\n")
+    assert "GL032" not in rule_ids(scan([str(tmp_path)]))
+
+
+def test_detects_fixed_range_hpa(tmp_path):
+    write(
+        tmp_path,
+        "hpa.yaml",
+        "apiVersion: autoscaling/v2\nkind: HorizontalPodAutoscaler\nspec:\n  minReplicas: 3\n  maxReplicas: 3\n",
+    )
+    assert "GL033" in rule_ids(scan([str(tmp_path)]))
+
+
+def test_elastic_hpa_not_flagged(tmp_path):
+    write(
+        tmp_path,
+        "hpa.yaml",
+        "apiVersion: autoscaling/v2\nkind: HorizontalPodAutoscaler\nspec:\n  minReplicas: 1\n  maxReplicas: 5\n",
+    )
+    assert "GL033" not in rule_ids(scan([str(tmp_path)]))
+
+
+def test_detects_compose_service_without_limits(tmp_path):
+    write(tmp_path, "docker-compose.yml", "services:\n  web:\n    image: nginx\n")
+    assert "GL034" in rule_ids(scan([str(tmp_path)]))
+
+
+def test_compose_service_with_mem_limit_not_flagged(tmp_path):
+    write(tmp_path, "docker-compose.yml", "services:\n  web:\n    image: nginx\n    mem_limit: 512m\n")
+    assert "GL034" not in rule_ids(scan([str(tmp_path)]))
+
+
+def test_opentofu_files_use_the_same_terraform_rules(tmp_path):
+    write(tmp_path, "main.tofu", 'resource "aws_instance" "web" {\n  instance_type = "m5.large"\n}\n')
+    assert "GL016" in rule_ids(scan([str(tmp_path)]))
+
+
+def test_detects_k8s_cronjob_schedule_every_minute(tmp_path):
+    write(
+        tmp_path,
+        "cron.yaml",
+        "apiVersion: batch/v1\nkind: CronJob\nspec:\n  schedule: '* * * * *'\n",
+    )
+    assert "GL003" in rule_ids(scan([str(tmp_path)]))

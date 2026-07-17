@@ -54,6 +54,11 @@ CO2E_HINTS = {
     "GL027": "~0.1-1 gCO2e per re-fetch a cache header would have avoided",
     "GL028": "~0.001-0.01 gCO2e per import (extra modules loaded/bound at startup)",
     "GL029": "~1-5 gCO2e per pull x pulls/day per avoidable extra image layer",
+    "GL030": "~0.001-0.01 gCO2e per iteration (building/unpacking the unused tuple half)",
+    "GL031": "~0.001-0.01 gCO2e per iteration (exception-handling frame setup overhead)",
+    "GL032": "~0.01-0.1 gCO2e per call (repeated allocator overhead per iteration)",
+    "GL033": "~100s-1000s gCO2e/day per replica kept always-on instead of scaling down",
+    "GL034": "~10s-100s gCO2e/day per unbounded service encouraging host over-provisioning",
 }
 
 RULES = [
@@ -80,9 +85,9 @@ RULES = [
         "id": "GL003",
         "langs": {".yml", ".yaml"},
         "severity": "high",
-        "pattern": re.compile(r"cron:\s*['\"]?\*\s+\*\s+\*\s+\*\s+\*"),
+        "pattern": re.compile(r"(?:cron|schedule):\s*['\"]?\*\s+\*\s+\*\s+\*\s+\*"),
         "message": "cron job scheduled every minute",
-        "suggestion": "every-minute CI/cron jobs rarely need it; widen the schedule",
+        "suggestion": "every-minute CI/cron/Kubernetes CronJob schedules rarely need it; widen the schedule",
     },
     {
         "id": "GL004",
@@ -118,7 +123,7 @@ RULES = [
     },
     {
         "id": "GL008",
-        "langs": {".tf"},
+        "langs": {".tf", ".tofu"},
         "severity": "high",
         "pattern": re.compile(r'instance_type\s*=\s*"(?:m|c|r)[0-9]\.(?:8|12|16|24)xlarge"'),
         "message": "very large instance type hardcoded",
@@ -158,7 +163,7 @@ RULES = [
     },
     {
         "id": "GL013",
-        "langs": {".tf"},
+        "langs": {".tf", ".tofu"},
         "severity": "low",
         "pattern": None,  # whole-resource-block check; see _tf_s3_lifecycle_findings
         "message": "S3 bucket without a lifecycle policy",
@@ -189,7 +194,7 @@ RULES = [
     },
     {
         "id": "GL016",
-        "langs": {".tf"},
+        "langs": {".tf", ".tofu"},
         "severity": "low",
         "pattern": re.compile(r'instance_type\s*=\s*"(?:t2|t3|m4|m5|c4|c5|r4|r5)\.[a-z0-9]+"', re.I),
         "message": "x86 instance family with an ARM/Graviton equivalent available",
@@ -257,7 +262,7 @@ RULES = [
     },
     {
         "id": "GL024",
-        "langs": {".tf"},
+        "langs": {".tf", ".tofu"},
         "severity": "medium",
         "pattern": None,  # whole-resource-block check; see _tf_asg_static_size_findings
         "message": "autoscaling group with min_size == max_size",
@@ -265,7 +270,7 @@ RULES = [
     },
     {
         "id": "GL025",
-        "langs": {".tf"},
+        "langs": {".tf", ".tofu"},
         "severity": "low",
         "pattern": re.compile(r'volume_type\s*=\s*"gp2"'),
         "message": "EBS volume using gp2 instead of gp3",
@@ -273,7 +278,7 @@ RULES = [
     },
     {
         "id": "GL026",
-        "langs": {".tf"},
+        "langs": {".tf", ".tofu"},
         "severity": "medium",
         "pattern": None,  # whole-resource-block check; see _tf_log_retention_findings
         "message": "CloudWatch log group without a retention period",
@@ -302,6 +307,50 @@ RULES = [
         "pattern": None,  # whole-file count check; see _dockerfile_layer_bloat_findings
         "message": "separate RUN install layer (image layer bloat)",
         "suggestion": "each RUN install creates a new image layer that must be pulled and stored; chain installs with && into one RUN to shrink transfer/storage footprint",
+    },
+    {
+        "id": "GL030",
+        "langs": {".py"},
+        "severity": "low",
+        "pattern": None,  # AST check; see _ast_dict_iterator_findings
+        "message": "dict .items() iteration discards the key or value",
+        "suggestion": "use .keys() or .values() directly instead of .items() when only one side is needed; skips building/unpacking the discarded half",
+    },
+    {
+        "id": "GL031",
+        "langs": {".py"},
+        "severity": "low",
+        "pattern": None,  # AST check; see _ast_try_in_loop_findings
+        "message": "try/except inside a loop",
+        "suggestion": "exception handling has real per-entry overhead versus a plain if-check; hoist the loop inside a single try/except instead of wrapping each iteration",
+    },
+    {
+        "id": "GL032",
+        "langs": {".c", ".h", ".cpp", ".cc", ".hpp"},
+        "severity": "medium",
+        "pattern": re.compile(
+            r"(?:for|while)\s*\([^\n]*\)\s*\{?\s*\n[ \t]*[^\n]*\b(?:malloc|calloc|realloc)\s*\("
+            r"|(?:for|while)\s*\([^\n]*\)\s*\{?\s*\n[ \t]*[^\n]*\bnew\s+\w",
+            re.M,
+        ),
+        "message": "heap allocation inside a loop",
+        "suggestion": "malloc/calloc/realloc/new repeats allocator overhead every iteration; allocate once before the loop and reuse the buffer (or reserve()/resize() for containers)",
+    },
+    {
+        "id": "GL033",
+        "langs": {".yml", ".yaml"},
+        "severity": "medium",
+        "pattern": None,  # whole-file check; see _k8s_hpa_static_findings
+        "message": "HorizontalPodAutoscaler with minReplicas == maxReplicas",
+        "suggestion": "a fixed-range HPA can't scale down under low demand; widen minReplicas/maxReplicas so it actually elasticity-scales",
+    },
+    {
+        "id": "GL034",
+        "langs": {".yml", ".yaml"},
+        "severity": "medium",
+        "pattern": None,  # whole-file check; see _compose_resources_findings
+        "message": "docker-compose service(s) without resource limits",
+        "suggestion": "unbounded containers can consume a whole host's CPU/RAM; set deploy.resources.limits (Swarm) or mem_limit/cpus (Compose v2) to right-size",
     },
 ]
 
@@ -442,6 +491,37 @@ def _ast_bubble_sort_findings(path, tree):
                 yield _finding(rule, path, inner.lineno)
 
 
+def _ast_dict_iterator_findings(path, tree):
+    """GL030: `for k, v in d.items()` where the key or the value is discarded
+    (bound to `_`) — the discarded half didn't need building/unpacking at all.
+    """
+    rule = next(r for r in RULES if r["id"] == "GL030")
+    for node in ast.walk(tree):
+        if not (isinstance(node, ast.For) and isinstance(node.target, ast.Tuple) and len(node.target.elts) == 2):
+            continue
+        if not (isinstance(node.iter, ast.Call) and isinstance(node.iter.func, ast.Attribute) and node.iter.func.attr == "items"):
+            continue
+        key, value = node.target.elts
+        if any(isinstance(e, ast.Name) and e.id == "_" for e in (key, value)):
+            yield _finding(rule, path, node.lineno)
+
+
+def _ast_try_in_loop_findings(path, tree):
+    """GL031: a `try` block anywhere inside a `for`/`while` loop. `seen`
+    dedupes a `try` matched from more than one enclosing loop when loops are
+    nested.
+    """
+    rule = next(r for r in RULES if r["id"] == "GL031")
+    seen = set()
+    for node in ast.walk(tree):
+        if not isinstance(node, (ast.For, ast.While)):
+            continue
+        for stmt in ast.walk(node):
+            if isinstance(stmt, ast.Try) and stmt.lineno not in seen:
+                seen.add(stmt.lineno)
+                yield _finding(rule, path, stmt.lineno)
+
+
 def _tf_resource_blocks(text, resource_type):
     """Yield (match, block_text, lineno) for every `resource "<resource_type>"
     "..." { ... }` in `text`. Block end is approximated as the next line that
@@ -512,6 +592,31 @@ def _k8s_resources_findings(path, text):
         yield _finding(rule, path, text.count("\n", 0, m.start()) + 1)
 
 
+def _k8s_hpa_static_findings(path, text):
+    """GL033: a `HorizontalPodAutoscaler` manifest whose minReplicas and
+    maxReplicas are the same literal value — a fixed-range HPA, not an
+    elastic one.
+    """
+    rule = next(r for r in RULES if r["id"] == "GL033")
+    if not re.search(r"^kind:\s*HorizontalPodAutoscaler\s*$", text, re.M):
+        return
+    min_m = re.search(r"minReplicas:\s*(\d+)", text)
+    max_m = re.search(r"maxReplicas:\s*(\d+)", text)
+    if min_m and max_m and min_m.group(1) == max_m.group(1):
+        yield _finding(rule, path, text.count("\n", 0, min_m.start()) + 1)
+
+
+def _compose_resources_findings(path, text):
+    """GL034: a docker-compose/swarm file (`services:` top-level key) with no
+    resource limit anywhere in the file — neither the Swarm-mode
+    `deploy.resources` block nor the classic `mem_limit`/`cpus` keys.
+    """
+    rule = next(r for r in RULES if r["id"] == "GL034")
+    m = re.search(r"^services:\s*$", text, re.M)
+    if m and not re.search(r"mem_limit|nano_cpus|cpus\s*:|memory\s*:", text):
+        yield _finding(rule, path, text.count("\n", 0, m.start()) + 1)
+
+
 def applicable(rule, path):
     """Return True if the rule targets the file's language/extension."""
     if path.name == "Dockerfile" and "Dockerfile" in rule["langs"]:
@@ -525,7 +630,7 @@ def scan_file(path, disabled=frozenset()):
         text = path.read_text(errors="replace")
     except OSError:
         return
-    ast_rules = {"GL001", "GL018", "GL023"}
+    ast_rules = {"GL001", "GL018", "GL023", "GL030", "GL031"}
     if path.suffix == ".py" and ast_rules - disabled:
         tree = _parse_python(path, text)
         if tree is not None:
@@ -535,15 +640,24 @@ def scan_file(path, disabled=frozenset()):
                 yield from _ast_nested_loop_findings(path, tree)
             if "GL023" not in disabled:
                 yield from _ast_bubble_sort_findings(path, tree)
-    if path.suffix == ".tf":
+            if "GL030" not in disabled:
+                yield from _ast_dict_iterator_findings(path, tree)
+            if "GL031" not in disabled:
+                yield from _ast_try_in_loop_findings(path, tree)
+    if path.suffix in (".tf", ".tofu"):
         if "GL013" not in disabled:
             yield from _tf_s3_lifecycle_findings(path, text)
         if "GL024" not in disabled:
             yield from _tf_asg_static_size_findings(path, text)
         if "GL026" not in disabled:
             yield from _tf_log_retention_findings(path, text)
-    if path.suffix in (".yml", ".yaml") and "GL014" not in disabled:
-        yield from _k8s_resources_findings(path, text)
+    if path.suffix in (".yml", ".yaml"):
+        if "GL014" not in disabled:
+            yield from _k8s_resources_findings(path, text)
+        if "GL033" not in disabled:
+            yield from _k8s_hpa_static_findings(path, text)
+        if "GL034" not in disabled:
+            yield from _compose_resources_findings(path, text)
     if (path.suffix == ".dockerfile" or path.name == "Dockerfile") and "GL029" not in disabled:
         yield from _dockerfile_layer_bloat_findings(path, text)
     for rule in RULES:
