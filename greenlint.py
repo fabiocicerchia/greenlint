@@ -43,6 +43,17 @@ CO2E_HINTS = {
     "GL016": "~10s-100s gCO2e/day per instance (ARM/Graviton is ~3-4x more power-efficient than x86)",
     "GL017": "~1-10 gCO2e per view avoided by using MP4/WebP/AVIF instead of an animated GIF",
     "GL018": "~0.01-1 gCO2e per call x n (quadratic vs. linear compute growth)",
+    "GL019": "~0.1-1 gCO2e per avoidable round-trip x (N-1) calls (network + remote CPU wake)",
+    "GL020": "~0.001-0.01 gCO2e per call (string work done even when the log level is disabled)",
+    "GL021": "~0.1-10 gCO2e per run x rows (10-100x more interpreter cycles than a vectorised op)",
+    "GL022": "~0.05-0.5 gCO2e per avoidable open/read x (N-1) iterations",
+    "GL023": "~0.01-1 gCO2e per call x n² vs n log n compute growth",
+    "GL024": "~100s-1000s gCO2e/day per instance kept always-on instead of scaling down",
+    "GL025": "~1-10 gCO2e/day per volume (marginally higher power draw per IOP than gp3)",
+    "GL026": "~1-10 gCO2e/month per GB of logs retained indefinitely",
+    "GL027": "~0.1-1 gCO2e per re-fetch a cache header would have avoided",
+    "GL028": "~0.001-0.01 gCO2e per import (extra modules loaded/bound at startup)",
+    "GL029": "~1-5 gCO2e per pull x pulls/day per avoidable extra image layer",
 }
 
 RULES = [
@@ -200,6 +211,98 @@ RULES = [
         "message": "nested loop iterating over the same collection (possible O(n²) pattern)",
         "suggestion": "a manual all-pairs scan over the same list costs O(n²); use a set/dict for membership tests or itertools.combinations instead",
     },
+    {
+        "id": "GL019",
+        "langs": {".py"},
+        "severity": "medium",
+        "pattern": re.compile(
+            r"for\s+\w+\s+in\s+[^:\n]+:\n[ \t]+(?:\w+\s*=\s*)?requests\.(?:get|post|put|patch|delete)\(", re.M
+        ),
+        "message": "HTTP request executed inside a loop (N+1-style network calls)",
+        "suggestion": "batch the calls, reuse a requests.Session, or gather them concurrently instead of one request per iteration; cuts round-trips and idle-wait energy",
+    },
+    {
+        "id": "GL020",
+        "langs": {".py"},
+        "severity": "low",
+        "pattern": re.compile(r"""logging\.(?:debug|info)\(\s*(?:f['"]|['"][^'"]*['"]\s*\.\s*format\()"""),
+        "message": "logging call built eagerly with an f-string or .format()",
+        "suggestion": "the interpolation runs even when the log level is disabled; use logging.debug('x=%s', x) for lazy formatting",
+    },
+    {
+        "id": "GL021",
+        "langs": {".py"},
+        "severity": "medium",
+        "pattern": re.compile(r"\.iterrows\(\)|\.apply\([^)]*axis\s*=\s*1"),
+        "message": "row-wise pandas iteration (iterrows/apply(axis=1))",
+        "suggestion": "row-wise pandas ops run one Python-level call per row; use vectorised column operations for 10-100x fewer CPU cycles",
+    },
+    {
+        "id": "GL022",
+        "langs": {".py"},
+        "severity": "low",
+        "pattern": re.compile(
+            r"for\s+\w+\s+in\s+[^:\n]+:\n[ \t]+(?:\w+\s*=\s*)?(?:open\(|pd\.read_csv\(|pd\.read_json\()", re.M
+        ),
+        "message": "file opened/read inside a loop",
+        "suggestion": "repeated opens/reads add a syscall and parse pass per iteration; load once outside the loop or read in chunks",
+    },
+    {
+        "id": "GL023",
+        "langs": {".py"},
+        "severity": "medium",
+        "pattern": None,  # AST check; see _ast_bubble_sort_findings
+        "message": "nested loop with an element swap (manual O(n²) sort)",
+        "suggestion": "built-in sorted()/list.sort() use Timsort (O(n log n), implemented in C); replace the manual swap-based sort",
+    },
+    {
+        "id": "GL024",
+        "langs": {".tf"},
+        "severity": "medium",
+        "pattern": None,  # whole-resource-block check; see _tf_asg_static_size_findings
+        "message": "autoscaling group with min_size == max_size",
+        "suggestion": "a fixed-size 'autoscaling' group is provisioned for peak load 24/7; widen the range so it can actually scale down under low demand",
+    },
+    {
+        "id": "GL025",
+        "langs": {".tf"},
+        "severity": "low",
+        "pattern": re.compile(r'volume_type\s*=\s*"gp2"'),
+        "message": "EBS volume using gp2 instead of gp3",
+        "suggestion": "gp3 gives the same baseline performance at lower cost and power draw per IOP than gp2; migrate unless you need gp2's specific burst behaviour",
+    },
+    {
+        "id": "GL026",
+        "langs": {".tf"},
+        "severity": "medium",
+        "pattern": None,  # whole-resource-block check; see _tf_log_retention_findings
+        "message": "CloudWatch log group without a retention period",
+        "suggestion": "logs are kept forever by default, growing storage and its energy footprint indefinitely; set retention_in_days",
+    },
+    {
+        "id": "GL027",
+        "langs": {".js", ".ts"},
+        "severity": "low",
+        "pattern": re.compile(r"express\.static\([^,)]*\)"),
+        "message": "static assets served without a cache duration (Express)",
+        "suggestion": "express.static() without maxAge sends no Cache-Control, so browsers re-fetch unchanged files every visit; set { maxAge: '1y', immutable: true } for hashed assets",
+    },
+    {
+        "id": "GL028",
+        "langs": {".py"},
+        "severity": "low",
+        "pattern": re.compile(r"^from\s+\S+\s+import\s+\*", re.M),
+        "message": "wildcard import",
+        "suggestion": "star imports bind every public name in the module, bloating the namespace and import time; import only the names you use",
+    },
+    {
+        "id": "GL029",
+        "langs": {".dockerfile", "Dockerfile"},
+        "severity": "low",
+        "pattern": None,  # whole-file count check; see _dockerfile_layer_bloat_findings
+        "message": "separate RUN install layer (image layer bloat)",
+        "suggestion": "each RUN install creates a new image layer that must be pulled and stored; chain installs with && into one RUN to shrink transfer/storage footprint",
+    },
 ]
 
 
@@ -304,17 +407,98 @@ def _ast_nested_loop_findings(path, tree):
                 yield _finding(rule, path, inner.lineno)
 
 
-def _tf_s3_lifecycle_findings(path, text):
-    """GL013: an `aws_s3_bucket` resource block with no lifecycle rule anywhere
-    inside it. Block end is approximated as the next line that is just `}`,
-    which matches typical `terraform fmt` output; not a real HCL parse.
+def _is_tuple_swap(stmt):
+    """True for the idiomatic Python swap `a[i], a[j] = a[j], a[i]` — two
+    subscripts assigned from two subscripts. That shape only shows up when
+    someone is hand-rolling an in-place swap, i.e. a manual sort.
     """
-    rule = next(r for r in RULES if r["id"] == "GL013")
-    for m in re.finditer(r'resource\s+"aws_s3_bucket"\s+"[^"]+"\s*\{', text):
+    return (
+        isinstance(stmt, ast.Assign)
+        and len(stmt.targets) == 1
+        and isinstance(stmt.targets[0], ast.Tuple)
+        and len(stmt.targets[0].elts) == 2
+        and all(isinstance(e, ast.Subscript) for e in stmt.targets[0].elts)
+        and isinstance(stmt.value, ast.Tuple)
+        and len(stmt.value.elts) == 2
+        and all(isinstance(e, ast.Subscript) for e in stmt.value.elts)
+    )
+
+
+def _ast_bubble_sort_findings(path, tree):
+    """GL023: a `for` loop nested inside another `for` loop whose body
+    contains an element swap — the textbook shape of a hand-rolled bubble or
+    selection sort.
+    """
+    rule = next(r for r in RULES if r["id"] == "GL023")
+    seen = set()
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.For):
+            continue
+        for inner in ast.walk(node):
+            if inner is node or not isinstance(inner, ast.For) or inner.lineno in seen:
+                continue
+            if any(_is_tuple_swap(stmt) for stmt in ast.walk(inner)):
+                seen.add(inner.lineno)
+                yield _finding(rule, path, inner.lineno)
+
+
+def _tf_resource_blocks(text, resource_type):
+    """Yield (match, block_text, lineno) for every `resource "<resource_type>"
+    "..." { ... }` in `text`. Block end is approximated as the next line that
+    is just `}`, which matches typical `terraform fmt` output; not a real HCL
+    parse, but enough to check whether a given argument is set inside it.
+    Shared by every whole-resource-block Terraform check.
+    """
+    for m in re.finditer(rf'resource\s+"{resource_type}"\s+"[^"]+"\s*\{{', text):
         end = text.find("\n}", m.end())
         block = text[m.end() : end if end != -1 else len(text)]
+        yield m, block, text.count("\n", 0, m.start()) + 1
+
+
+def _tf_s3_lifecycle_findings(path, text):
+    """GL013: an `aws_s3_bucket` resource block with no lifecycle rule anywhere
+    inside it.
+    """
+    rule = next(r for r in RULES if r["id"] == "GL013")
+    for _, block, lineno in _tf_resource_blocks(text, "aws_s3_bucket"):
         if "lifecycle" not in block.lower():
-            yield _finding(rule, path, text.count("\n", 0, m.start()) + 1)
+            yield _finding(rule, path, lineno)
+
+
+def _tf_asg_static_size_findings(path, text):
+    """GL024: an `aws_autoscaling_group` whose min_size and max_size are the
+    same literal value — a fixed-size group provisioned for peak load, not an
+    elastic one.
+    """
+    rule = next(r for r in RULES if r["id"] == "GL024")
+    for _, block, lineno in _tf_resource_blocks(text, "aws_autoscaling_group"):
+        min_m = re.search(r"min_size\s*=\s*(\d+)", block)
+        max_m = re.search(r"max_size\s*=\s*(\d+)", block)
+        if min_m and max_m and min_m.group(1) == max_m.group(1):
+            yield _finding(rule, path, lineno)
+
+
+def _tf_log_retention_findings(path, text):
+    """GL026: an `aws_cloudwatch_log_group` with no `retention_in_days` set —
+    logs are kept forever by default.
+    """
+    rule = next(r for r in RULES if r["id"] == "GL026")
+    for _, block, lineno in _tf_resource_blocks(text, "aws_cloudwatch_log_group"):
+        if "retention_in_days" not in block:
+            yield _finding(rule, path, lineno)
+
+
+def _dockerfile_layer_bloat_findings(path, text):
+    """GL029: more than one separate `RUN ... install` line in a Dockerfile —
+    each is its own image layer. Flags every occurrence after the first.
+    """
+    rule = next(r for r in RULES if r["id"] == "GL029")
+    positions = [
+        m.start()
+        for m in re.finditer(r"^RUN\s+.*\b(?:apt(?:-get)?|pip3?|npm|yum)\s+install\b", text, re.M | re.I)
+    ]
+    for pos in positions[1:]:
+        yield _finding(rule, path, text.count("\n", 0, pos) + 1)
 
 
 def _k8s_resources_findings(path, text):
@@ -341,7 +525,7 @@ def scan_file(path, disabled=frozenset()):
         text = path.read_text(errors="replace")
     except OSError:
         return
-    ast_rules = {"GL001", "GL018"}
+    ast_rules = {"GL001", "GL018", "GL023"}
     if path.suffix == ".py" and ast_rules - disabled:
         tree = _parse_python(path, text)
         if tree is not None:
@@ -349,10 +533,19 @@ def scan_file(path, disabled=frozenset()):
                 yield from _ast_busy_loop_findings(path, tree)
             if "GL018" not in disabled:
                 yield from _ast_nested_loop_findings(path, tree)
-    if path.suffix == ".tf" and "GL013" not in disabled:
-        yield from _tf_s3_lifecycle_findings(path, text)
+            if "GL023" not in disabled:
+                yield from _ast_bubble_sort_findings(path, tree)
+    if path.suffix == ".tf":
+        if "GL013" not in disabled:
+            yield from _tf_s3_lifecycle_findings(path, text)
+        if "GL024" not in disabled:
+            yield from _tf_asg_static_size_findings(path, text)
+        if "GL026" not in disabled:
+            yield from _tf_log_retention_findings(path, text)
     if path.suffix in (".yml", ".yaml") and "GL014" not in disabled:
         yield from _k8s_resources_findings(path, text)
+    if (path.suffix == ".dockerfile" or path.name == "Dockerfile") and "GL029" not in disabled:
+        yield from _dockerfile_layer_bloat_findings(path, text)
     for rule in RULES:
         if rule["id"] in disabled or rule["id"] in ast_rules or rule["pattern"] is None or not applicable(rule, path):
             continue

@@ -62,8 +62,8 @@ ignore = ["vendor/*", "*/node_modules/*"]
 
 ## Rules
 
-18 rules across Python/JS/TS/SQL/YAML/HTML/CSS/Dockerfile/Terraform/Kubernetes
-(GL001–GL018, see `--list-rules`). Rule development is deliberately
+29 rules across Python/JS/TS/SQL/YAML/HTML/CSS/Dockerfile/Terraform/Kubernetes
+(GL001–GL029, see `--list-rules`). Rule development is deliberately
 open-ended — the rule set *is* the product. Proposals with an energy
 rationale are the most valuable contribution.
 

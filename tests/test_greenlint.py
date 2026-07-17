@@ -223,3 +223,131 @@ def test_detects_nested_loop_over_same_collection(tmp_path):
 def test_nested_loop_over_different_collections_not_flagged(tmp_path):
     write(tmp_path, "a.py", "def f(items, others):\n    for i in items:\n        for j in others:\n            pass\n")
     assert "GL018" not in rule_ids(scan([str(tmp_path)]))
+
+
+def test_detects_http_request_in_loop(tmp_path):
+    write(tmp_path, "a.py", "def f(ids):\n    for i in ids:\n        requests.get(f'/x/{i}')\n")
+    assert "GL019" in rule_ids(scan([str(tmp_path)]))
+
+
+def test_batched_http_request_not_flagged(tmp_path):
+    write(tmp_path, "a.py", "def f(ids):\n    session.get('/batch', params={'ids': ids})\n")
+    assert "GL019" not in rule_ids(scan([str(tmp_path)]))
+
+
+def test_detects_eager_logging_fstring(tmp_path):
+    write(tmp_path, "a.py", 'import logging\ndef f(x):\n    logging.debug(f"x={x}")\n')
+    assert "GL020" in rule_ids(scan([str(tmp_path)]))
+
+
+def test_lazy_logging_not_flagged(tmp_path):
+    write(tmp_path, "a.py", 'import logging\ndef f(x):\n    logging.debug("x=%s", x)\n')
+    assert "GL020" not in rule_ids(scan([str(tmp_path)]))
+
+
+def test_detects_pandas_iterrows(tmp_path):
+    write(tmp_path, "a.py", "def f(df):\n    for i, row in df.iterrows():\n        print(row)\n")
+    assert "GL021" in rule_ids(scan([str(tmp_path)]))
+
+
+def test_vectorised_pandas_not_flagged(tmp_path):
+    write(tmp_path, "a.py", 'def f(df):\n    df["c"] = df["a"] + df["b"]\n')
+    assert "GL021" not in rule_ids(scan([str(tmp_path)]))
+
+
+def test_detects_file_open_in_loop(tmp_path):
+    write(tmp_path, "a.py", "def f(paths):\n    for p in paths:\n        f = open(p)\n")
+    assert "GL022" in rule_ids(scan([str(tmp_path)]))
+
+
+def test_file_opened_outside_loop_not_flagged(tmp_path):
+    write(tmp_path, "a.py", "def f(paths):\n    data = [open(p).read() for p in paths]\n")
+    assert "GL022" not in rule_ids(scan([str(tmp_path)]))
+
+
+def test_detects_manual_bubble_sort(tmp_path):
+    write(
+        tmp_path,
+        "a.py",
+        "def f(a):\n    n = len(a)\n    for i in range(n):\n"
+        "        for j in range(n - 1):\n            if a[j] > a[j + 1]:\n"
+        "                a[j], a[j + 1] = a[j + 1], a[j]\n",
+    )
+    assert "GL023" in rule_ids(scan([str(tmp_path)]))
+
+
+def test_builtin_sorted_not_flagged(tmp_path):
+    write(tmp_path, "a.py", "def f(a):\n    return sorted(a)\n")
+    assert "GL023" not in rule_ids(scan([str(tmp_path)]))
+
+
+def test_detects_fixed_size_autoscaling_group(tmp_path):
+    write(tmp_path, "asg.tf", 'resource "aws_autoscaling_group" "bad" {\n  min_size = 3\n  max_size = 3\n}\n')
+    assert "GL024" in rule_ids(scan([str(tmp_path)]))
+
+
+def test_elastic_autoscaling_group_not_flagged(tmp_path):
+    write(tmp_path, "asg.tf", 'resource "aws_autoscaling_group" "good" {\n  min_size = 1\n  max_size = 5\n}\n')
+    assert "GL024" not in rule_ids(scan([str(tmp_path)]))
+
+
+def test_detects_gp2_volume(tmp_path):
+    write(tmp_path, "vol.tf", 'resource "aws_ebs_volume" "v" {\n  volume_type = "gp2"\n}\n')
+    assert "GL025" in rule_ids(scan([str(tmp_path)]))
+
+
+def test_gp3_volume_not_flagged(tmp_path):
+    write(tmp_path, "vol.tf", 'resource "aws_ebs_volume" "v" {\n  volume_type = "gp3"\n}\n')
+    assert "GL025" not in rule_ids(scan([str(tmp_path)]))
+
+
+def test_detects_log_group_without_retention(tmp_path):
+    write(tmp_path, "log.tf", 'resource "aws_cloudwatch_log_group" "l" {\n  name = "app"\n}\n')
+    assert "GL026" in rule_ids(scan([str(tmp_path)]))
+
+
+def test_log_group_with_retention_not_flagged(tmp_path):
+    write(
+        tmp_path,
+        "log.tf",
+        'resource "aws_cloudwatch_log_group" "l" {\n  name = "app"\n  retention_in_days = 30\n}\n',
+    )
+    assert "GL026" not in rule_ids(scan([str(tmp_path)]))
+
+
+def test_detects_express_static_without_cache(tmp_path):
+    write(tmp_path, "server.js", "app.use(express.static('public'));\n")
+    assert "GL027" in rule_ids(scan([str(tmp_path)]))
+
+
+def test_express_static_with_maxage_not_flagged(tmp_path):
+    write(tmp_path, "server.js", "app.use(express.static('public', { maxAge: '1y' }));\n")
+    assert "GL027" not in rule_ids(scan([str(tmp_path)]))
+
+
+def test_detects_wildcard_import(tmp_path):
+    write(tmp_path, "a.py", "from os import *\n")
+    assert "GL028" in rule_ids(scan([str(tmp_path)]))
+
+
+def test_named_import_not_flagged(tmp_path):
+    write(tmp_path, "a.py", "from math import sqrt\n")
+    assert "GL028" not in rule_ids(scan([str(tmp_path)]))
+
+
+def test_detects_multiple_dockerfile_install_layers(tmp_path):
+    write(
+        tmp_path,
+        "Dockerfile",
+        "FROM debian:bookworm-slim\nRUN apt-get install -y curl\nRUN pip3 install -r requirements.txt\n",
+    )
+    assert "GL029" in rule_ids(scan([str(tmp_path)]))
+
+
+def test_single_dockerfile_install_layer_not_flagged(tmp_path):
+    write(
+        tmp_path,
+        "Dockerfile",
+        "FROM debian:bookworm-slim\nRUN apt-get install -y curl && pip3 install -r requirements.txt\n",
+    )
+    assert "GL029" not in rule_ids(scan([str(tmp_path)]))
