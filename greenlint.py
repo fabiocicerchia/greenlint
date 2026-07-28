@@ -78,8 +78,23 @@ RULES = [
     {
         "id": "GL002",
         "langs": {
-            ".py", ".js", ".ts", ".sh", ".go", ".rs", ".java", ".php", ".pl",
-            ".c", ".h", ".cpp", ".cc", ".hpp", ".kt", ".swift", ".cs",
+            ".py",
+            ".js",
+            ".ts",
+            ".sh",
+            ".go",
+            ".rs",
+            ".java",
+            ".php",
+            ".pl",
+            ".c",
+            ".h",
+            ".cpp",
+            ".cc",
+            ".hpp",
+            ".kt",
+            ".swift",
+            ".cs",
         },
         "severity": "low",
         "pattern": re.compile(
@@ -115,8 +130,21 @@ RULES = [
     {
         "id": "GL005",
         "langs": {
-            ".sql", ".py", ".php", ".go", ".js", ".ts", ".rs", ".java",
-            ".c", ".h", ".cpp", ".cc", ".hpp", ".pl", ".sh",
+            ".sql",
+            ".py",
+            ".php",
+            ".go",
+            ".js",
+            ".ts",
+            ".rs",
+            ".java",
+            ".c",
+            ".h",
+            ".cpp",
+            ".cc",
+            ".hpp",
+            ".pl",
+            ".sh",
         },
         "severity": "medium",
         "pattern": re.compile(r"SELECT\s+\*\s+FROM", re.I),
@@ -127,7 +155,9 @@ RULES = [
         "id": "GL006",
         "langs": {".dockerfile", "Dockerfile"},
         "severity": "medium",
-        "pattern": re.compile(r"^FROM\s+(?:ubuntu|debian)(?::|\s|$)(?!.*slim)", re.M | re.I),
+        "pattern": re.compile(
+            r"^FROM\s+(?:ubuntu|debian)(?::|\s|$)(?!.*slim)", re.M | re.I
+        ),
         "message": "full-fat base image",
         "suggestion": "prefer -slim/alpine/distroless: smaller pulls, less storage, faster cold starts",
     },
@@ -143,7 +173,9 @@ RULES = [
         "id": "GL008",
         "langs": {".tf", ".tofu"},
         "severity": "high",
-        "pattern": re.compile(r'instance_type\s*=\s*"(?:m|c|r)[0-9]\.(?:8|12|16|24)xlarge"'),
+        "pattern": re.compile(
+            r'instance_type\s*=\s*"(?:m|c|r)[0-9]\.(?:8|12|16|24)xlarge"'
+        ),
         "message": "very large instance type hardcoded",
         "suggestion": "check utilization; rightsize or use autoscaling instead of peak-sizing",
     },
@@ -151,7 +183,9 @@ RULES = [
         "id": "GL009",
         "langs": {".dockerfile", "Dockerfile"},
         "severity": "low",
-        "pattern": re.compile(r"apt-get\s+install(?!.*--no-install-recommends)[^\n]*", re.I),
+        "pattern": re.compile(
+            r"apt-get\s+install(?!.*--no-install-recommends)[^\n]*", re.I
+        ),
         "message": "apt-get install without --no-install-recommends",
         "suggestion": "recommended/suggested packages bloat the image; skip them to cut pull, transfer, and storage energy",
     },
@@ -214,7 +248,9 @@ RULES = [
         "id": "GL016",
         "langs": {".tf", ".tofu"},
         "severity": "low",
-        "pattern": re.compile(r'instance_type\s*=\s*"(?:t2|t3|m4|m5|c4|c5|r4|r5)\.[a-z0-9]+"', re.I),
+        "pattern": re.compile(
+            r'instance_type\s*=\s*"(?:t2|t3|m4|m5|c4|c5|r4|r5)\.[a-z0-9]+"', re.I
+        ),
         "message": "x86 instance family with an ARM/Graviton equivalent available",
         "suggestion": "ARM-based instances (t4g/m6g/c6g/r6g) deliver ~3-4x better performance-per-watt for compatible workloads",
     },
@@ -222,7 +258,9 @@ RULES = [
         "id": "GL017",
         "langs": {".html", ".css"},
         "severity": "low",
-        "pattern": re.compile(r"""(?:<img\b[^>]*\bsrc\s*=\s*["']|url\(\s*["']?)[^"'\)\s]+\.gif\b""", re.I),
+        "pattern": re.compile(
+            r"""(?:<img\b[^>]*\bsrc\s*=\s*["']|url\(\s*["']?)[^"'\)\s]+\.gif\b""", re.I
+        ),
         "message": "GIF referenced for image/animation",
         "suggestion": "GIFs are an obsolete, inefficient animation format; MP4/WebP/AVIF (or SVG/CSS animation) give smaller files and less energy per view",
     },
@@ -239,7 +277,8 @@ RULES = [
         "langs": {".py"},
         "severity": "medium",
         "pattern": re.compile(
-            r"for\s+\w+\s+in\s+[^:\n]+:\n[ \t]+(?:\w+\s*=\s*)?requests\.(?:get|post|put|patch|delete)\(", re.M
+            r"for\s+\w+\s+in\s+[^:\n]+:\n[ \t]+(?:\w+\s*=\s*)?requests\.(?:get|post|put|patch|delete)\(",
+            re.M,
         ),
         "message": "HTTP request executed inside a loop (N+1-style network calls)",
         "suggestion": "batch the calls, reuse a requests.Session, or gather them concurrently instead of one request per iteration; cuts round-trips and idle-wait energy",
@@ -248,7 +287,9 @@ RULES = [
         "id": "GL020",
         "langs": {".py"},
         "severity": "low",
-        "pattern": re.compile(r"""logging\.(?:debug|info)\(\s*(?:f['"]|['"][^'"]*['"]\s*\.\s*format\()"""),
+        "pattern": re.compile(
+            r"""logging\.(?:debug|info)\(\s*(?:f['"]|['"][^'"]*['"]\s*\.\s*format\()"""
+        ),
         "message": "logging call built eagerly with an f-string or .format()",
         "suggestion": "the interpolation runs even when the log level is disabled; use logging.debug('x=%s', x) for lazy formatting",
     },
@@ -265,7 +306,8 @@ RULES = [
         "langs": {".py"},
         "severity": "low",
         "pattern": re.compile(
-            r"for\s+\w+\s+in\s+[^:\n]+:\n[ \t]+(?:\w+\s*=\s*)?(?:open\(|pd\.read_csv\(|pd\.read_json\()", re.M
+            r"for\s+\w+\s+in\s+[^:\n]+:\n[ \t]+(?:\w+\s*=\s*)?(?:open\(|pd\.read_csv\(|pd\.read_json\()",
+            re.M,
         ),
         "message": "file opened/read inside a loop",
         "suggestion": "repeated opens/reads add a syscall and parse pass per iteration; load once outside the loop or read in chunks",
@@ -390,7 +432,9 @@ RULES = [
         "id": "GL037",
         "langs": {".rb"},
         "severity": "low",
-        "pattern": re.compile(r"\.select\s*(?:\(&:\w+[?!]?\)|\{[^{}]*\})\s*\.map\s*(?:\(&:\w+[?!]?\)|\{[^{}]*\})"),
+        "pattern": re.compile(
+            r"\.select\s*(?:\(&:\w+[?!]?\)|\{[^{}]*\})\s*\.map\s*(?:\(&:\w+[?!]?\)|\{[^{}]*\})"
+        ),
         "message": "select().map() chain (two passes over the collection)",
         "suggestion": "use filter_map to select and transform in a single pass instead of two full iterations",
     },
@@ -417,7 +461,9 @@ def _parse_simple_toml(text):
         key, _, value = line.partition("=")
         key, value = key.strip(), value.strip()
         if value.startswith("[") and value.endswith("]"):
-            data[key] = [v.strip().strip("\"'") for v in value[1:-1].split(",") if v.strip()]
+            data[key] = [
+                v.strip().strip("\"'") for v in value[1:-1].split(",") if v.strip()
+            ]
         else:
             data[key] = value.strip("\"'")
     return data
@@ -431,7 +477,10 @@ def load_config(path=None):
     if not cfg_path.is_file():
         return {"disable": set(), "ignore": []}
     data = _parse_simple_toml(cfg_path.read_text())
-    return {"disable": set(data.get("disable", [])), "ignore": list(data.get("ignore", []))}
+    return {
+        "disable": set(data.get("disable", [])),
+        "ignore": list(data.get("ignore", [])),
+    }
 
 
 def _finding(rule, path, line):
@@ -465,7 +514,11 @@ def _ast_busy_loop_findings(path, tree):
     """
     rule = next(r for r in RULES if r["id"] == "GL001")
     for node in ast.walk(tree):
-        if not (isinstance(node, ast.While) and isinstance(node.test, ast.Constant) and node.test.value is True):
+        if not (
+            isinstance(node, ast.While)
+            and isinstance(node.test, ast.Constant)
+            and node.test.value is True
+        ):
             continue
         sleeps = any(
             isinstance(n, ast.Call)
@@ -547,9 +600,17 @@ def _ast_dict_iterator_findings(path, tree):
     """
     rule = next(r for r in RULES if r["id"] == "GL030")
     for node in ast.walk(tree):
-        if not (isinstance(node, ast.For) and isinstance(node.target, ast.Tuple) and len(node.target.elts) == 2):
+        if not (
+            isinstance(node, ast.For)
+            and isinstance(node.target, ast.Tuple)
+            and len(node.target.elts) == 2
+        ):
             continue
-        if not (isinstance(node.iter, ast.Call) and isinstance(node.iter.func, ast.Attribute) and node.iter.func.attr == "items"):
+        if not (
+            isinstance(node.iter, ast.Call)
+            and isinstance(node.iter.func, ast.Attribute)
+            and node.iter.func.attr == "items"
+        ):
             continue
         key, value = node.target.elts
         if any(isinstance(e, ast.Name) and e.id == "_" for e in (key, value)):
@@ -625,7 +686,9 @@ def _dockerfile_layer_bloat_findings(path, text):
     rule = next(r for r in RULES if r["id"] == "GL029")
     positions = [
         m.start()
-        for m in re.finditer(r"^RUN\s+.*\b(?:apt(?:-get)?|pip3?|npm|yum)\s+install\b", text, re.M | re.I)
+        for m in re.finditer(
+            r"^RUN\s+.*\b(?:apt(?:-get)?|pip3?|npm|yum)\s+install\b", text, re.M | re.I
+        )
     ]
     for pos in positions[1:]:
         yield _finding(rule, path, text.count("\n", 0, pos) + 1)
@@ -708,10 +771,17 @@ def scan_file(path, disabled=frozenset()):
             yield from _k8s_hpa_static_findings(path, text)
         if "GL034" not in disabled:
             yield from _compose_resources_findings(path, text)
-    if (path.suffix == ".dockerfile" or path.name == "Dockerfile") and "GL029" not in disabled:
+    if (
+        path.suffix == ".dockerfile" or path.name == "Dockerfile"
+    ) and "GL029" not in disabled:
         yield from _dockerfile_layer_bloat_findings(path, text)
     for rule in RULES:
-        if rule["id"] in disabled or rule["id"] in ast_rules or rule["pattern"] is None or not applicable(rule, path):
+        if (
+            rule["id"] in disabled
+            or rule["id"] in ast_rules
+            or rule["pattern"] is None
+            or not applicable(rule, path)
+        ):
             continue
         for m in rule["pattern"].finditer(text):
             line = text.count("\n", 0, m.start()) + 1
@@ -730,7 +800,9 @@ def scan(paths, config=None):
             else [
                 f
                 for f in p.rglob("*")
-                if f.is_file() and ".git" not in f.parts and "node_modules" not in f.parts
+                if f.is_file()
+                and ".git" not in f.parts
+                and "node_modules" not in f.parts
             ]
         )
         for f in files:
@@ -745,13 +817,17 @@ def scan(paths, config=None):
 def main(argv=None):
     """CLI entry point; returns the process exit code."""
     p = argparse.ArgumentParser(
-        prog="greenlint", description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
+        prog="greenlint",
+        description=__doc__,
+        formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     p.add_argument("paths", nargs="*", default=["."])
     p.add_argument("--list-rules", action="store_true")
     p.add_argument("--format", choices=["text", "json", "github"], default="text")
     p.add_argument("--fail-on-findings", action="store_true")
-    p.add_argument("--config", help=f"path to config (default: ./{CONFIG_FILENAME} if present)")
+    p.add_argument(
+        "--config", help=f"path to config (default: ./{CONFIG_FILENAME} if present)"
+    )
     args = p.parse_args(argv)
 
     if args.list_rules:
@@ -774,7 +850,9 @@ def main(argv=None):
             )
     else:
         for f in findings:
-            print(f"{f['file']}:{f['line']}: [{f['rule']}/{f['severity']}] {f['message']}")
+            print(
+                f"{f['file']}:{f['line']}: [{f['rule']}/{f['severity']}] {f['message']}"
+            )
             print(f"    ↳ {f['suggestion']}")
             if f["co2e_estimate"]:
                 print(f"    ~ {f['co2e_estimate']}")

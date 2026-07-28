@@ -134,7 +134,11 @@ def test_detects_query_in_loop(tmp_path):
 
 
 def test_batched_query_not_flagged_as_n_plus_1(tmp_path):
-    write(tmp_path, "a.py", 'cursor.execute(f"SELECT * FROM users WHERE id IN {user_ids}")\n')
+    write(
+        tmp_path,
+        "a.py",
+        'cursor.execute(f"SELECT * FROM users WHERE id IN {user_ids}")\n',
+    )
     assert "GL012" not in rule_ids(scan([str(tmp_path)]))
 
 
@@ -193,12 +197,20 @@ def test_current_docker_base_image_not_flagged(tmp_path):
 
 
 def test_detects_non_graviton_instance_family(tmp_path):
-    write(tmp_path, "main.tf", 'resource "aws_instance" "web" {\n  instance_type = "m5.large"\n}\n')
+    write(
+        tmp_path,
+        "main.tf",
+        'resource "aws_instance" "web" {\n  instance_type = "m5.large"\n}\n',
+    )
     assert "GL016" in rule_ids(scan([str(tmp_path)]))
 
 
 def test_graviton_instance_family_not_flagged(tmp_path):
-    write(tmp_path, "main.tf", 'resource "aws_instance" "web" {\n  instance_type = "m6g.large"\n}\n')
+    write(
+        tmp_path,
+        "main.tf",
+        'resource "aws_instance" "web" {\n  instance_type = "m6g.large"\n}\n',
+    )
     assert "GL016" not in rule_ids(scan([str(tmp_path)]))
 
 
@@ -216,22 +228,38 @@ def test_png_in_html_and_css_not_flagged(tmp_path):
 
 
 def test_detects_nested_loop_over_same_collection(tmp_path):
-    write(tmp_path, "a.py", "def f(items):\n    for i in items:\n        for j in items:\n            pass\n")
+    write(
+        tmp_path,
+        "a.py",
+        "def f(items):\n    for i in items:\n        for j in items:\n            pass\n",
+    )
     assert "GL018" in rule_ids(scan([str(tmp_path)]))
 
 
 def test_nested_loop_over_different_collections_not_flagged(tmp_path):
-    write(tmp_path, "a.py", "def f(items, others):\n    for i in items:\n        for j in others:\n            pass\n")
+    write(
+        tmp_path,
+        "a.py",
+        "def f(items, others):\n    for i in items:\n        for j in others:\n            pass\n",
+    )
     assert "GL018" not in rule_ids(scan([str(tmp_path)]))
 
 
 def test_detects_http_request_in_loop(tmp_path):
-    write(tmp_path, "a.py", "def f(ids):\n    for i in ids:\n        requests.get(f'/x/{i}')\n")
+    write(
+        tmp_path,
+        "a.py",
+        "def f(ids):\n    for i in ids:\n        requests.get(f'/x/{i}')\n",
+    )
     assert "GL019" in rule_ids(scan([str(tmp_path)]))
 
 
 def test_batched_http_request_not_flagged(tmp_path):
-    write(tmp_path, "a.py", "def f(ids):\n    session.get('/batch', params={'ids': ids})\n")
+    write(
+        tmp_path,
+        "a.py",
+        "def f(ids):\n    session.get('/batch', params={'ids': ids})\n",
+    )
     assert "GL019" not in rule_ids(scan([str(tmp_path)]))
 
 
@@ -246,7 +274,11 @@ def test_lazy_logging_not_flagged(tmp_path):
 
 
 def test_detects_pandas_iterrows(tmp_path):
-    write(tmp_path, "a.py", "def f(df):\n    for i, row in df.iterrows():\n        print(row)\n")
+    write(
+        tmp_path,
+        "a.py",
+        "def f(df):\n    for i, row in df.iterrows():\n        print(row)\n",
+    )
     assert "GL021" in rule_ids(scan([str(tmp_path)]))
 
 
@@ -261,7 +293,9 @@ def test_detects_file_open_in_loop(tmp_path):
 
 
 def test_file_opened_outside_loop_not_flagged(tmp_path):
-    write(tmp_path, "a.py", "def f(paths):\n    data = [open(p).read() for p in paths]\n")
+    write(
+        tmp_path, "a.py", "def f(paths):\n    data = [open(p).read() for p in paths]\n"
+    )
     assert "GL022" not in rule_ids(scan([str(tmp_path)]))
 
 
@@ -282,27 +316,47 @@ def test_builtin_sorted_not_flagged(tmp_path):
 
 
 def test_detects_fixed_size_autoscaling_group(tmp_path):
-    write(tmp_path, "asg.tf", 'resource "aws_autoscaling_group" "bad" {\n  min_size = 3\n  max_size = 3\n}\n')
+    write(
+        tmp_path,
+        "asg.tf",
+        'resource "aws_autoscaling_group" "bad" {\n  min_size = 3\n  max_size = 3\n}\n',
+    )
     assert "GL024" in rule_ids(scan([str(tmp_path)]))
 
 
 def test_elastic_autoscaling_group_not_flagged(tmp_path):
-    write(tmp_path, "asg.tf", 'resource "aws_autoscaling_group" "good" {\n  min_size = 1\n  max_size = 5\n}\n')
+    write(
+        tmp_path,
+        "asg.tf",
+        'resource "aws_autoscaling_group" "good" {\n  min_size = 1\n  max_size = 5\n}\n',
+    )
     assert "GL024" not in rule_ids(scan([str(tmp_path)]))
 
 
 def test_detects_gp2_volume(tmp_path):
-    write(tmp_path, "vol.tf", 'resource "aws_ebs_volume" "v" {\n  volume_type = "gp2"\n}\n')
+    write(
+        tmp_path,
+        "vol.tf",
+        'resource "aws_ebs_volume" "v" {\n  volume_type = "gp2"\n}\n',
+    )
     assert "GL025" in rule_ids(scan([str(tmp_path)]))
 
 
 def test_gp3_volume_not_flagged(tmp_path):
-    write(tmp_path, "vol.tf", 'resource "aws_ebs_volume" "v" {\n  volume_type = "gp3"\n}\n')
+    write(
+        tmp_path,
+        "vol.tf",
+        'resource "aws_ebs_volume" "v" {\n  volume_type = "gp3"\n}\n',
+    )
     assert "GL025" not in rule_ids(scan([str(tmp_path)]))
 
 
 def test_detects_log_group_without_retention(tmp_path):
-    write(tmp_path, "log.tf", 'resource "aws_cloudwatch_log_group" "l" {\n  name = "app"\n}\n')
+    write(
+        tmp_path,
+        "log.tf",
+        'resource "aws_cloudwatch_log_group" "l" {\n  name = "app"\n}\n',
+    )
     assert "GL026" in rule_ids(scan([str(tmp_path)]))
 
 
@@ -321,7 +375,9 @@ def test_detects_express_static_without_cache(tmp_path):
 
 
 def test_express_static_with_maxage_not_flagged(tmp_path):
-    write(tmp_path, "server.js", "app.use(express.static('public', { maxAge: '1y' }));\n")
+    write(
+        tmp_path, "server.js", "app.use(express.static('public', { maxAge: '1y' }));\n"
+    )
     assert "GL027" not in rule_ids(scan([str(tmp_path)]))
 
 
@@ -359,7 +415,9 @@ def test_detects_dict_items_discarding_key_or_value(tmp_path):
 
 
 def test_dict_items_using_both_key_and_value_not_flagged(tmp_path):
-    write(tmp_path, "a.py", "def f(d):\n    for k, v in d.items():\n        print(k, v)\n")
+    write(
+        tmp_path, "a.py", "def f(d):\n    for k, v in d.items():\n        print(k, v)\n"
+    )
     assert "GL030" not in rule_ids(scan([str(tmp_path)]))
 
 
@@ -382,12 +440,20 @@ def test_try_except_around_loop_not_flagged(tmp_path):
 
 
 def test_detects_malloc_in_loop(tmp_path):
-    write(tmp_path, "a.c", "void f(int n) {\n    for (int i = 0; i < n; i++) {\n        int *buf = malloc(100);\n    }\n}\n")
+    write(
+        tmp_path,
+        "a.c",
+        "void f(int n) {\n    for (int i = 0; i < n; i++) {\n        int *buf = malloc(100);\n    }\n}\n",
+    )
     assert "GL032" in rule_ids(scan([str(tmp_path)]))
 
 
 def test_malloc_outside_loop_not_flagged(tmp_path):
-    write(tmp_path, "a.c", "void f(int n) {\n    int *buf = malloc(100 * n);\n    for (int i = 0; i < n; i++) {\n    }\n}\n")
+    write(
+        tmp_path,
+        "a.c",
+        "void f(int n) {\n    int *buf = malloc(100 * n);\n    for (int i = 0; i < n; i++) {\n    }\n}\n",
+    )
     assert "GL032" not in rule_ids(scan([str(tmp_path)]))
 
 
@@ -415,12 +481,20 @@ def test_detects_compose_service_without_limits(tmp_path):
 
 
 def test_compose_service_with_mem_limit_not_flagged(tmp_path):
-    write(tmp_path, "docker-compose.yml", "services:\n  web:\n    image: nginx\n    mem_limit: 512m\n")
+    write(
+        tmp_path,
+        "docker-compose.yml",
+        "services:\n  web:\n    image: nginx\n    mem_limit: 512m\n",
+    )
     assert "GL034" not in rule_ids(scan([str(tmp_path)]))
 
 
 def test_opentofu_files_use_the_same_terraform_rules(tmp_path):
-    write(tmp_path, "main.tofu", 'resource "aws_instance" "web" {\n  instance_type = "m5.large"\n}\n')
+    write(
+        tmp_path,
+        "main.tofu",
+        'resource "aws_instance" "web" {\n  instance_type = "m5.large"\n}\n',
+    )
     assert "GL016" in rule_ids(scan([str(tmp_path)]))
 
 
@@ -507,10 +581,18 @@ def test_kotlin_long_delay_not_flagged(tmp_path):
 
 
 def test_detects_swift_short_timer_interval(tmp_path):
-    write(tmp_path, "Poll.swift", "Timer.scheduledTimer(withTimeInterval: 0.05, repeats: true) { _ in tick() }\n")
+    write(
+        tmp_path,
+        "Poll.swift",
+        "Timer.scheduledTimer(withTimeInterval: 0.05, repeats: true) { _ in tick() }\n",
+    )
     assert "GL002" in rule_ids(scan([str(tmp_path)]))
 
 
 def test_swift_long_timer_interval_not_flagged(tmp_path):
-    write(tmp_path, "Poll.swift", "Timer.scheduledTimer(withTimeInterval: 5.0, repeats: true) { _ in tick() }\n")
+    write(
+        tmp_path,
+        "Poll.swift",
+        "Timer.scheduledTimer(withTimeInterval: 5.0, repeats: true) { _ in tick() }\n",
+    )
     assert "GL002" not in rule_ids(scan([str(tmp_path)]))
