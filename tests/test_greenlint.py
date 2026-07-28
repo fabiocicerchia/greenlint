@@ -58,8 +58,7 @@ def test_ast_busy_loop_ignores_unrelated_sleep_elsewhere_in_file(tmp_path):
     write(
         tmp_path,
         "a.py",
-        "def poll():\n    while True:\n        check()\n\n"
-        "def other():\n    time.sleep(1)\n",
+        "def poll():\n    while True:\n        check()\n\ndef other():\n    time.sleep(1)\n",
     )
     assert "GL001" in rule_ids(scan([str(tmp_path)]))
 
@@ -293,9 +292,7 @@ def test_detects_file_open_in_loop(tmp_path):
 
 
 def test_file_opened_outside_loop_not_flagged(tmp_path):
-    write(
-        tmp_path, "a.py", "def f(paths):\n    data = [open(p).read() for p in paths]\n"
-    )
+    write(tmp_path, "a.py", "def f(paths):\n    data = [open(p).read() for p in paths]\n")
     assert "GL022" not in rule_ids(scan([str(tmp_path)]))
 
 
@@ -375,9 +372,7 @@ def test_detects_express_static_without_cache(tmp_path):
 
 
 def test_express_static_with_maxage_not_flagged(tmp_path):
-    write(
-        tmp_path, "server.js", "app.use(express.static('public', { maxAge: '1y' }));\n"
-    )
+    write(tmp_path, "server.js", "app.use(express.static('public', { maxAge: '1y' }));\n")
     assert "GL027" not in rule_ids(scan([str(tmp_path)]))
 
 
@@ -415,9 +410,7 @@ def test_detects_dict_items_discarding_key_or_value(tmp_path):
 
 
 def test_dict_items_using_both_key_and_value_not_flagged(tmp_path):
-    write(
-        tmp_path, "a.py", "def f(d):\n    for k, v in d.items():\n        print(k, v)\n"
-    )
+    write(tmp_path, "a.py", "def f(d):\n    for k, v in d.items():\n        print(k, v)\n")
     assert "GL030" not in rule_ids(scan([str(tmp_path)]))
 
 

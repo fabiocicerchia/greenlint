@@ -71,7 +71,7 @@ RULES = [
         "id": "GL001",
         "langs": {".py"},
         "severity": "medium",
-        "pattern": re.compile(r"while\s+True\s*:\s*$(?!.*sleep)", re.M),
+        "pattern": re.compile(r"while\s+True\s*:\s*$(?!.*sleep)", re.MULTILINE),
         "message": "busy loop without sleep",
         "suggestion": "poll with a backoff/sleep, or use an event-driven wait",
     },
@@ -147,7 +147,7 @@ RULES = [
             ".sh",
         },
         "severity": "medium",
-        "pattern": re.compile(r"SELECT\s+\*\s+FROM", re.I),
+        "pattern": re.compile(r"SELECT\s+\*\s+FROM", re.IGNORECASE),
         "message": "SELECT * query",
         "suggestion": "fetch only needed columns; less I/O, less network, less RAM",
     },
@@ -156,7 +156,7 @@ RULES = [
         "langs": {".dockerfile", "Dockerfile"},
         "severity": "medium",
         "pattern": re.compile(
-            r"^FROM\s+(?:ubuntu|debian)(?::|\s|$)(?!.*slim)", re.M | re.I
+            r"^FROM\s+(?:ubuntu|debian)(?::|\s|$)(?!.*slim)", re.MULTILINE | re.IGNORECASE
         ),
         "message": "full-fat base image",
         "suggestion": "prefer -slim/alpine/distroless: smaller pulls, less storage, faster cold starts",
@@ -165,7 +165,7 @@ RULES = [
         "id": "GL007",
         "langs": {".py"},
         "severity": "low",
-        "pattern": re.compile(r"\.append\s*\(.*\)\s*$\s+.*for\s+", re.M),
+        "pattern": re.compile(r"\.append\s*\(.*\)\s*$\s+.*for\s+", re.MULTILINE),
         "message": "append inside loop (possible O(n) rebuild pattern)",
         "suggestion": "consider comprehensions/generators; less allocation churn",
     },
@@ -173,9 +173,7 @@ RULES = [
         "id": "GL008",
         "langs": {".tf", ".tofu"},
         "severity": "high",
-        "pattern": re.compile(
-            r'instance_type\s*=\s*"(?:m|c|r)[0-9]\.(?:8|12|16|24)xlarge"'
-        ),
+        "pattern": re.compile(r'instance_type\s*=\s*"(?:m|c|r)[0-9]\.(?:8|12|16|24)xlarge"'),
         "message": "very large instance type hardcoded",
         "suggestion": "check utilization; rightsize or use autoscaling instead of peak-sizing",
     },
@@ -184,7 +182,7 @@ RULES = [
         "langs": {".dockerfile", "Dockerfile"},
         "severity": "low",
         "pattern": re.compile(
-            r"apt-get\s+install(?!.*--no-install-recommends)[^\n]*", re.I
+            r"apt-get\s+install(?!.*--no-install-recommends)[^\n]*", re.IGNORECASE
         ),
         "message": "apt-get install without --no-install-recommends",
         "suggestion": "recommended/suggested packages bloat the image; skip them to cut pull, transfer, and storage energy",
@@ -193,7 +191,7 @@ RULES = [
         "id": "GL010",
         "langs": {".dockerfile", "Dockerfile"},
         "severity": "low",
-        "pattern": re.compile(r"pip3?\s+install(?!.*--no-cache-dir)[^\n]*", re.I),
+        "pattern": re.compile(r"pip3?\s+install(?!.*--no-cache-dir)[^\n]*", re.IGNORECASE),
         "message": "pip install without --no-cache-dir",
         "suggestion": "the wheel cache gets baked into the image layer; skip it to shrink pulls and storage",
     },
@@ -201,7 +199,7 @@ RULES = [
         "id": "GL011",
         "langs": {".html"},
         "severity": "low",
-        "pattern": re.compile(r"<img\b(?![^>]*\bloading=)[^>]*>", re.I),
+        "pattern": re.compile(r"<img\b(?![^>]*\bloading=)[^>]*>", re.IGNORECASE),
         "message": "img tag missing lazy loading",
         "suggestion": 'loading="lazy" defers offscreen image loads; less bandwidth and render work up front',
     },
@@ -209,7 +207,7 @@ RULES = [
         "id": "GL012",
         "langs": {".py"},
         "severity": "medium",
-        "pattern": re.compile(r"for\s+\w+\s+in\s+[^:\n]+:\n[ \t]+\S*\.execute\(", re.M),
+        "pattern": re.compile(r"for\s+\w+\s+in\s+[^:\n]+:\n[ \t]+\S*\.execute\(", re.MULTILINE),
         "message": "database query executed inside a loop (N+1 pattern)",
         "suggestion": "batch into one query (e.g. WHERE id IN (...)) instead of one round-trip per item; cuts DB CPU and network energy",
     },
@@ -239,7 +237,7 @@ RULES = [
             r"|ubuntu:(?:14\.04|16\.04|18\.04)\b"
             r"|debian:(?:7|8|9|wheezy|jessie|stretch)\b"
             r"|centos:(?:6|7)\b)",
-            re.M | re.I,
+            re.MULTILINE | re.IGNORECASE,
         ),
         "message": "base image pinned to an end-of-life runtime/OS version",
         "suggestion": "older runtimes lack the perf/efficiency work in newer releases and pull more security-patch layers over time; move to a current stable version",
@@ -249,7 +247,7 @@ RULES = [
         "langs": {".tf", ".tofu"},
         "severity": "low",
         "pattern": re.compile(
-            r'instance_type\s*=\s*"(?:t2|t3|m4|m5|c4|c5|r4|r5)\.[a-z0-9]+"', re.I
+            r'instance_type\s*=\s*"(?:t2|t3|m4|m5|c4|c5|r4|r5)\.[a-z0-9]+"', re.IGNORECASE
         ),
         "message": "x86 instance family with an ARM/Graviton equivalent available",
         "suggestion": "ARM-based instances (t4g/m6g/c6g/r6g) deliver ~3-4x better performance-per-watt for compatible workloads",
@@ -259,7 +257,7 @@ RULES = [
         "langs": {".html", ".css"},
         "severity": "low",
         "pattern": re.compile(
-            r"""(?:<img\b[^>]*\bsrc\s*=\s*["']|url\(\s*["']?)[^"'\)\s]+\.gif\b""", re.I
+            r"""(?:<img\b[^>]*\bsrc\s*=\s*["']|url\(\s*["']?)[^"'\)\s]+\.gif\b""", re.IGNORECASE
         ),
         "message": "GIF referenced for image/animation",
         "suggestion": "GIFs are an obsolete, inefficient animation format; MP4/WebP/AVIF (or SVG/CSS animation) give smaller files and less energy per view",
@@ -278,7 +276,7 @@ RULES = [
         "severity": "medium",
         "pattern": re.compile(
             r"for\s+\w+\s+in\s+[^:\n]+:\n[ \t]+(?:\w+\s*=\s*)?requests\.(?:get|post|put|patch|delete)\(",
-            re.M,
+            re.MULTILINE,
         ),
         "message": "HTTP request executed inside a loop (N+1-style network calls)",
         "suggestion": "batch the calls, reuse a requests.Session, or gather them concurrently instead of one request per iteration; cuts round-trips and idle-wait energy",
@@ -307,7 +305,7 @@ RULES = [
         "severity": "low",
         "pattern": re.compile(
             r"for\s+\w+\s+in\s+[^:\n]+:\n[ \t]+(?:\w+\s*=\s*)?(?:open\(|pd\.read_csv\(|pd\.read_json\()",
-            re.M,
+            re.MULTILINE,
         ),
         "message": "file opened/read inside a loop",
         "suggestion": "repeated opens/reads add a syscall and parse pass per iteration; load once outside the loop or read in chunks",
@@ -356,7 +354,7 @@ RULES = [
         "id": "GL028",
         "langs": {".py"},
         "severity": "low",
-        "pattern": re.compile(r"^from\s+\S+\s+import\s+\*", re.M),
+        "pattern": re.compile(r"^from\s+\S+\s+import\s+\*", re.MULTILINE),
         "message": "wildcard import",
         "suggestion": "star imports bind every public name in the module, bloating the namespace and import time; import only the names you use",
     },
@@ -391,7 +389,7 @@ RULES = [
         "pattern": re.compile(
             r"(?:for|while)\s*\([^\n]*\)\s*\{?\s*\n[ \t]*[^\n]*\b(?:malloc|calloc|realloc)\s*\("
             r"|(?:for|while)\s*\([^\n]*\)\s*\{?\s*\n[ \t]*[^\n]*\bnew\s+\w",
-            re.M,
+            re.MULTILINE,
         ),
         "message": "heap allocation inside a loop",
         "suggestion": "malloc/calloc/realloc/new repeats allocator overhead every iteration; allocate once before the loop and reuse the buffer (or reserve()/resize() for containers)",
@@ -463,9 +461,7 @@ def _parse_simple_toml(text):
         key, _, value = line.partition("=")
         key, value = key.strip(), value.strip()
         if value.startswith("[") and value.endswith("]"):
-            data[key] = [
-                v.strip().strip("\"'") for v in value[1:-1].split(",") if v.strip()
-            ]
+            data[key] = [v.strip().strip("\"'") for v in value[1:-1].split(",") if v.strip()]
         else:
             data[key] = value.strip("\"'")
     return data
@@ -689,7 +685,9 @@ def _dockerfile_layer_bloat_findings(path, text):
     positions = [
         m.start()
         for m in re.finditer(
-            r"^RUN\s+.*\b(?:apt(?:-get)?|pip3?|npm|yum)\s+install\b", text, re.M | re.I
+            r"^RUN\s+.*\b(?:apt(?:-get)?|pip3?|npm|yum)\s+install\b",
+            text,
+            re.MULTILINE | re.IGNORECASE,
         )
     ]
     for pos in positions[1:]:
@@ -702,7 +700,7 @@ def _k8s_resources_findings(path, text):
     repos, a false negative for values shared via Helm/Kustomize overlays.
     """
     rule = RULES_BY_ID["GL014"]
-    m = re.search(r"^kind:\s*(Deployment|StatefulSet|DaemonSet|Pod)\s*$", text, re.M)
+    m = re.search(r"^kind:\s*(Deployment|StatefulSet|DaemonSet|Pod)\s*$", text, re.MULTILINE)
     if m and "resources:" not in text:
         yield _finding(rule, path, text.count("\n", 0, m.start()) + 1)
 
@@ -713,7 +711,7 @@ def _k8s_hpa_static_findings(path, text):
     elastic one.
     """
     rule = RULES_BY_ID["GL033"]
-    if not re.search(r"^kind:\s*HorizontalPodAutoscaler\s*$", text, re.M):
+    if not re.search(r"^kind:\s*HorizontalPodAutoscaler\s*$", text, re.MULTILINE):
         return
     min_m = re.search(r"minReplicas:\s*(\d+)", text)
     max_m = re.search(r"maxReplicas:\s*(\d+)", text)
@@ -727,7 +725,7 @@ def _compose_resources_findings(path, text):
     `deploy.resources` block nor the classic `mem_limit`/`cpus` keys.
     """
     rule = RULES_BY_ID["GL034"]
-    m = re.search(r"^services:\s*$", text, re.M)
+    m = re.search(r"^services:\s*$", text, re.MULTILINE)
     if m and not re.search(r"mem_limit|nano_cpus|cpus\s*:|memory\s*:", text):
         yield _finding(rule, path, text.count("\n", 0, m.start()) + 1)
 
@@ -773,9 +771,7 @@ def scan_file(path, disabled=frozenset()):
             yield from _k8s_hpa_static_findings(path, text)
         if "GL034" not in disabled:
             yield from _compose_resources_findings(path, text)
-    if (
-        path.suffix == ".dockerfile" or path.name == "Dockerfile"
-    ) and "GL029" not in disabled:
+    if (path.suffix == ".dockerfile" or path.name == "Dockerfile") and "GL029" not in disabled:
         yield from _dockerfile_layer_bloat_findings(path, text)
     for rule in RULES:
         if (
@@ -802,9 +798,7 @@ def scan(paths, config=None):
             else [
                 f
                 for f in p.rglob("*")
-                if f.is_file()
-                and ".git" not in f.parts
-                and "node_modules" not in f.parts
+                if f.is_file() and ".git" not in f.parts and "node_modules" not in f.parts
             ]
         )
         for f in files:
@@ -827,9 +821,7 @@ def main(argv=None):
     p.add_argument("--list-rules", action="store_true")
     p.add_argument("--format", choices=["text", "json", "github"], default="text")
     p.add_argument("--fail-on-findings", action="store_true")
-    p.add_argument(
-        "--config", help=f"path to config (default: ./{CONFIG_FILENAME} if present)"
-    )
+    p.add_argument("--config", help=f"path to config (default: ./{CONFIG_FILENAME} if present)")
     args = p.parse_args(argv)
 
     if args.list_rules:
@@ -852,9 +844,7 @@ def main(argv=None):
             )
     else:
         for f in findings:
-            print(
-                f"{f['file']}:{f['line']}: [{f['rule']}/{f['severity']}] {f['message']}"
-            )
+            print(f"{f['file']}:{f['line']}: [{f['rule']}/{f['severity']}] {f['message']}")
             print(f"    ↳ {f['suggestion']}")
             if f["co2e_estimate"]:
                 print(f"    ~ {f['co2e_estimate']}")
