@@ -10,6 +10,10 @@ permissions:
 
 # Lint / formatting / secret scanning live in code-quality.yml and
 # security.yml. This workflow runs the Python test matrix and the build.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   test:
     runs-on: ubuntu-latest
