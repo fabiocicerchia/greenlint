@@ -448,6 +448,8 @@ RULES = [
     },
 ]
 
+RULES_BY_ID = {r["id"]: r for r in RULES}
+
 
 def _parse_simple_toml(text):
     """Parse the flat subset of TOML greenlint's config needs: `key = "value"`
@@ -512,7 +514,7 @@ def _ast_busy_loop_findings(path, tree):
     do sleep but happen to share a file with the word "sleep" elsewhere.
     Walking the loop body directly for a real sleep call fixes both.
     """
-    rule = next(r for r in RULES if r["id"] == "GL001")
+    rule = RULES_BY_ID["GL001"]
     for node in ast.walk(tree):
         if not (
             isinstance(node, ast.While)
@@ -542,7 +544,7 @@ def _ast_nested_loop_findings(path, tree):
     `seen` dedupes an inner loop matched from more than one enclosing loop
     when loops are nested three or more deep.
     """
-    rule = next(r for r in RULES if r["id"] == "GL018")
+    rule = RULES_BY_ID["GL018"]
     seen = set()
     for node in ast.walk(tree):
         if not (isinstance(node, ast.For) and isinstance(node.iter, ast.Name)):
@@ -581,7 +583,7 @@ def _ast_bubble_sort_findings(path, tree):
     contains an element swap — the textbook shape of a hand-rolled bubble or
     selection sort.
     """
-    rule = next(r for r in RULES if r["id"] == "GL023")
+    rule = RULES_BY_ID["GL023"]
     seen = set()
     for node in ast.walk(tree):
         if not isinstance(node, ast.For):
@@ -598,7 +600,7 @@ def _ast_dict_iterator_findings(path, tree):
     """GL030: `for k, v in d.items()` where the key or the value is discarded
     (bound to `_`) — the discarded half didn't need building/unpacking at all.
     """
-    rule = next(r for r in RULES if r["id"] == "GL030")
+    rule = RULES_BY_ID["GL030"]
     for node in ast.walk(tree):
         if not (
             isinstance(node, ast.For)
@@ -622,7 +624,7 @@ def _ast_try_in_loop_findings(path, tree):
     dedupes a `try` matched from more than one enclosing loop when loops are
     nested.
     """
-    rule = next(r for r in RULES if r["id"] == "GL031")
+    rule = RULES_BY_ID["GL031"]
     seen = set()
     for node in ast.walk(tree):
         if not isinstance(node, (ast.For, ast.While)):
@@ -650,7 +652,7 @@ def _tf_s3_lifecycle_findings(path, text):
     """GL013: an `aws_s3_bucket` resource block with no lifecycle rule anywhere
     inside it.
     """
-    rule = next(r for r in RULES if r["id"] == "GL013")
+    rule = RULES_BY_ID["GL013"]
     for _, block, lineno in _tf_resource_blocks(text, "aws_s3_bucket"):
         if "lifecycle" not in block.lower():
             yield _finding(rule, path, lineno)
@@ -661,7 +663,7 @@ def _tf_asg_static_size_findings(path, text):
     same literal value — a fixed-size group provisioned for peak load, not an
     elastic one.
     """
-    rule = next(r for r in RULES if r["id"] == "GL024")
+    rule = RULES_BY_ID["GL024"]
     for _, block, lineno in _tf_resource_blocks(text, "aws_autoscaling_group"):
         min_m = re.search(r"min_size\s*=\s*(\d+)", block)
         max_m = re.search(r"max_size\s*=\s*(\d+)", block)
@@ -673,7 +675,7 @@ def _tf_log_retention_findings(path, text):
     """GL026: an `aws_cloudwatch_log_group` with no `retention_in_days` set —
     logs are kept forever by default.
     """
-    rule = next(r for r in RULES if r["id"] == "GL026")
+    rule = RULES_BY_ID["GL026"]
     for _, block, lineno in _tf_resource_blocks(text, "aws_cloudwatch_log_group"):
         if "retention_in_days" not in block:
             yield _finding(rule, path, lineno)
@@ -683,7 +685,7 @@ def _dockerfile_layer_bloat_findings(path, text):
     """GL029: more than one separate `RUN ... install` line in a Dockerfile —
     each is its own image layer. Flags every occurrence after the first.
     """
-    rule = next(r for r in RULES if r["id"] == "GL029")
+    rule = RULES_BY_ID["GL029"]
     positions = [
         m.start()
         for m in re.finditer(
@@ -699,7 +701,7 @@ def _k8s_resources_findings(path, text):
     in the file. File-wide, not per-container; a real gap for single-manifest
     repos, a false negative for values shared via Helm/Kustomize overlays.
     """
-    rule = next(r for r in RULES if r["id"] == "GL014")
+    rule = RULES_BY_ID["GL014"]
     m = re.search(r"^kind:\s*(Deployment|StatefulSet|DaemonSet|Pod)\s*$", text, re.M)
     if m and "resources:" not in text:
         yield _finding(rule, path, text.count("\n", 0, m.start()) + 1)
@@ -710,7 +712,7 @@ def _k8s_hpa_static_findings(path, text):
     maxReplicas are the same literal value — a fixed-range HPA, not an
     elastic one.
     """
-    rule = next(r for r in RULES if r["id"] == "GL033")
+    rule = RULES_BY_ID["GL033"]
     if not re.search(r"^kind:\s*HorizontalPodAutoscaler\s*$", text, re.M):
         return
     min_m = re.search(r"minReplicas:\s*(\d+)", text)
@@ -724,7 +726,7 @@ def _compose_resources_findings(path, text):
     resource limit anywhere in the file — neither the Swarm-mode
     `deploy.resources` block nor the classic `mem_limit`/`cpus` keys.
     """
-    rule = next(r for r in RULES if r["id"] == "GL034")
+    rule = RULES_BY_ID["GL034"]
     m = re.search(r"^services:\s*$", text, re.M)
     if m and not re.search(r"mem_limit|nano_cpus|cpus\s*:|memory\s*:", text):
         yield _finding(rule, path, text.count("\n", 0, m.start()) + 1)
