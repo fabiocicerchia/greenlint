@@ -27,3 +27,27 @@ Try it against the bundled example:
 ```sh
 greenlint examples/basic/
 ```
+
+## Development
+
+`make setup` (git hooks + pre-commit), then `make dev` and `make test` / `make lint`.
+
+## Usage
+
+```sh
+pipx install .
+greenlint .                          # scan the repo
+greenlint --list-rules               # what it knows
+greenlint . --fail-on-findings       # CI gate
+greenlint . --format json            # tooling integration
+greenlint . --config path/to.toml    # override the .greenlint.toml lookup
+```
+
+### Config
+
+Drop a `.greenlint.toml` in the repo root to disable rules or ignore paths:
+
+```toml
+disable = ["GL002", "GL007"]
+ignore = ["vendor/*", "*/node_modules/*"]
+```
