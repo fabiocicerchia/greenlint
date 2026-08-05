@@ -26,7 +26,7 @@ jobs:
       release_created: ${{ steps.rp.outputs.release_created }}
     steps:
       - id: rp
-        uses: googleapis/release-please-action@45996ed1f6d02564a971a2fa1b5860e934307cf7  # v5
+        uses: googleapis/release-please-action@45996ed1f6d02564a971a2fa1b5860e934307cf7  # v5.0.0
         with:
           # Bumps `version` in pyproject.toml and maintains CHANGELOG.md.
           release-type: python
@@ -60,4 +60,4 @@ jobs:
           name: dist
           path: dist/
       - name: Publish to PyPI (trusted publishing)
-        uses: pypa/gh-action-pypi-publish@cef221092ed1bacb1cc03d23a2d87d1d172e277b  # v1
+        uses: pypa/gh-action-pypi-publish@cef221092ed1bacb1cc03d23a2d87d1d172e277b  # v1.14.0
