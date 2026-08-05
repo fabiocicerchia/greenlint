@@ -44,44 +44,13 @@ curl -fsSL https://raw.githubusercontent.com/fabiocicerchia/greenlint/main/insta
 ## Usage
 
 ```sh
-pipx install .
-greenlint .                          # scan the repo
-greenlint --list-rules               # what it knows
-greenlint . --fail-on-findings       # CI gate
-greenlint . --format json            # tooling integration
-greenlint . --config path/to.toml    # override the .greenlint.toml lookup
+greenlint .                     # scan the current repo
+greenlint --list-rules          # show every rule it knows
+greenlint . --fail-on-findings  # exit non-zero if anything is found (CI gate)
+greenlint . --format json       # machine-readable output
 ```
 
-### Config
-
-Drop a `.greenlint.toml` in the repo root to disable rules or ignore paths:
-
-```toml
-disable = ["GL002", "GL007"]
-ignore = ["vendor/*", "*/node_modules/*"]
-```
-
-## Rules
-
-38 rules (GL001–GL038, see `--list-rules`) spanning Python, JS/TS/JSX/TSX,
-Go, Rust, Java, Kotlin, Swift, C#, C/C++, PHP, Perl, Ruby, Bash, SQL, HTML,
-CSS, Dockerfile, Terraform/OpenTofu, Kubernetes, and docker-compose/Swarm.
-See [`docs/rules.md`](docs/rules.md) for the full reference — what each rule
-detects, how it's triggered, and the remediation. Rule development is
-deliberately open-ended — the rule set *is* the product. Proposals with an
-energy rationale are the most valuable contribution.
-
-## Status & roadmap
-
-- [x] AST-based rules for Python (GL001, GL018, GL023, GL030, GL031)
-- [ ] Broader AST-based rules beyond Python (regex has false-positive limits
-      for JS/Go/Rust/etc.)
-- [ ] C#, Ruby, Kotlin, Swift coverage is currently a single high-confidence
-      rule each — room to grow
-
-## Development
-
-`make setup` (git hooks + pre-commit), then `make dev` and `make test` / `make lint`.
+More in [`docs/getting-started.md`](docs/getting-started.md).
 
 ## Documentation
 
