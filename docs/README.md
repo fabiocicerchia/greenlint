@@ -1,6 +1,5 @@
 # Documentation
 
-- [Getting Started](getting-started.md) — install and first scan.
-- [Architecture](architecture.md) — how the rule engine works.
-
-Add pages here as the project grows (rule reference, config format, ADRs).
+- [Architecture](architecture.md) — high-level design and components.
+- [Getting Started](getting-started.md) — setup, first run and day-to-day use.
+- [Rules](rules.md) — every rule, why it fires, and how to silence it.

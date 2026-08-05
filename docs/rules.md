@@ -327,3 +327,13 @@ Detection mechanism key:
 - **Fix:** a new function/object is allocated every render, defeating
   `memo`/`PureComponent`; hoist it with `useCallback`/`useMemo` or move it
   outside the component.
+
+## Rules
+
+38 rules (GL001–GL038, see `--list-rules`) spanning Python, JS/TS/JSX/TSX,
+Go, Rust, Java, Kotlin, Swift, C#, C/C++, PHP, Perl, Ruby, Bash, SQL, HTML,
+CSS, Dockerfile, Terraform/OpenTofu, Kubernetes, and docker-compose/Swarm.
+See [`docs/rules.md`](rules.md) for the full reference — what each rule
+detects, how it's triggered, and the remediation. Rule development is
+deliberately open-ended — the rule set *is* the product. Proposals with an
+energy rationale are the most valuable contribution.
