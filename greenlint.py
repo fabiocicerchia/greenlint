@@ -55,7 +55,7 @@ CO2E_HINTS = {
     "GL028": "~0.001-0.01 gCO2e per import (extra modules loaded/bound at startup)",
     "GL029": "~1-5 gCO2e per pull x pulls/day per avoidable extra image layer",
     "GL030": "~0.001-0.01 gCO2e per iteration (building/unpacking the unused tuple half)",
-    "GL031": "~0.001-0.01 gCO2e per iteration (exception-handling frame setup overhead)",
+    "GL031": "~0.01-0.1 gCO2e per iteration (raising and unwinding on every pass)",
     "GL032": "~0.01-0.1 gCO2e per call (repeated allocator overhead per iteration)",
     "GL033": "~100s-1000s gCO2e/day per replica kept always-on instead of scaling down",
     "GL034": "~10s-100s gCO2e/day per unbounded service encouraging host over-provisioning",
@@ -99,14 +99,16 @@ RULES = [
         "severity": "low",
         "pattern": re.compile(
             r"setInterval\s*\(\s*[^,]+,\s*([0-9]{1,2})\s*\)"
-            r"|time\.sleep\s*\(\s*0?\.0*[0-9]\s*\)"
-            r"|sleep\s+0?\.0*[0-9]\b"  # bash
+            # `0.0x` only: `sleep(0.1)` is exactly 100ms, which this rule is
+            # not about, and was being flagged by the older `0.0*[0-9]`.
+            r"|time\.sleep\s*\(\s*0?\.0+[0-9]\s*\)"
+            r"|sleep\s+0?\.0+[0-9]\b"  # bash
             r"|time\.Sleep\(\s*[0-9]{1,2}\s*\*\s*time\.Millisecond\s*\)"  # go
             r"|thread::sleep\(\s*Duration::from_millis\(\s*[0-9]{1,2}\s*\)\s*\)"  # rust
             r"|Thread\.sleep\(\s*[0-9]{1,2}\s*\)"  # java/kotlin/c#
             r"|usleep\(\s*[0-9]{1,5}\s*\)"  # php/perl/c/c++ (microseconds, <100ms)
             r"|\bdelay\(\s*[0-9]{1,2}\)"  # kotlin coroutines
-            r"|Timer\.scheduledTimer\(withTimeInterval:\s*0?\.0*[0-9]"  # swift
+            r"|Timer\.scheduledTimer\(withTimeInterval:\s*0?\.0+[0-9]"  # swift
         ),
         "message": "sub-100ms polling interval",
         "suggestion": "tight polling burns CPU; prefer push/webhooks or longer intervals",
@@ -379,8 +381,8 @@ RULES = [
         "langs": {".py"},
         "severity": "low",
         "pattern": None,  # AST check; see _ast_try_in_loop_findings
-        "message": "try/except inside a loop",
-        "suggestion": "exception handling has real per-entry overhead versus a plain if-check; hoist the loop inside a single try/except instead of wrapping each iteration",
+        "message": "exception swallowed every iteration (exceptions as control flow)",
+        "suggestion": "a handler that just passes/continues means the raise fires on ordinary input; raising and unwinding costs far more than an if-check. Test the condition instead of catching it",
     },
     {
         "id": "GL032",
@@ -552,6 +554,46 @@ def _parse_python(path, text):
         return None
 
 
+def _loop_can_exit(loop):
+    """True if the loop body can leave the loop on a data-dependent condition —
+    a `break` belonging to this loop, or a `return`/`raise`.
+
+    `while True:` that drains a paginated API, reads a socket until EOF, or
+    consumes an iterator all look like infinite loops and are not: each pass
+    does work and the exit depends on what came back. What the energy rule is
+    actually after is a loop with no way out and nothing to wait on, which
+    pegs a core for as long as the process lives.
+    """
+    for stmt in loop.body:
+        for n in ast.walk(stmt):
+            if isinstance(n, (ast.Return, ast.Raise)):
+                return True
+            if isinstance(n, ast.Break) and _nearest_loop(loop, n) is loop:
+                return True
+    return False
+
+
+def _nearest_loop(root, target):
+    """The innermost For/While in `root`'s body that encloses `target`, or
+    `root` itself. A `break` inside a nested loop exits that one, not this one.
+    """
+    found = root
+    stack = [(root, root)]
+    while stack:
+        node, owner = stack.pop()
+        for child in ast.iter_child_nodes(node):
+            if child is target:
+                found = owner
+                stack.clear()
+                break
+            # A nested function's `return` belongs to that function, not here.
+            if isinstance(child, (ast.FunctionDef, ast.AsyncFunctionDef, ast.Lambda)):
+                continue
+            nxt = child if isinstance(child, (ast.For, ast.While)) else owner
+            stack.append((child, nxt))
+    return found
+
+
 def _ast_busy_loop_findings(path, tree):
     """AST-based replacement for GL001 on Python: the regex version flags
     `while True:` unless "sleep" appears *anywhere* in the file, which both
@@ -576,8 +618,9 @@ def _ast_busy_loop_findings(path, tree):
             for body_node in node.body
             for n in ast.walk(body_node)
         )
-        if not sleeps:
-            yield _finding(rule, path, node.lineno)
+        if sleeps or _loop_can_exit(node):
+            continue
+        yield _finding(rule, path, node.lineno)
 
 
 def _ast_nested_loop_findings(path, tree):
@@ -695,6 +738,35 @@ def _is_scalar_expr(node):
     return False
 
 
+def _names_bound_to_lists(tree):
+    """(list_names, scalar_names) — names seen initialised to a list, and names
+    seen initialised to a number, anywhere in `tree`.
+
+    `xs += <anything>` on a list is `list.extend`: in place, O(k). It is only
+    quadratic when the target is immutable (str, bytes, tuple), because those
+    build a whole new object each time. Knowing how the name was initialised is
+    what tells the two apart — `lines = []` a few lines up is the difference
+    between `lines += render(x)` being fine and being O(n^2), and `errors = 0`
+    is the difference between `errors += e` being a counter and a rebuild.
+    """
+    lists, scalars = set(), set()
+    for node in ast.walk(tree):
+        if not isinstance(node, (ast.Assign, ast.AnnAssign)):
+            continue
+        value = node.value
+        targets = node.targets if isinstance(node, ast.Assign) else [node.target]
+        names = {t.id for t in targets if isinstance(t, ast.Name)}
+        if isinstance(value, (ast.List, ast.ListComp)):
+            lists |= names
+        elif (
+            isinstance(value, ast.Constant)
+            and isinstance(value.value, (int, float))
+            and not isinstance(value.value, bool)
+        ):
+            scalars |= names
+    return lists, scalars
+
+
 def _ast_quadratic_rebuild_findings(path, tree):
     """GL007: accumulating with `+`/`+=` inside a loop, which copies the whole
     sequence built so far on every iteration — O(n^2) allocation where
@@ -706,6 +778,7 @@ def _ast_quadratic_rebuild_findings(path, tree):
     the rule fire on almost every Python file that builds a list.
     """
     rule = RULES_BY_ID["GL007"]
+    list_names, scalar_names = _names_bound_to_lists(tree)
     seen = set()
     for node in ast.walk(tree):
         if not isinstance(node, (ast.For, ast.While)):
@@ -732,24 +805,63 @@ def _ast_quadratic_rebuild_findings(path, tree):
                     continue
             # A numeric counter (`total += 1`, `seen += len(chunk)`, `kwh +=
             # watts * hours / 1000`) accumulates in O(1) — not a rebuild.
-            if _is_scalar_expr(value):
+            if _is_scalar_expr(value) or target.id in scalar_names:
                 continue
-            # `xs += [a, b]` is `list.extend`: in place, O(k), no copy. The
-            # list on the right also proves the target is a list, since `+=` a
-            # list is a TypeError for str/bytes/tuple. Only the rebinding form
+            # `xs += ...` is `list.extend` when xs is a list: in place, O(k),
+            # no copy. Either the list literal on the right proves it (`+=` a
+            # list is a TypeError for str/bytes/tuple), or the name was seen
+            # being initialised to one. Only the rebinding form
             # (`xs = xs + [a]`) copies everything accumulated so far.
-            if isinstance(stmt, ast.AugAssign) and isinstance(
-                value, (ast.List, ast.ListComp)
+            if isinstance(stmt, ast.AugAssign) and (
+                isinstance(value, (ast.List, ast.ListComp))
+                or target.id in list_names
             ):
                 continue
             seen.add(stmt.lineno)
             yield _finding(rule, path, stmt.lineno)
 
 
+# Conversions whose failure is routinely used as a type test, where a
+# non-throwing check exists (`.isdigit()`, a regex, a guard).
+PROBE_CALLS = frozenset({"int", "float", "complex", "Decimal"})
+
+
+def _has_cheap_alternative(body):
+    """True when the guarded work is a lookup or a numeric conversion — the
+    cases where the exception is standing in for a test that costs nothing:
+    `d[k]` where `d.get(k)` works, `int(s)` where a guard works.
+
+    Anything else (opening a file, parsing a document, a subprocess, a network
+    call) can legitimately fail on good input, and catching it is the correct
+    way to write that — not a pattern to flag.
+    """
+    if len(body) != 1:
+        return False
+    stmt = body[0]
+    value = getattr(stmt, "value", None)
+    if isinstance(stmt, (ast.Assign, ast.AnnAssign, ast.Expr)) and value is not None:
+        if isinstance(value, ast.Subscript):
+            return True
+        if isinstance(value, ast.Call):
+            name = getattr(value.func, "id", None) or getattr(value.func, "attr", None)
+            return name in PROBE_CALLS
+    return False
+
+
 def _ast_try_in_loop_findings(path, tree):
-    """GL031: a `try` block anywhere inside a `for`/`while` loop. `seen`
-    dedupes a `try` matched from more than one enclosing loop when loops are
-    nested.
+    """GL031: exceptions used as per-iteration control flow inside a loop —
+    a handler whose whole body is `pass` or `continue`, i.e. the exception is
+    expected to fire on ordinary input and the raise/unwind cost is paid every
+    time round.
+
+    Not "a try inside a loop". Since Python 3.11 a try block that does not
+    raise costs nothing at runtime, so the old form of this rule was measuring
+    something that stopped existing — and it fired on every retry loop,
+    per-item error collector and `except OSError: break` read loop in the
+    portfolio, all of which need the handler exactly where it is.
+
+    `seen` dedupes a `try` matched from more than one enclosing loop when
+    loops are nested.
     """
     rule = RULES_BY_ID["GL031"]
     seen = set()
@@ -757,7 +869,13 @@ def _ast_try_in_loop_findings(path, tree):
         if not isinstance(node, (ast.For, ast.While)):
             continue
         for stmt in ast.walk(node):
-            if isinstance(stmt, ast.Try) and stmt.lineno not in seen:
+            if not isinstance(stmt, ast.Try) or stmt.lineno in seen:
+                continue
+            swallowed = any(
+                all(isinstance(b, (ast.Pass, ast.Continue)) for b in h.body)
+                for h in stmt.handlers
+            )
+            if swallowed and _has_cheap_alternative(stmt.body):
                 seen.add(stmt.lineno)
                 yield _finding(rule, path, stmt.lineno)
 
@@ -928,7 +1046,7 @@ def scan_file(path, disabled=frozenset()):
     # Rules about long-lived loops, applied to test code, only ever produce
     # noise: a test's tight wait is bounded by the test run and is the point.
     if _is_test_file(path):
-        disabled = disabled | {"GL001", "GL002"}
+        disabled = disabled | {"GL001", "GL002", "GL007"}
     ast_rules = {"GL001", "GL007", "GL018", "GL023", "GL030", "GL031"}
     if path.suffix == ".py" and ast_rules - disabled:
         tree = _parse_python(path, text)

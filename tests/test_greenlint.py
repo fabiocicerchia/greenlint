@@ -68,6 +68,48 @@ def test_ast_busy_loop_not_flagged_when_loop_actually_sleeps(tmp_path):
     assert "GL001" not in rule_ids(scan([str(tmp_path)]))
 
 
+def test_paginator_loop_not_flagged(tmp_path):
+    # `while True:` draining a paginated API exits on what came back. Each pass
+    # does a network round trip, so it is not spinning on a core.
+    write(
+        tmp_path,
+        "a.py",
+        "def f(client):\n    token = None\n    while True:\n        page = client.get(token)\n"
+        "        token = page.get('next')\n        if not token:\n            break\n",
+    )
+    assert "GL001" not in rule_ids(scan([str(tmp_path)]))
+
+
+def test_read_until_eof_loop_not_flagged(tmp_path):
+    write(
+        tmp_path,
+        "a.py",
+        "def f(conn):\n    while True:\n        ch = conn.recv(1)\n"
+        "        if not ch:\n            break\n",
+    )
+    assert "GL001" not in rule_ids(scan([str(tmp_path)]))
+
+
+def test_loop_returning_a_value_not_flagged(tmp_path):
+    write(
+        tmp_path,
+        "a.py",
+        "def f(it):\n    while True:\n        n = next(it)\n        if n > end:\n            return n\n",
+    )
+    assert "GL001" not in rule_ids(scan([str(tmp_path)]))
+
+
+def test_break_in_a_nested_loop_does_not_exonerate(tmp_path):
+    # The break belongs to the inner `for`, so the outer `while True:` still
+    # has no way out.
+    write(
+        tmp_path,
+        "a.py",
+        "def f(xs):\n    while True:\n        for x in xs:\n            if x:\n                break\n",
+    )
+    assert "GL001" in rule_ids(scan([str(tmp_path)]))
+
+
 def test_ast_busy_loop_respects_disable(tmp_path):
     cfg = write(tmp_path, ".greenlint.toml", 'disable = ["GL001"]\n')
     write(tmp_path, "a.py", "while True:\n    check()\n")
@@ -414,20 +456,78 @@ def test_dict_items_using_both_key_and_value_not_flagged(tmp_path):
     assert "GL030" not in rule_ids(scan([str(tmp_path)]))
 
 
-def test_detects_try_except_in_loop(tmp_path):
+def test_detects_lookup_guarded_by_except_in_loop(tmp_path):
+    # `d[k]` + `except KeyError: continue` where `d.get(k)` never raises.
     write(
         tmp_path,
         "a.py",
-        "def f(items):\n    for i in items:\n        try:\n            g(i)\n        except ValueError:\n            pass\n",
+        "def f(keys, d):\n    for k in keys:\n        try:\n            v = d[k]\n"
+        "        except KeyError:\n            continue\n",
     )
     assert "GL031" in rule_ids(scan([str(tmp_path)]))
+
+
+def test_detects_int_conversion_used_as_a_type_test(tmp_path):
+    write(
+        tmp_path,
+        "a.py",
+        "def f(items):\n    for s in items:\n        try:\n            n = int(s)\n"
+        "        except ValueError:\n            continue\n",
+    )
+    assert "GL031" in rule_ids(scan([str(tmp_path)]))
+
+
+def test_swallowed_io_error_in_loop_not_flagged(tmp_path):
+    # Opening a file can fail on perfectly good input; catching it is how that
+    # is written, not a pattern with a free alternative.
+    write(
+        tmp_path,
+        "a.py",
+        "def f(paths):\n    for p in paths:\n        try:\n            data = json.load(open(p))\n"
+        "        except OSError:\n            continue\n",
+    )
+    assert "GL031" not in rule_ids(scan([str(tmp_path)]))
+
+
+def test_retry_loop_handler_not_flagged(tmp_path):
+    # The handler does real work (backoff + give-up check), so the exception is
+    # not standing in for an if-check and cannot be hoisted out of the loop.
+    write(
+        tmp_path,
+        "a.py",
+        "def f():\n    while True:\n        try:\n            run()\n            break\n"
+        "        except OSError:\n            if time.time() > deadline:\n                raise\n"
+        "            time.sleep(2)\n",
+    )
+    assert "GL031" not in rule_ids(scan([str(tmp_path)]))
+
+
+def test_per_item_error_collector_not_flagged(tmp_path):
+    write(
+        tmp_path,
+        "a.py",
+        "def f(checks):\n    for c in checks:\n        try:\n            evaluate(c)\n"
+        "        except Failure as e:\n            results.append(str(e))\n",
+    )
+    assert "GL031" not in rule_ids(scan([str(tmp_path)]))
+
+
+def test_handler_that_breaks_not_flagged(tmp_path):
+    write(
+        tmp_path,
+        "a.py",
+        "def f(fd):\n    while True:\n        try:\n            chunk = os.read(fd, 4096)\n"
+        "        except OSError:\n            break\n",
+    )
+    assert "GL031" not in rule_ids(scan([str(tmp_path)]))
 
 
 def test_try_except_around_loop_not_flagged(tmp_path):
     write(
         tmp_path,
         "a.py",
-        "def f(items):\n    try:\n        for i in items:\n            g(i)\n    except ValueError:\n        pass\n",
+        "def f(keys, d):\n    try:\n        for k in keys:\n            v = d[k]\n"
+        "    except KeyError:\n        pass\n",
     )
     assert "GL031" not in rule_ids(scan([str(tmp_path)]))
 
@@ -548,6 +648,25 @@ def test_list_extend_with_comprehension_is_not_flagged(tmp_path):
     assert "GL007" not in rule_ids(scan([str(tmp_path)]))
 
 
+def test_extend_of_a_name_known_to_be_a_list_is_not_flagged(tmp_path):
+    # `lines = []` proves `lines += f(x)` is list.extend, not a rebuild.
+    write(
+        tmp_path,
+        "a.py",
+        "def f(groups):\n    lines = []\n    for g in groups:\n        lines += render(g)\n    return lines\n",
+    )
+    assert "GL007" not in rule_ids(scan([str(tmp_path)]))
+
+
+def test_bytes_accumulation_of_a_call_result_is_still_flagged(tmp_path):
+    write(
+        tmp_path,
+        "a.py",
+        "def f(conn):\n    data = b''\n    while True:\n        data += conn.recv(10)\n",
+    )
+    assert "GL007" in rule_ids(scan([str(tmp_path)]))
+
+
 def test_byte_accumulation_is_still_flagged(tmp_path):
     write(tmp_path, "a.py", "data = b''\nwhile True:\n    data += chunk\n")
     assert "GL007" in rule_ids(scan([str(tmp_path)]))
@@ -566,6 +685,17 @@ def test_helm_template_not_flagged_for_missing_resources(tmp_path):
         '    {{- include "app.podSpec" . | nindent 4 }}\n',
     )
     assert "GL014" not in rule_ids(scan([str(tmp_path)]))
+
+
+def test_sleep_of_exactly_100ms_is_not_flagged(tmp_path):
+    # The rule is "sub-100ms". 0.1s is 100ms.
+    write(tmp_path, "a.py", "time.sleep(0.1)\n")
+    assert "GL002" not in rule_ids(scan([str(tmp_path)]))
+
+
+def test_sleep_below_100ms_is_still_flagged(tmp_path):
+    write(tmp_path, "a.py", "time.sleep(0.05)\n")
+    assert "GL002" in rule_ids(scan([str(tmp_path)]))
 
 
 def test_short_sleep_in_a_test_file_is_not_flagged(tmp_path):
