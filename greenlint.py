@@ -506,6 +506,102 @@ def load_config(path=None):
     }
 
 
+# Line- and block-comment syntax per extension. Dockerfile/unknown default to `#`.
+_SLASH = ("//", ("/*", "*/"))
+COMMENT_SYNTAX = {
+    ".go": _SLASH, ".js": _SLASH, ".ts": _SLASH, ".jsx": _SLASH, ".tsx": _SLASH,
+    ".c": _SLASH, ".h": _SLASH, ".cpp": _SLASH, ".cc": _SLASH, ".hpp": _SLASH,
+    ".java": _SLASH, ".rs": _SLASH, ".kt": _SLASH, ".swift": _SLASH, ".cs": _SLASH,
+    ".php": _SLASH, ".scala": _SLASH,
+    ".sql": ("--", ("/*", "*/")),
+    ".py": ("#", None), ".sh": ("#", None), ".bash": ("#", None), ".rb": ("#", None),
+    ".yml": ("#", None), ".yaml": ("#", None), ".tf": ("#", None), ".tofu": ("#", None),
+    ".toml": ("#", None), ".pl": ("#", None), ".dockerfile": ("#", None),
+}
+
+
+def _blank_comments(text, path):
+    """Return `text` with comment bodies replaced by spaces.
+
+    Length and every newline are preserved, so line numbers and match offsets
+    computed against the result still point at the real file. Quoted strings
+    are respected, so a `#` inside a SQL string is not mistaken for a comment.
+
+    Without this, every regex rule fires on prose that *warns against* the
+    pattern — `# never write SELECT * here` reported as a SELECT * query. That
+    was six false positives out of six in a six-line probe.
+    """
+    line_tok, block = COMMENT_SYNTAX.get(
+        path.suffix, ("#", None) if path.name == "Dockerfile" else (None, None)
+    )
+    if not line_tok:
+        return text
+    out = list(text)
+    i, n, quote = 0, len(text), None
+    while i < n:
+        ch = text[i]
+        if quote:
+            if ch == "\\":
+                i += 2
+                continue
+            if ch == quote:
+                quote = None
+            i += 1
+            continue
+        if ch in "\"'":
+            quote = ch
+            i += 1
+            continue
+        if text.startswith(line_tok, i):
+            while i < n and text[i] != "\n":
+                out[i] = " "
+                i += 1
+            continue
+        if block and text.startswith(block[0], i):
+            end = text.find(block[1], i + len(block[0]))
+            end = n if end == -1 else end + len(block[1])
+            for j in range(i, end):
+                if out[j] != "\n":
+                    out[j] = " "
+            i = end
+            continue
+        i += 1
+    return "".join(out)
+
+
+def _blank_python_docstrings(code, tree):
+    """Blank module/class/function docstrings, preserving offsets.
+
+    A docstring is prose, and prose about a pattern is not the pattern — the
+    same reason comments are blanked. Ordinary string literals are left alone:
+    `q = "SELECT * FROM t"` is a real query.
+    """
+    lines = code.splitlines(keepends=True)
+    starts, off = [], 0
+    for ln in lines:
+        starts.append(off)
+        off += len(ln)
+    out = list(code)
+    for node in ast.walk(tree):
+        if not isinstance(
+            node, (ast.Module, ast.ClassDef, ast.FunctionDef, ast.AsyncFunctionDef)
+        ):
+            continue
+        doc = node.body[0] if node.body else None
+        if not (
+            isinstance(doc, ast.Expr)
+            and isinstance(doc.value, ast.Constant)
+            and isinstance(doc.value.value, str)
+        ):
+            continue
+        s = starts[doc.lineno - 1] + doc.col_offset
+        e = starts[doc.end_lineno - 1] + doc.end_col_offset
+        for j in range(s, min(e, len(out))):
+            if out[j] != "\n":
+                out[j] = " "
+    return "".join(out)
+
+
 def _is_go_template(text):
     """True for a Helm/Go-template YAML file. What such a file *renders to* is
     what matters, and greenlint does not render it — so manifest rules that ask
@@ -1043,6 +1139,15 @@ def scan_file(path, disabled=frozenset()):
         text = path.read_text(errors="replace")
     except OSError:
         return
+    # Everything that pattern-matches works on this view, in which comment
+    # bodies are spaces. Offsets and line numbers still line up with the file.
+    # GL004 is the exception: it reads comments deliberately, to spot the tool
+    # that needs the full history.
+    code = _blank_comments(text, path)
+    if path.suffix == ".py":
+        _doc_tree = _parse_python(path, text)
+        if _doc_tree is not None:
+            code = _blank_python_docstrings(code, _doc_tree)
     # Rules about long-lived loops, applied to test code, only ever produce
     # noise: a test's tight wait is bounded by the test run and is the point.
     if _is_test_file(path):
@@ -1065,22 +1170,22 @@ def scan_file(path, disabled=frozenset()):
                 yield from _ast_try_in_loop_findings(path, tree)
     if path.suffix in (".tf", ".tofu"):
         if "GL013" not in disabled:
-            yield from _tf_s3_lifecycle_findings(path, text)
+            yield from _tf_s3_lifecycle_findings(path, code)
         if "GL024" not in disabled:
-            yield from _tf_asg_static_size_findings(path, text)
+            yield from _tf_asg_static_size_findings(path, code)
         if "GL026" not in disabled:
-            yield from _tf_log_retention_findings(path, text)
+            yield from _tf_log_retention_findings(path, code)
     if path.suffix in (".yml", ".yaml"):
         if "GL004" not in disabled:
             yield from _fetch_depth_findings(path, text)
         if "GL014" not in disabled:
-            yield from _k8s_resources_findings(path, text)
+            yield from _k8s_resources_findings(path, code)
         if "GL033" not in disabled:
-            yield from _k8s_hpa_static_findings(path, text)
+            yield from _k8s_hpa_static_findings(path, code)
         if "GL034" not in disabled:
-            yield from _compose_resources_findings(path, text)
+            yield from _compose_resources_findings(path, code)
     if (path.suffix == ".dockerfile" or path.name == "Dockerfile") and "GL029" not in disabled:
-        yield from _dockerfile_layer_bloat_findings(path, text)
+        yield from _dockerfile_layer_bloat_findings(path, code)
     for rule in RULES:
         if (
             rule["id"] in disabled
@@ -1089,8 +1194,8 @@ def scan_file(path, disabled=frozenset()):
             or not applicable(rule, path)
         ):
             continue
-        for m in rule["pattern"].finditer(text):
-            line = text.count("\n", 0, m.start()) + 1
+        for m in rule["pattern"].finditer(code):
+            line = code.count("\n", 0, m.start()) + 1
             yield _finding(rule, path, line)
 
 

@@ -708,6 +708,42 @@ def test_short_sleep_in_production_code_is_still_flagged(tmp_path):
     assert "GL002" in rule_ids(scan([str(tmp_path)]))
 
 
+def test_pattern_in_a_comment_is_not_a_finding(tmp_path):
+    # Prose warning against a pattern is not the pattern. This was six false
+    # positives out of six across the portfolio's docs and examples.
+    write(tmp_path, "a.py", "# never write SELECT * FROM users\nq = 1\n")
+    write(tmp_path, "b.sql", "-- bad: SELECT * FROM users;\nSELECT id FROM users;\n")
+    write(tmp_path, "c.go", "// avoid time.Sleep(10 * time.Millisecond)\n")
+    write(tmp_path, "d.yml", '# not a cron: * * * * * schedule\nx: 1\n')
+    assert rule_ids(scan([str(tmp_path)])) == set()
+
+
+def test_pattern_in_a_docstring_is_not_a_finding(tmp_path):
+    write(tmp_path, "a.py", '"""Never write SELECT * FROM orders."""\n')
+    assert "GL005" not in rule_ids(scan([str(tmp_path)]))
+
+
+def test_pattern_in_a_real_string_is_still_a_finding(tmp_path):
+    # A query lives in a string literal — blanking comments must not touch it.
+    write(tmp_path, "a.py", 'q = "SELECT * FROM users"\n')
+    assert "GL005" in rule_ids(scan([str(tmp_path)]))
+
+
+def test_hash_inside_a_string_is_not_a_comment(tmp_path):
+    write(tmp_path, "a.py", 'q = "# SELECT * FROM users"\n')
+    assert "GL005" in rule_ids(scan([str(tmp_path)]))
+
+
+def test_block_comment_is_blanked(tmp_path):
+    write(tmp_path, "a.go", "/*\n  SELECT * FROM users\n*/\nfunc f() {}\n")
+    assert "GL005" not in rule_ids(scan([str(tmp_path)]))
+
+
+def test_commented_out_dockerfile_directive_not_flagged(tmp_path):
+    write(tmp_path, "Dockerfile", "# FROM ubuntu:22.04\nFROM alpine:3.24\n")
+    assert "GL006" not in rule_ids(scan([str(tmp_path)]))
+
+
 def test_detects_full_history_clone(tmp_path):
     write(
         tmp_path,
