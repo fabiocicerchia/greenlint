@@ -468,6 +468,156 @@ def test_elastic_hpa_not_flagged(tmp_path):
     assert "GL033" not in rule_ids(scan([str(tmp_path)]))
 
 
+def test_config_array_may_span_lines(tmp_path):
+    cfg = tmp_path / ".greenlint.toml"
+    cfg.write_text('ignore = [\n  "*/vendor/*",\n  "*/examples/*",\n]\n')
+    assert load_config(str(cfg))["ignore"] == ["*/vendor/*", "*/examples/*"]
+
+
+def test_multiline_ignore_actually_excludes_files(tmp_path):
+    cfg = tmp_path / ".greenlint.toml"
+    cfg.write_text('ignore = [\n  "*/examples/*",\n]\n')
+    (tmp_path / "examples").mkdir()
+    write(tmp_path / "examples", "a.py", "while True:\n    pass\n")
+    assert scan([str(tmp_path)], load_config(str(cfg))) == []
+
+
+def test_detects_two_install_layers_in_one_stage(tmp_path):
+    write(
+        tmp_path,
+        "Dockerfile",
+        "FROM alpine\nRUN apk add curl\nRUN pip install foo\nRUN pip install bar\n",
+    )
+    assert "GL029" in rule_ids(scan([str(tmp_path)]))
+
+
+def test_install_layers_in_separate_build_stages_not_flagged(tmp_path):
+    # The build stage is discarded, so its layers never ship — chaining across
+    # the FROM boundary saves nothing.
+    write(
+        tmp_path,
+        "Dockerfile",
+        "FROM python:3.12 AS build\nRUN pip install build\n"
+        "FROM python:3.12-slim\nRUN pip install /tmp/x.whl\n",
+    )
+    assert "GL029" not in rule_ids(scan([str(tmp_path)]))
+
+
+def test_detects_quadratic_list_rebuild(tmp_path):
+    write(tmp_path, "a.py", "out = []\nfor i in range(10):\n    out = out + [i]\n")
+    assert "GL007" in rule_ids(scan([str(tmp_path)]))
+
+
+def test_detects_string_concat_in_loop(tmp_path):
+    write(tmp_path, "a.py", "s = ''\nfor w in words:\n    s += w\n")
+    assert "GL007" in rule_ids(scan([str(tmp_path)]))
+
+
+def test_append_in_loop_is_not_flagged(tmp_path):
+    # append is amortised O(1) and idiomatic — the whole reason this rule was
+    # rewritten. Guard it so the regex version cannot come back.
+    write(tmp_path, "a.py", "out = []\nfor i in range(10):\n    out.append(i)\n")
+    assert "GL007" not in rule_ids(scan([str(tmp_path)]))
+
+
+def test_counter_increment_in_loop_is_not_flagged(tmp_path):
+    write(tmp_path, "a.py", "total = 0\nfor i in range(10):\n    total += 1\n")
+    assert "GL007" not in rule_ids(scan([str(tmp_path)]))
+
+
+def test_numeric_accumulation_is_not_flagged(tmp_path):
+    write(
+        tmp_path,
+        "a.py",
+        "kwh = 0\nseen = 0\nfor r in rows:\n"
+        "    kwh += r.hours * r.watts / 1000\n"
+        "    seen += len(r.data)\n",
+    )
+    assert "GL007" not in rule_ids(scan([str(tmp_path)]))
+
+
+def test_list_extend_via_augmented_assign_is_not_flagged(tmp_path):
+    # `xs += [...]` is list.extend — in place, O(k). Only `xs = xs + [...]`
+    # copies the whole list each pass.
+    write(tmp_path, "a.py", "xs = []\nfor g in groups:\n    xs += [g.a, g.b]\n")
+    assert "GL007" not in rule_ids(scan([str(tmp_path)]))
+
+
+def test_list_extend_with_comprehension_is_not_flagged(tmp_path):
+    write(tmp_path, "a.py", "xs = []\nfor g in groups:\n    xs += [x for x in g]\n")
+    assert "GL007" not in rule_ids(scan([str(tmp_path)]))
+
+
+def test_byte_accumulation_is_still_flagged(tmp_path):
+    write(tmp_path, "a.py", "data = b''\nwhile True:\n    data += chunk\n")
+    assert "GL007" in rule_ids(scan([str(tmp_path)]))
+
+
+def test_rebinding_from_other_names_is_not_flagged(tmp_path):
+    write(tmp_path, "a.py", "for i in range(10):\n    z = x + y\n")
+    assert "GL007" not in rule_ids(scan([str(tmp_path)]))
+
+
+def test_helm_template_not_flagged_for_missing_resources(tmp_path):
+    write(
+        tmp_path,
+        "workload.yaml",
+        'apiVersion: apps/v1\nkind: Deployment\nspec:\n  template:\n'
+        '    {{- include "app.podSpec" . | nindent 4 }}\n',
+    )
+    assert "GL014" not in rule_ids(scan([str(tmp_path)]))
+
+
+def test_short_sleep_in_a_test_file_is_not_flagged(tmp_path):
+    write(tmp_path, "proxy_test.go", "func f() { time.Sleep(10 * time.Millisecond) }\n")
+    assert "GL002" not in rule_ids(scan([str(tmp_path)]))
+
+
+def test_short_sleep_in_production_code_is_still_flagged(tmp_path):
+    write(tmp_path, "proxy.go", "func f() { time.Sleep(10 * time.Millisecond) }\n")
+    assert "GL002" in rule_ids(scan([str(tmp_path)]))
+
+
+def test_detects_full_history_clone(tmp_path):
+    write(
+        tmp_path,
+        "ci.yml",
+        "jobs:\n  build:\n    steps:\n      - uses: actions/checkout@v5\n        with:\n          fetch-depth: 0\n",
+    )
+    assert "GL004" in rule_ids(scan([str(tmp_path)]))
+
+
+def test_full_history_clone_not_flagged_when_a_scanner_needs_it(tmp_path):
+    write(
+        tmp_path,
+        "security.yml",
+        "jobs:\n  secrets:\n    steps:\n      - uses: actions/checkout@v5\n        with:\n"
+        "          fetch-depth: 0\n      - uses: gitleaks/gitleaks-action@v3\n",
+    )
+    assert "GL004" not in rule_ids(scan([str(tmp_path)]))
+
+
+def test_full_history_clone_in_a_comment_not_flagged(tmp_path):
+    write(
+        tmp_path,
+        "action.yml",
+        "runs:\n  steps:\n"
+        "    # cheaper than asking every caller for fetch-depth: 0\n"
+        "    - run: git fetch --depth=1\n",
+    )
+    assert "GL004" not in rule_ids(scan([str(tmp_path)]))
+
+
+def test_full_history_clone_not_flagged_for_release_tooling(tmp_path):
+    write(
+        tmp_path,
+        "release.yml",
+        "jobs:\n  release:\n    steps:\n      - uses: actions/checkout@v5\n        with:\n"
+        "          fetch-depth: 0\n      - uses: googleapis/release-please-action@v4\n",
+    )
+    assert "GL004" not in rule_ids(scan([str(tmp_path)]))
+
+
 def test_detects_compose_service_without_limits(tmp_path):
     write(tmp_path, "docker-compose.yml", "services:\n  web:\n    image: nginx\n")
     assert "GL034" in rule_ids(scan([str(tmp_path)]))

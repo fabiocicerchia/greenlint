@@ -123,7 +123,7 @@ RULES = [
         "id": "GL004",
         "langs": {".yml", ".yaml"},
         "severity": "medium",
-        "pattern": re.compile(r"fetch-depth:\s*0"),
+        "pattern": None,  # whole-file check; see _fetch_depth_findings
         "message": "full git history clone in CI",
         "suggestion": "unshallow clones download and store far more than needed",
     },
@@ -165,9 +165,9 @@ RULES = [
         "id": "GL007",
         "langs": {".py"},
         "severity": "low",
-        "pattern": re.compile(r"\.append\s*\(.*\)\s*$\s+.*for\s+", re.MULTILINE),
-        "message": "append inside loop (possible O(n) rebuild pattern)",
-        "suggestion": "consider comprehensions/generators; less allocation churn",
+        "pattern": None,  # whole-file check; see _ast_quadratic_rebuild_findings
+        "message": "quadratic rebuild in a loop (whole sequence copied each iteration)",
+        "suggestion": "`x = x + [i]` / `x += [i]` on a list, or `s += t` on a string, copies everything accumulated so far on every pass — O(n^2) allocation. Use list.append() (amortised O(1)) or collect the parts and ''.join() them once",
     },
     {
         "id": "GL008",
@@ -449,12 +449,35 @@ RULES = [
 RULES_BY_ID = {r["id"]: r for r in RULES}
 
 
+def _joined_toml_lines(text):
+    """Yield logical lines, folding a `key = [` ... `]` array onto one line."""
+    parts = None
+    for raw in text.splitlines():
+        stripped = raw.split("#", 1)[0].strip()
+        if parts is None:
+            if "=" in stripped and stripped.rstrip().endswith("["):
+                parts = [stripped]
+                continue
+            yield raw
+        else:
+            parts.append(stripped)
+            if stripped.endswith("]"):
+                yield " ".join(parts)
+                parts = None
+    if parts is not None:  # unterminated array — hand it back as-is
+        yield " ".join(parts)
+
+
 def _parse_simple_toml(text):
     """Parse the flat subset of TOML greenlint's config needs: `key = "value"`
-    or `key = ["a", "b"]`, one per line, `#` comments. No tables, no nesting.
+    or `key = ["a", "b"]`, `#` comments. No tables, no nesting.
+
+    Arrays may span lines, which is how anyone writing TOML by hand lays out a
+    list of globs. Without this they parsed as the string "[" and silently
+    ignored every entry — a config that looks applied and is not.
     """
     data = {}
-    for raw in text.splitlines():
+    for raw in _joined_toml_lines(text):
         line = raw.split("#", 1)[0].strip()
         if not line or "=" not in line:
             continue
@@ -479,6 +502,32 @@ def load_config(path=None):
         "disable": set(data.get("disable", [])),
         "ignore": list(data.get("ignore", [])),
     }
+
+
+def _is_go_template(text):
+    """True for a Helm/Go-template YAML file. What such a file *renders to* is
+    what matters, and greenlint does not render it — so manifest rules that ask
+    "is key X present" cannot answer honestly here.
+    """
+    return "{{" in text and "}}" in text
+
+
+# `foo_test.go`, `test_foo.py`, `foo.test.ts`, `foo.spec.ts`.
+TEST_FILENAME = re.compile(r"(^test_|_test\.|\.test\.|\.spec\.|_spec\.)", re.IGNORECASE)
+
+
+def _is_test_file(path):
+    """True for test code. Tight sleeps and busy waits in a test are bounded by
+    the test run and are usually the point (waiting for a condition quickly),
+    so the energy rules that target long-lived loops do not apply.
+
+    Matched on the filename plus an exact `test`/`tests`/`spec` directory
+    component — not a substring of the whole path, which would exempt every
+    file in a checkout that happens to sit under a directory containing "test".
+    """
+    if TEST_FILENAME.search(path.name):
+        return True
+    return any(part.lower() in ("test", "tests", "spec", "specs") for part in path.parts[:-1])
 
 
 def _finding(rule, path, line):
@@ -615,6 +664,88 @@ def _ast_dict_iterator_findings(path, tree):
             yield _finding(rule, path, node.lineno)
 
 
+# Builtins/constructors whose result is a number or a duration, never a
+# sequence — `n += len(x)` is a counter, not a rebuild.
+SCALAR_CALLS = frozenset(
+    {"len", "sum", "int", "float", "round", "abs", "ord", "timedelta", "Decimal"}
+)
+# Operators that only numbers support, so an expression using one is numeric.
+SCALAR_OPS = (ast.Div, ast.FloorDiv, ast.Sub, ast.Mod, ast.Pow)
+
+
+def _is_scalar_expr(node):
+    """True when the expression is certainly numeric, so `x += node` is a
+    counter rather than a sequence rebuild. Conservative: unknown names are
+    not scalar, because `data += chunk` is exactly the case worth catching.
+    """
+    if isinstance(node, ast.Constant):
+        return isinstance(node.value, (int, float, complex)) and not isinstance(
+            node.value, bool
+        )
+    if isinstance(node, ast.Call):
+        func = node.func
+        name = getattr(func, "id", None) or getattr(func, "attr", None)
+        return name in SCALAR_CALLS
+    if isinstance(node, ast.BinOp):
+        if isinstance(node.op, SCALAR_OPS):
+            return True
+        return _is_scalar_expr(node.left) or _is_scalar_expr(node.right)
+    if isinstance(node, ast.UnaryOp):
+        return _is_scalar_expr(node.operand)
+    return False
+
+
+def _ast_quadratic_rebuild_findings(path, tree):
+    """GL007: accumulating with `+`/`+=` inside a loop, which copies the whole
+    sequence built so far on every iteration — O(n^2) allocation where
+    `list.append` / `''.join` are linear.
+
+    Deliberately narrow: only `x += <expr>` and `x = x + <expr>` where the
+    target is a plain name. `list.append()` in a loop is idiomatic and
+    amortised O(1) — the previous version of this rule flagged it, which made
+    the rule fire on almost every Python file that builds a list.
+    """
+    rule = RULES_BY_ID["GL007"]
+    seen = set()
+    for node in ast.walk(tree):
+        if not isinstance(node, (ast.For, ast.While)):
+            continue
+        for stmt in ast.walk(node):
+            if not isinstance(stmt, (ast.AugAssign, ast.Assign)) or stmt.lineno in seen:
+                continue
+            target = value = None
+            if isinstance(stmt, ast.AugAssign) and isinstance(stmt.op, ast.Add):
+                target, value = stmt.target, stmt.value
+            elif (
+                isinstance(stmt, ast.Assign)
+                and len(stmt.targets) == 1
+                and isinstance(stmt.value, ast.BinOp)
+                and isinstance(stmt.value.op, ast.Add)
+            ):
+                target, value = stmt.targets[0], stmt.value
+            if not isinstance(target, ast.Name):
+                continue
+            # `x = x + ...` only — `x = y + z` rebinds rather than accumulates.
+            if isinstance(stmt, ast.Assign):
+                left = stmt.value.left
+                if not (isinstance(left, ast.Name) and left.id == target.id):
+                    continue
+            # A numeric counter (`total += 1`, `seen += len(chunk)`, `kwh +=
+            # watts * hours / 1000`) accumulates in O(1) — not a rebuild.
+            if _is_scalar_expr(value):
+                continue
+            # `xs += [a, b]` is `list.extend`: in place, O(k), no copy. The
+            # list on the right also proves the target is a list, since `+=` a
+            # list is a TypeError for str/bytes/tuple. Only the rebinding form
+            # (`xs = xs + [a]`) copies everything accumulated so far.
+            if isinstance(stmt, ast.AugAssign) and isinstance(
+                value, (ast.List, ast.ListComp)
+            ):
+                continue
+            seen.add(stmt.lineno)
+            yield _finding(rule, path, stmt.lineno)
+
+
 def _ast_try_in_loop_findings(path, tree):
     """GL031: a `try` block anywhere inside a `for`/`while` loop. `seen`
     dedupes a `try` matched from more than one enclosing loop when loops are
@@ -680,9 +811,15 @@ def _tf_log_retention_findings(path, text):
 def _dockerfile_layer_bloat_findings(path, text):
     """GL029: more than one separate `RUN ... install` line in a Dockerfile —
     each is its own image layer. Flags every occurrence after the first.
+
+    Counted per build stage, not per file: layers created in a stage that the
+    final image does not inherit from are thrown away, so chaining installs
+    across a `FROM ... AS build` boundary saves nothing and is usually
+    impossible anyway.
     """
     rule = RULES_BY_ID["GL029"]
-    positions = [
+    stage_starts = [m.start() for m in re.finditer(r"^FROM\s+", text, re.MULTILINE)]
+    installs = [
         m.start()
         for m in re.finditer(
             r"^RUN\s+.*\b(?:apt(?:-get)?|pip3?|npm|yum)\s+install\b",
@@ -690,16 +827,26 @@ def _dockerfile_layer_bloat_findings(path, text):
             re.MULTILINE | re.IGNORECASE,
         )
     ]
-    for pos in positions[1:]:
-        yield _finding(rule, path, text.count("\n", 0, pos) + 1)
+    seen_stages = set()
+    for pos in installs:
+        stage = sum(1 for s in stage_starts if s < pos)
+        if stage in seen_stages:
+            yield _finding(rule, path, text.count("\n", 0, pos) + 1)
+        seen_stages.add(stage)
 
 
 def _k8s_resources_findings(path, text):
     """GL014: a Pod-spec-bearing manifest with no `resources:` block anywhere
     in the file. File-wide, not per-container; a real gap for single-manifest
     repos, a false negative for values shared via Helm/Kustomize overlays.
+
+    Go-template files are skipped: in a Helm chart the pod spec usually lives
+    in an included partial and `resources:` comes from `values.yaml`, so the
+    unrendered template says nothing about whether the workload is bounded.
     """
     rule = RULES_BY_ID["GL014"]
+    if _is_go_template(text):
+        return
     m = re.search(r"^kind:\s*(Deployment|StatefulSet|DaemonSet|Pod)\s*$", text, re.MULTILINE)
     if m and "resources:" not in text:
         yield _finding(rule, path, text.count("\n", 0, m.start()) + 1)
@@ -717,6 +864,41 @@ def _k8s_hpa_static_findings(path, text):
     max_m = re.search(r"maxReplicas:\s*(\d+)", text)
     if min_m and max_m and min_m.group(1) == max_m.group(1):
         yield _finding(rule, path, text.count("\n", 0, min_m.start()) + 1)
+
+
+# Tools that read commit history, not just the working tree: a shallow clone
+# makes them wrong (or makes them fail), so `fetch-depth: 0` is the correct
+# setting and GL004 must not nag about it. Matched case-insensitively against
+# the whole workflow file.
+NEEDS_FULL_HISTORY = re.compile(
+    r"gitleaks|trufflehog|sonar|codecov|scorecard|release-please|semantic-release"
+    r"|git-cliff|gitversion|conventional-changelog|git\s+log|git\s+describe"
+    # goreleaser builds its changelog from the tag history.
+    r"|goreleaser"
+    # Reviewers that diff a PR against its merge-base need both branches.
+    r"|gandalf|merge-base",
+    re.IGNORECASE,
+)
+
+
+def _fetch_depth_findings(path, text):
+    """GL004: a full-history clone in CI.
+
+    Skipped when the same workflow runs something that genuinely needs the
+    history — a secret scanner walking every commit, or a release tool deriving
+    a version from tags. Telling those workflows to shallow-clone trades a
+    working scan for a broken one, which is not a saving.
+    """
+    rule = RULES_BY_ID["GL004"]
+    if NEEDS_FULL_HISTORY.search(text):
+        return
+    for m in re.finditer(r"fetch-depth:\s*0", text):
+        # A commented-out or discussed setting is not a setting. Prose about
+        # `fetch-depth: 0` is common in the docs of tools that avoid needing it.
+        line_start = text.rfind("\n", 0, m.start()) + 1
+        if "#" in text[line_start : m.start()]:
+            continue
+        yield _finding(rule, path, text.count("\n", 0, m.start()) + 1)
 
 
 def _compose_resources_findings(path, text):
@@ -743,12 +925,18 @@ def scan_file(path, disabled=frozenset()):
         text = path.read_text(errors="replace")
     except OSError:
         return
-    ast_rules = {"GL001", "GL018", "GL023", "GL030", "GL031"}
+    # Rules about long-lived loops, applied to test code, only ever produce
+    # noise: a test's tight wait is bounded by the test run and is the point.
+    if _is_test_file(path):
+        disabled = disabled | {"GL001", "GL002"}
+    ast_rules = {"GL001", "GL007", "GL018", "GL023", "GL030", "GL031"}
     if path.suffix == ".py" and ast_rules - disabled:
         tree = _parse_python(path, text)
         if tree is not None:
             if "GL001" not in disabled:
                 yield from _ast_busy_loop_findings(path, tree)
+            if "GL007" not in disabled:
+                yield from _ast_quadratic_rebuild_findings(path, tree)
             if "GL018" not in disabled:
                 yield from _ast_nested_loop_findings(path, tree)
             if "GL023" not in disabled:
@@ -765,6 +953,8 @@ def scan_file(path, disabled=frozenset()):
         if "GL026" not in disabled:
             yield from _tf_log_retention_findings(path, text)
     if path.suffix in (".yml", ".yaml"):
+        if "GL004" not in disabled:
+            yield from _fetch_depth_findings(path, text)
         if "GL014" not in disabled:
             yield from _k8s_resources_findings(path, text)
         if "GL033" not in disabled:
