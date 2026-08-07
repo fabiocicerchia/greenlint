@@ -1,0 +1,12 @@
+# greenlint scanning greenlint.
+#
+# A linter's own fixtures have to contain the patterns it detects:
+# examples/basic/sample.py is a deliberate catalogue of wasteful code, and the
+# test suite asserts on `SELECT *`, busy loops and the rest. Scanning them
+# reports the fixtures back as findings, which says nothing about this repo.
+#
+# Only the fixtures are excluded. greenlint.py itself is scanned.
+ignore = [
+  "*/examples/*",
+  "*/tests/*",
+]

@@ -4,7 +4,7 @@ Guidance for Claude Code (and other AI agents) working in this repo.
 
 ## Project
 
-greenlint is a single-module Python CLI (`greenlint.py`) that statically
+greenlint is a single-module Python 3.11+ CLI (`greenlint.py`) that statically
 analyses source and config files for **energy-wasteful patterns** (busy loops,
 sub-100ms polling, every-minute crons, `SELECT *`, full-history CI clones,
 etc.). Rules are regex + context based and language-tagged; the rule set *is*
@@ -18,7 +18,29 @@ make dev     # editable install with dev deps (pytest, ruff, build)
 make lint    # ruff check .
 make test    # pytest -q
 make build   # python -m build
+make help    # Show this help
+make setup   # Install the pre-commit hook
+make install # Install the package
 ```
+
+## Tooling
+
+Shared config — the GitHub workflows, `.pre-commit-config.yaml`,
+`.editorconfig`, `.hadolint.yaml`, `SECURITY.md` — comes from
+[repo-skeleton](https://github.com/fabiocicerchia/repo-skeleton). Edit it
+there, not here; a local edit is drift and the next sync overwrites it.
+`check-drift.sh` in that repo reports what has diverged.
+
+- `make setup` installs the pre-commit hook, and that is the whole of it.
+  Don't add a `.githooks/` directory: `core.hooksPath` replaces `.git/hooks/`
+  wholesale, so setting it silently stops every pre-commit hook from running.
+- Hooks are pinned by commit SHA with the tag in a trailing comment. A tag can
+  be moved, a SHA cannot.
+- CI runs this same `.pre-commit-config.yaml` through `pre-commit/action`, so
+  what passes locally is what gates the pull request.
+- `.greenlint.toml` tunes greenlint (rule opt-outs, ignore globs). Ignore
+  globs are matched against the path as given, so write them anchored
+  (`*/vendor/*`), not bare.
 
 ## Conventions
 
@@ -31,7 +53,8 @@ make build   # python -m build
 
 ## Guardrails
 
-- Keep greenlint dependency-free at runtime; prefer stdlib.
+- Keep greenlint dependency-free at runtime; prefer stdlib. The 3.11 floor is
+  what buys that: `tomllib` reads `.greenlint.toml` without a `tomli` pin.
 - New rules need an energy rationale (the `suggestion` field) and a test.
 - Don't touch generated files or lockfiles by hand.
 - Ask before large refactors or destructive operations.

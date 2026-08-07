@@ -68,6 +68,48 @@ def test_ast_busy_loop_not_flagged_when_loop_actually_sleeps(tmp_path):
     assert "GL001" not in rule_ids(scan([str(tmp_path)]))
 
 
+def test_paginator_loop_not_flagged(tmp_path):
+    # `while True:` draining a paginated API exits on what came back. Each pass
+    # does a network round trip, so it is not spinning on a core.
+    write(
+        tmp_path,
+        "a.py",
+        "def f(client):\n    token = None\n    while True:\n        page = client.get(token)\n"
+        "        token = page.get('next')\n        if not token:\n            break\n",
+    )
+    assert "GL001" not in rule_ids(scan([str(tmp_path)]))
+
+
+def test_read_until_eof_loop_not_flagged(tmp_path):
+    write(
+        tmp_path,
+        "a.py",
+        "def f(conn):\n    while True:\n        ch = conn.recv(1)\n"
+        "        if not ch:\n            break\n",
+    )
+    assert "GL001" not in rule_ids(scan([str(tmp_path)]))
+
+
+def test_loop_returning_a_value_not_flagged(tmp_path):
+    write(
+        tmp_path,
+        "a.py",
+        "def f(it):\n    while True:\n        n = next(it)\n        if n > end:\n            return n\n",
+    )
+    assert "GL001" not in rule_ids(scan([str(tmp_path)]))
+
+
+def test_break_in_a_nested_loop_does_not_exonerate(tmp_path):
+    # The break belongs to the inner `for`, so the outer `while True:` still
+    # has no way out.
+    write(
+        tmp_path,
+        "a.py",
+        "def f(xs):\n    while True:\n        for x in xs:\n            if x:\n                break\n",
+    )
+    assert "GL001" in rule_ids(scan([str(tmp_path)]))
+
+
 def test_ast_busy_loop_respects_disable(tmp_path):
     cfg = write(tmp_path, ".greenlint.toml", 'disable = ["GL001"]\n')
     write(tmp_path, "a.py", "while True:\n    check()\n")
@@ -414,20 +456,78 @@ def test_dict_items_using_both_key_and_value_not_flagged(tmp_path):
     assert "GL030" not in rule_ids(scan([str(tmp_path)]))
 
 
-def test_detects_try_except_in_loop(tmp_path):
+def test_detects_lookup_guarded_by_except_in_loop(tmp_path):
+    # `d[k]` + `except KeyError: continue` where `d.get(k)` never raises.
     write(
         tmp_path,
         "a.py",
-        "def f(items):\n    for i in items:\n        try:\n            g(i)\n        except ValueError:\n            pass\n",
+        "def f(keys, d):\n    for k in keys:\n        try:\n            v = d[k]\n"
+        "        except KeyError:\n            continue\n",
     )
     assert "GL031" in rule_ids(scan([str(tmp_path)]))
+
+
+def test_detects_int_conversion_used_as_a_type_test(tmp_path):
+    write(
+        tmp_path,
+        "a.py",
+        "def f(items):\n    for s in items:\n        try:\n            n = int(s)\n"
+        "        except ValueError:\n            continue\n",
+    )
+    assert "GL031" in rule_ids(scan([str(tmp_path)]))
+
+
+def test_swallowed_io_error_in_loop_not_flagged(tmp_path):
+    # Opening a file can fail on perfectly good input; catching it is how that
+    # is written, not a pattern with a free alternative.
+    write(
+        tmp_path,
+        "a.py",
+        "def f(paths):\n    for p in paths:\n        try:\n            data = json.load(open(p))\n"
+        "        except OSError:\n            continue\n",
+    )
+    assert "GL031" not in rule_ids(scan([str(tmp_path)]))
+
+
+def test_retry_loop_handler_not_flagged(tmp_path):
+    # The handler does real work (backoff + give-up check), so the exception is
+    # not standing in for an if-check and cannot be hoisted out of the loop.
+    write(
+        tmp_path,
+        "a.py",
+        "def f():\n    while True:\n        try:\n            run()\n            break\n"
+        "        except OSError:\n            if time.time() > deadline:\n                raise\n"
+        "            time.sleep(2)\n",
+    )
+    assert "GL031" not in rule_ids(scan([str(tmp_path)]))
+
+
+def test_per_item_error_collector_not_flagged(tmp_path):
+    write(
+        tmp_path,
+        "a.py",
+        "def f(checks):\n    for c in checks:\n        try:\n            evaluate(c)\n"
+        "        except Failure as e:\n            results.append(str(e))\n",
+    )
+    assert "GL031" not in rule_ids(scan([str(tmp_path)]))
+
+
+def test_handler_that_breaks_not_flagged(tmp_path):
+    write(
+        tmp_path,
+        "a.py",
+        "def f(fd):\n    while True:\n        try:\n            chunk = os.read(fd, 4096)\n"
+        "        except OSError:\n            break\n",
+    )
+    assert "GL031" not in rule_ids(scan([str(tmp_path)]))
 
 
 def test_try_except_around_loop_not_flagged(tmp_path):
     write(
         tmp_path,
         "a.py",
-        "def f(items):\n    try:\n        for i in items:\n            g(i)\n    except ValueError:\n        pass\n",
+        "def f(keys, d):\n    try:\n        for k in keys:\n            v = d[k]\n"
+        "    except KeyError:\n        pass\n",
     )
     assert "GL031" not in rule_ids(scan([str(tmp_path)]))
 
@@ -466,6 +566,222 @@ def test_elastic_hpa_not_flagged(tmp_path):
         "apiVersion: autoscaling/v2\nkind: HorizontalPodAutoscaler\nspec:\n  minReplicas: 1\n  maxReplicas: 5\n",
     )
     assert "GL033" not in rule_ids(scan([str(tmp_path)]))
+
+
+def test_config_array_may_span_lines(tmp_path):
+    cfg = tmp_path / ".greenlint.toml"
+    cfg.write_text('ignore = [\n  "*/vendor/*",\n  "*/examples/*",\n]\n')
+    assert load_config(str(cfg))["ignore"] == ["*/vendor/*", "*/examples/*"]
+
+
+def test_multiline_ignore_actually_excludes_files(tmp_path):
+    cfg = tmp_path / ".greenlint.toml"
+    cfg.write_text('ignore = [\n  "*/examples/*",\n]\n')
+    (tmp_path / "examples").mkdir()
+    write(tmp_path / "examples", "a.py", "while True:\n    pass\n")
+    assert scan([str(tmp_path)], load_config(str(cfg))) == []
+
+
+def test_detects_two_install_layers_in_one_stage(tmp_path):
+    write(
+        tmp_path,
+        "Dockerfile",
+        "FROM alpine\nRUN apk add curl\nRUN pip install foo\nRUN pip install bar\n",
+    )
+    assert "GL029" in rule_ids(scan([str(tmp_path)]))
+
+
+def test_install_layers_in_separate_build_stages_not_flagged(tmp_path):
+    # The build stage is discarded, so its layers never ship — chaining across
+    # the FROM boundary saves nothing.
+    write(
+        tmp_path,
+        "Dockerfile",
+        "FROM python:3.12 AS build\nRUN pip install build\n"
+        "FROM python:3.12-slim\nRUN pip install /tmp/x.whl\n",
+    )
+    assert "GL029" not in rule_ids(scan([str(tmp_path)]))
+
+
+def test_detects_quadratic_list_rebuild(tmp_path):
+    write(tmp_path, "a.py", "out = []\nfor i in range(10):\n    out = out + [i]\n")
+    assert "GL007" in rule_ids(scan([str(tmp_path)]))
+
+
+def test_detects_string_concat_in_loop(tmp_path):
+    write(tmp_path, "a.py", "s = ''\nfor w in words:\n    s += w\n")
+    assert "GL007" in rule_ids(scan([str(tmp_path)]))
+
+
+def test_append_in_loop_is_not_flagged(tmp_path):
+    # append is amortised O(1) and idiomatic — the whole reason this rule was
+    # rewritten. Guard it so the regex version cannot come back.
+    write(tmp_path, "a.py", "out = []\nfor i in range(10):\n    out.append(i)\n")
+    assert "GL007" not in rule_ids(scan([str(tmp_path)]))
+
+
+def test_counter_increment_in_loop_is_not_flagged(tmp_path):
+    write(tmp_path, "a.py", "total = 0\nfor i in range(10):\n    total += 1\n")
+    assert "GL007" not in rule_ids(scan([str(tmp_path)]))
+
+
+def test_numeric_accumulation_is_not_flagged(tmp_path):
+    write(
+        tmp_path,
+        "a.py",
+        "kwh = 0\nseen = 0\nfor r in rows:\n"
+        "    kwh += r.hours * r.watts / 1000\n"
+        "    seen += len(r.data)\n",
+    )
+    assert "GL007" not in rule_ids(scan([str(tmp_path)]))
+
+
+def test_list_extend_via_augmented_assign_is_not_flagged(tmp_path):
+    # `xs += [...]` is list.extend — in place, O(k). Only `xs = xs + [...]`
+    # copies the whole list each pass.
+    write(tmp_path, "a.py", "xs = []\nfor g in groups:\n    xs += [g.a, g.b]\n")
+    assert "GL007" not in rule_ids(scan([str(tmp_path)]))
+
+
+def test_list_extend_with_comprehension_is_not_flagged(tmp_path):
+    write(tmp_path, "a.py", "xs = []\nfor g in groups:\n    xs += [x for x in g]\n")
+    assert "GL007" not in rule_ids(scan([str(tmp_path)]))
+
+
+def test_extend_of_a_name_known_to_be_a_list_is_not_flagged(tmp_path):
+    # `lines = []` proves `lines += f(x)` is list.extend, not a rebuild.
+    write(
+        tmp_path,
+        "a.py",
+        "def f(groups):\n    lines = []\n    for g in groups:\n        lines += render(g)\n    return lines\n",
+    )
+    assert "GL007" not in rule_ids(scan([str(tmp_path)]))
+
+
+def test_bytes_accumulation_of_a_call_result_is_still_flagged(tmp_path):
+    write(
+        tmp_path,
+        "a.py",
+        "def f(conn):\n    data = b''\n    while True:\n        data += conn.recv(10)\n",
+    )
+    assert "GL007" in rule_ids(scan([str(tmp_path)]))
+
+
+def test_byte_accumulation_is_still_flagged(tmp_path):
+    write(tmp_path, "a.py", "data = b''\nwhile True:\n    data += chunk\n")
+    assert "GL007" in rule_ids(scan([str(tmp_path)]))
+
+
+def test_rebinding_from_other_names_is_not_flagged(tmp_path):
+    write(tmp_path, "a.py", "for i in range(10):\n    z = x + y\n")
+    assert "GL007" not in rule_ids(scan([str(tmp_path)]))
+
+
+def test_helm_template_not_flagged_for_missing_resources(tmp_path):
+    write(
+        tmp_path,
+        "workload.yaml",
+        'apiVersion: apps/v1\nkind: Deployment\nspec:\n  template:\n'
+        '    {{- include "app.podSpec" . | nindent 4 }}\n',
+    )
+    assert "GL014" not in rule_ids(scan([str(tmp_path)]))
+
+
+def test_sleep_of_exactly_100ms_is_not_flagged(tmp_path):
+    # The rule is "sub-100ms". 0.1s is 100ms.
+    write(tmp_path, "a.py", "time.sleep(0.1)\n")
+    assert "GL002" not in rule_ids(scan([str(tmp_path)]))
+
+
+def test_sleep_below_100ms_is_still_flagged(tmp_path):
+    write(tmp_path, "a.py", "time.sleep(0.05)\n")
+    assert "GL002" in rule_ids(scan([str(tmp_path)]))
+
+
+def test_short_sleep_in_a_test_file_is_not_flagged(tmp_path):
+    write(tmp_path, "proxy_test.go", "func f() { time.Sleep(10 * time.Millisecond) }\n")
+    assert "GL002" not in rule_ids(scan([str(tmp_path)]))
+
+
+def test_short_sleep_in_production_code_is_still_flagged(tmp_path):
+    write(tmp_path, "proxy.go", "func f() { time.Sleep(10 * time.Millisecond) }\n")
+    assert "GL002" in rule_ids(scan([str(tmp_path)]))
+
+
+def test_pattern_in_a_comment_is_not_a_finding(tmp_path):
+    # Prose warning against a pattern is not the pattern. This was six false
+    # positives out of six across the portfolio's docs and examples.
+    write(tmp_path, "a.py", "# never write SELECT * FROM users\nq = 1\n")
+    write(tmp_path, "b.sql", "-- bad: SELECT * FROM users;\nSELECT id FROM users;\n")
+    write(tmp_path, "c.go", "// avoid time.Sleep(10 * time.Millisecond)\n")
+    write(tmp_path, "d.yml", '# not a cron: * * * * * schedule\nx: 1\n')
+    assert rule_ids(scan([str(tmp_path)])) == set()
+
+
+def test_pattern_in_a_docstring_is_not_a_finding(tmp_path):
+    write(tmp_path, "a.py", '"""Never write SELECT * FROM orders."""\n')
+    assert "GL005" not in rule_ids(scan([str(tmp_path)]))
+
+
+def test_pattern_in_a_real_string_is_still_a_finding(tmp_path):
+    # A query lives in a string literal — blanking comments must not touch it.
+    write(tmp_path, "a.py", 'q = "SELECT * FROM users"\n')
+    assert "GL005" in rule_ids(scan([str(tmp_path)]))
+
+
+def test_hash_inside_a_string_is_not_a_comment(tmp_path):
+    write(tmp_path, "a.py", 'q = "# SELECT * FROM users"\n')
+    assert "GL005" in rule_ids(scan([str(tmp_path)]))
+
+
+def test_block_comment_is_blanked(tmp_path):
+    write(tmp_path, "a.go", "/*\n  SELECT * FROM users\n*/\nfunc f() {}\n")
+    assert "GL005" not in rule_ids(scan([str(tmp_path)]))
+
+
+def test_commented_out_dockerfile_directive_not_flagged(tmp_path):
+    write(tmp_path, "Dockerfile", "# FROM ubuntu:22.04\nFROM alpine:3.24\n")
+    assert "GL006" not in rule_ids(scan([str(tmp_path)]))
+
+
+def test_detects_full_history_clone(tmp_path):
+    write(
+        tmp_path,
+        "ci.yml",
+        "jobs:\n  build:\n    steps:\n      - uses: actions/checkout@v5\n        with:\n          fetch-depth: 0\n",
+    )
+    assert "GL004" in rule_ids(scan([str(tmp_path)]))
+
+
+def test_full_history_clone_not_flagged_when_a_scanner_needs_it(tmp_path):
+    write(
+        tmp_path,
+        "security.yml",
+        "jobs:\n  secrets:\n    steps:\n      - uses: actions/checkout@v5\n        with:\n"
+        "          fetch-depth: 0\n      - uses: gitleaks/gitleaks-action@v3\n",
+    )
+    assert "GL004" not in rule_ids(scan([str(tmp_path)]))
+
+
+def test_full_history_clone_in_a_comment_not_flagged(tmp_path):
+    write(
+        tmp_path,
+        "action.yml",
+        "runs:\n  steps:\n"
+        "    # cheaper than asking every caller for fetch-depth: 0\n"
+        "    - run: git fetch --depth=1\n",
+    )
+    assert "GL004" not in rule_ids(scan([str(tmp_path)]))
+
+
+def test_full_history_clone_not_flagged_for_release_tooling(tmp_path):
+    write(
+        tmp_path,
+        "release.yml",
+        "jobs:\n  release:\n    steps:\n      - uses: actions/checkout@v5\n        with:\n"
+        "          fetch-depth: 0\n      - uses: googleapis/release-please-action@v4\n",
+    )
+    assert "GL004" not in rule_ids(scan([str(tmp_path)]))
 
 
 def test_detects_compose_service_without_limits(tmp_path):
@@ -589,3 +905,123 @@ def test_swift_long_timer_interval_not_flagged(tmp_path):
         "Timer.scheduledTimer(withTimeInterval: 5.0, repeats: true) { _ in tick() }\n",
     )
     assert "GL002" not in rule_ids(scan([str(tmp_path)]))
+
+
+# --- PR #27 review follow-ups: each of these reproduced a real defect. ---
+
+
+def test_apostrophe_does_not_unblank_the_rest_of_the_file(tmp_path):
+    # `echo don't` opened a quote that never closed, so every comment after it
+    # stayed visible to the rules and prose was reported as code.
+    write(tmp_path, "x.sh", "echo don't\n# never use sleep 0.01 in a loop\n")
+    assert "GL002" not in rule_ids(scan([str(tmp_path)]))
+
+
+def test_apostrophe_does_not_hide_a_real_finding(tmp_path):
+    write(tmp_path, "x.sh", "echo don't\nsleep 0.01\n")
+    assert "GL002" in rule_ids(scan([str(tmp_path)]))
+
+
+def test_busy_loop_found_despite_return_in_nested_function(tmp_path):
+    # The `return` belongs to the callback, not to the loop, so it is not an
+    # exit condition — the loop still pegs a core.
+    write(
+        tmp_path,
+        "a.py",
+        "def serve():\n"
+        "    while True:\n"
+        "        def _cb():\n"
+        "            return 1\n"
+        "        _cb()\n",
+    )
+    assert "GL001" in rule_ids(scan([str(tmp_path)]))
+
+
+def test_quadratic_rebuild_name_bindings_are_per_scope(tmp_path):
+    # `total = 0` in a() must not exempt the genuine string rebuild in b().
+    write(
+        tmp_path,
+        "a.py",
+        "def a():\n"
+        "    total = 0\n"
+        "    for x in range(10):\n"
+        "        total += x\n"
+        "\n"
+        "def b():\n"
+        "    total = ''\n"
+        "    for x in range(10):\n"
+        "        total += str(x)\n",
+    )
+    findings = [f for f in scan([str(tmp_path)]) if f["rule"] == "GL007"]
+    assert [f["line"] for f in findings] == [9]
+
+
+def test_fetch_depth_exemption_is_per_job(tmp_path):
+    write(
+        tmp_path,
+        "w.yml",
+        "name: demo\n"
+        "jobs:\n"
+        "  secrets:\n"
+        "    steps:\n"
+        "      - uses: actions/checkout@v4\n"
+        "        with:\n"
+        "          fetch-depth: 0\n"
+        "      - uses: gitleaks/gitleaks-action@v2\n"
+        "  build:\n"
+        "    steps:\n"
+        "      - uses: actions/checkout@v4\n"
+        "        with:\n"
+        "          fetch-depth: 0\n"
+        "      - run: make build\n",
+    )
+    findings = [f for f in scan([str(tmp_path)]) if f["rule"] == "GL004"]
+    assert [f["line"] for f in findings] == [13]
+
+
+def test_python_file_is_parsed_once(tmp_path, monkeypatch):
+    import greenlint
+
+    f = write(tmp_path, "a.py", "x = 1\n")
+    calls = []
+    original = greenlint._parse_python
+    monkeypatch.setattr(
+        greenlint,
+        "_parse_python",
+        lambda p, t: (calls.append(p), original(p, t))[1],
+    )
+    list(greenlint.scan_file(f))
+    assert len(calls) == 1
+
+
+def test_multiline_ignore_array_is_parsed(tmp_path):
+    write(tmp_path, "tests/q.sql", "SELECT * FROM users;\n")
+    cfg = write(
+        tmp_path, ".greenlint.toml", 'ignore = [\n  "*/examples/*",\n  "*/tests/*",\n]\n'
+    )
+    assert scan([str(tmp_path)], load_config(str(cfg))) == []
+
+
+def test_relative_ignore_glob_applies(tmp_path, monkeypatch):
+    # `greenlint .` yields `tests/q.sql`, which `*/tests/*` cannot match unless
+    # the path is anchored — the globs silently did nothing.
+    write(tmp_path, "tests/q.sql", "SELECT * FROM users;\n")
+    cfg = write(tmp_path, ".greenlint.toml", 'ignore = ["*/tests/*"]\n')
+    monkeypatch.chdir(tmp_path)
+    assert scan(["."], load_config(str(cfg))) == []
+
+
+def test_string_instead_of_list_is_rejected(tmp_path):
+    import pytest
+
+    cfg = write(tmp_path, ".greenlint.toml", 'disable = "GL005"\n')
+    with pytest.raises(SystemExit, match="must be a list"):
+        load_config(str(cfg))
+
+
+def test_malformed_config_aborts(tmp_path):
+    import pytest
+
+    cfg = write(tmp_path, ".greenlint.toml", "disable = [\n")
+    with pytest.raises(SystemExit, match="invalid TOML"):
+        load_config(str(cfg))
