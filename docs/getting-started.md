@@ -2,7 +2,7 @@
 
 ## Prerequisites
 
-- Python 3.10+
+- Python 3.11+ (for `tomllib`, which keeps greenlint dependency-free)
 - `pipx` (recommended) or `pip`
 
 ## Install

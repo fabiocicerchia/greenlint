@@ -18,6 +18,8 @@ import re
 import sys
 from pathlib import Path
 
+import tomllib
+
 CONFIG_FILENAME = ".greenlint.toml"
 
 # Rough, order-of-magnitude estimates per occurrence — not a measurement, a
@@ -451,58 +453,43 @@ RULES = [
 RULES_BY_ID = {r["id"]: r for r in RULES}
 
 
-def _joined_toml_lines(text):
-    """Yield logical lines, folding a `key = [` ... `]` array onto one line."""
-    parts = None
-    for raw in text.splitlines():
-        stripped = raw.split("#", 1)[0].strip()
-        if parts is None:
-            if "=" in stripped and stripped.rstrip().endswith("["):
-                parts = [stripped]
-                continue
-            yield raw
-        else:
-            parts.append(stripped)
-            if stripped.endswith("]"):
-                yield " ".join(parts)
-                parts = None
-    if parts is not None:  # unterminated array — hand it back as-is
-        yield " ".join(parts)
+def _as_list(value, key):
+    """Coerce a config value to a list of strings, refusing a bare string.
 
-
-def _parse_simple_toml(text):
-    """Parse the flat subset of TOML greenlint's config needs: `key = "value"`
-    or `key = ["a", "b"]`, `#` comments. No tables, no nesting.
-
-    Arrays may span lines, which is how anyone writing TOML by hand lays out a
-    list of globs. Without this they parsed as the string "[" and silently
-    ignored every entry — a config that looks applied and is not.
+    `disable = "GL005"` is the easy typo, and `set("GL005")` is the set of five
+    characters — a config that looks applied and disables nothing. TOML gives
+    us the real type, so the mistake is worth naming rather than silently
+    iterating.
     """
-    data = {}
-    for raw in _joined_toml_lines(text):
-        line = raw.split("#", 1)[0].strip()
-        if not line or "=" not in line:
-            continue
-        key, _, value = line.partition("=")
-        key, value = key.strip(), value.strip()
-        if value.startswith("[") and value.endswith("]"):
-            data[key] = [v.strip().strip("\"'") for v in value[1:-1].split(",") if v.strip()]
-        else:
-            data[key] = value.strip("\"'")
-    return data
+    if value is None:
+        return []
+    if isinstance(value, str):
+        raise SystemExit(
+            f"greenlint: {CONFIG_FILENAME}: `{key}` must be a list, not a string — "
+            f'write `{key} = ["{value}"]`'
+        )
+    return [str(v) for v in value]
 
 
 def load_config(path=None):
     """Load `.greenlint.toml` (rule disable list + ignore globs). Missing
     file → no-op config. `path` overrides the default cwd lookup.
+
+    A malformed config aborts rather than degrading to "no rules disabled":
+    silently ignoring the file is how a config that looks applied turns out
+    not to be.
     """
     cfg_path = Path(path) if path else Path.cwd() / CONFIG_FILENAME
     if not cfg_path.is_file():
         return {"disable": set(), "ignore": []}
-    data = _parse_simple_toml(cfg_path.read_text())
+    try:
+        with cfg_path.open("rb") as fh:  # tomllib decodes UTF-8 itself, per spec
+            data = tomllib.load(fh)
+    except tomllib.TOMLDecodeError as exc:
+        raise SystemExit(f"greenlint: {cfg_path}: invalid TOML — {exc}") from exc
     return {
-        "disable": set(data.get("disable", [])),
-        "ignore": list(data.get("ignore", [])),
+        "disable": set(_as_list(data.get("disable"), "disable")),
+        "ignore": _as_list(data.get("ignore"), "ignore"),
     }
 
 
@@ -530,6 +517,17 @@ def _blank_comments(text, path):
     Without this, every regex rule fires on prose that *warns against* the
     pattern — `# never write SELECT * here` reported as a SELECT * query. That
     was six false positives out of six in a six-line probe.
+
+    Quote tracking is reset at every newline, and a `'` between two letters is
+    read as an apostrophe rather than an opening quote. `echo don't` otherwise
+    opened a string that never closed, and *every comment in the rest of the
+    file* stayed visible to the rules — reintroducing the false positives this
+    function exists to remove, on any shell, YAML or Ruby file containing an
+    ordinary English contraction.
+
+    The cost is that a genuinely multi-line string containing a comment token
+    gets blanked. That is a false negative, which is the safe direction: this
+    whole pass exists because a linter that cries wolf gets switched off.
     """
     line_tok, block = COMMENT_SYNTAX.get(
         path.suffix, ("#", None) if path.name == "Dockerfile" else (None, None)
@@ -540,8 +538,14 @@ def _blank_comments(text, path):
     i, n, quote = 0, len(text), None
     while i < n:
         ch = text[i]
+        if ch == "\n":
+            quote = None
+            i += 1
+            continue
         if quote:
-            if ch == "\\":
+            # A trailing backslash is a line continuation, not an escape of the
+            # newline we use to resynchronise.
+            if ch == "\\" and i + 1 < n and text[i + 1] != "\n":
                 i += 2
                 continue
             if ch == quote:
@@ -549,6 +553,9 @@ def _blank_comments(text, path):
             i += 1
             continue
         if ch in "\"'":
+            if ch == "'" and 0 < i < n - 1 and text[i - 1].isalpha() and text[i + 1].isalpha():
+                i += 1  # don't / it's / won't
+                continue
             quote = ch
             i += 1
             continue
@@ -650,6 +657,28 @@ def _parse_python(path, text):
         return None
 
 
+# A nested function, lambda or class body is its own scope: its statements and
+# its name bindings belong to it, not to the code that encloses it.
+SCOPE_BOUNDARIES = (ast.FunctionDef, ast.AsyncFunctionDef, ast.Lambda, ast.ClassDef)
+
+
+def _walk_own(node):
+    """Like `ast.walk`, but never descends into a nested scope.
+
+    `ast.walk` treats a `def` inside a loop as part of the loop, which made a
+    `return` in a callback read as "this loop can exit" and a `total = 0` in
+    one function silence a rebuild in another.
+    """
+    stack = [node]
+    while stack:
+        cur = stack.pop()
+        yield cur
+        for child in ast.iter_child_nodes(cur):
+            if isinstance(child, SCOPE_BOUNDARIES):
+                continue
+            stack.append(child)
+
+
 def _loop_can_exit(loop):
     """True if the loop body can leave the loop on a data-dependent condition —
     a `break` belonging to this loop, or a `return`/`raise`.
@@ -661,7 +690,9 @@ def _loop_can_exit(loop):
     pegs a core for as long as the process lives.
     """
     for stmt in loop.body:
-        for n in ast.walk(stmt):
+        if isinstance(stmt, SCOPE_BOUNDARIES):
+            continue  # a callback defined in the loop cannot end it
+        for n in _walk_own(stmt):
             if isinstance(n, (ast.Return, ast.Raise)):
                 return True
             if isinstance(n, ast.Break) and _nearest_loop(loop, n) is loop:
@@ -834,9 +865,14 @@ def _is_scalar_expr(node):
     return False
 
 
-def _names_bound_to_lists(tree):
+def _names_bound_to_lists(nodes):
     """(list_names, scalar_names) — names seen initialised to a list, and names
-    seen initialised to a number, anywhere in `tree`.
+    seen initialised to a number, among `nodes`.
+
+    `nodes` is one scope's own statements, never the whole module: `total = 0`
+    in one function said nothing about `total` in the next, but sharing one
+    namespace let any counter anywhere in the file silence a genuine rebuild
+    everywhere else — and `total`, `out`, `result` and `s` collide constantly.
 
     `xs += <anything>` on a list is `list.extend`: in place, O(k). It is only
     quadratic when the target is immutable (str, bytes, tuple), because those
@@ -846,7 +882,7 @@ def _names_bound_to_lists(tree):
     is the difference between `errors += e` being a counter and a rebuild.
     """
     lists, scalars = set(), set()
-    for node in ast.walk(tree):
+    for node in nodes:
         if not isinstance(node, (ast.Assign, ast.AnnAssign)):
             continue
         value = node.value
@@ -874,47 +910,53 @@ def _ast_quadratic_rebuild_findings(path, tree):
     the rule fire on almost every Python file that builds a list.
     """
     rule = RULES_BY_ID["GL007"]
-    list_names, scalar_names = _names_bound_to_lists(tree)
     seen = set()
-    for node in ast.walk(tree):
-        if not isinstance(node, (ast.For, ast.While)):
-            continue
-        for stmt in ast.walk(node):
-            if not isinstance(stmt, (ast.AugAssign, ast.Assign)) or stmt.lineno in seen:
+    # One pass per scope, each judged against only its own name bindings.
+    scopes = [tree] + [
+        n for n in ast.walk(tree) if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef))
+    ]
+    for scope in scopes:
+        own = list(_walk_own(scope))
+        list_names, scalar_names = _names_bound_to_lists(own)
+        for node in own:
+            if not isinstance(node, (ast.For, ast.While)):
                 continue
-            target = value = None
-            if isinstance(stmt, ast.AugAssign) and isinstance(stmt.op, ast.Add):
-                target, value = stmt.target, stmt.value
-            elif (
-                isinstance(stmt, ast.Assign)
-                and len(stmt.targets) == 1
-                and isinstance(stmt.value, ast.BinOp)
-                and isinstance(stmt.value.op, ast.Add)
-            ):
-                target, value = stmt.targets[0], stmt.value
-            if not isinstance(target, ast.Name):
-                continue
-            # `x = x + ...` only — `x = y + z` rebinds rather than accumulates.
-            if isinstance(stmt, ast.Assign):
-                left = stmt.value.left
-                if not (isinstance(left, ast.Name) and left.id == target.id):
+            for stmt in _walk_own(node):
+                if not isinstance(stmt, (ast.AugAssign, ast.Assign)) or stmt.lineno in seen:
                     continue
-            # A numeric counter (`total += 1`, `seen += len(chunk)`, `kwh +=
-            # watts * hours / 1000`) accumulates in O(1) — not a rebuild.
-            if _is_scalar_expr(value) or target.id in scalar_names:
-                continue
-            # `xs += ...` is `list.extend` when xs is a list: in place, O(k),
-            # no copy. Either the list literal on the right proves it (`+=` a
-            # list is a TypeError for str/bytes/tuple), or the name was seen
-            # being initialised to one. Only the rebinding form
-            # (`xs = xs + [a]`) copies everything accumulated so far.
-            if isinstance(stmt, ast.AugAssign) and (
-                isinstance(value, (ast.List, ast.ListComp))
-                or target.id in list_names
-            ):
-                continue
-            seen.add(stmt.lineno)
-            yield _finding(rule, path, stmt.lineno)
+                target = value = None
+                if isinstance(stmt, ast.AugAssign) and isinstance(stmt.op, ast.Add):
+                    target, value = stmt.target, stmt.value
+                elif (
+                    isinstance(stmt, ast.Assign)
+                    and len(stmt.targets) == 1
+                    and isinstance(stmt.value, ast.BinOp)
+                    and isinstance(stmt.value.op, ast.Add)
+                ):
+                    target, value = stmt.targets[0], stmt.value
+                if not isinstance(target, ast.Name):
+                    continue
+                # `x = x + ...` only — `x = y + z` rebinds, not accumulates.
+                if isinstance(stmt, ast.Assign):
+                    left = stmt.value.left
+                    if not (isinstance(left, ast.Name) and left.id == target.id):
+                        continue
+                # A numeric counter (`total += 1`, `seen += len(chunk)`, `kwh +=
+                # watts * hours / 1000`) accumulates in O(1) — not a rebuild.
+                if _is_scalar_expr(value) or target.id in scalar_names:
+                    continue
+                # `xs += ...` is `list.extend` when xs is a list: in place,
+                # O(k), no copy. Either the list literal on the right proves it
+                # (`+=` a list is a TypeError for str/bytes/tuple), or the name
+                # was seen being initialised to one. Only the rebinding form
+                # (`xs = xs + [a]`) copies everything accumulated so far.
+                if isinstance(stmt, ast.AugAssign) and (
+                    isinstance(value, (ast.List, ast.ListComp))
+                    or target.id in list_names
+                ):
+                    continue
+                seen.add(stmt.lineno)
+                yield _finding(rule, path, stmt.lineno)
 
 
 # Conversions whose failure is routinely used as a type test, where a
@@ -1095,18 +1137,47 @@ NEEDS_FULL_HISTORY = re.compile(
 )
 
 
+def _job_span(text, pos):
+    """(start, end) of the `jobs:` entry containing `pos`, or the whole file.
+
+    Crude on purpose — indentation, not a YAML parse, because greenlint has no
+    YAML dependency and this only needs to find a block boundary. Any workflow
+    it cannot segment falls back to the whole file, which is what the rule did
+    everywhere before.
+    """
+    jobs = re.search(r"^jobs:[ \t]*$", text, re.MULTILINE)
+    if not jobs or pos < jobs.end():
+        return 0, len(text)
+    body = text[jobs.end():]
+    # The first key under `jobs:` sets the indent at which a sibling job starts.
+    first = re.search(r"^([ \t]+)[\w-]+:[ \t]*$", body, re.MULTILINE)
+    if not first:
+        return 0, len(text)
+    starts = [
+        jobs.end() + m.start()
+        for m in re.finditer(rf"^{re.escape(first.group(1))}[\w-]+:[ \t]*$", body, re.MULTILINE)
+    ]
+    before = [s for s in starts if s <= pos]
+    after = [s for s in starts if s > pos]
+    return (before[-1] if before else jobs.end()), (after[0] if after else len(text))
+
+
 def _fetch_depth_findings(path, text):
     """GL004: a full-history clone in CI.
 
-    Skipped when the same workflow runs something that genuinely needs the
+    Skipped when the **same job** runs something that genuinely needs the
     history — a secret scanner walking every commit, or a release tool deriving
     a version from tags. Telling those workflows to shallow-clone trades a
     working scan for a broken one, which is not a saving.
+
+    Per job, not per file: one `gitleaks` job used to exempt every other job in
+    the same workflow, including the ones cloning all of history for nothing.
     """
     rule = RULES_BY_ID["GL004"]
-    if NEEDS_FULL_HISTORY.search(text):
-        return
     for m in re.finditer(r"fetch-depth:\s*0", text):
+        start, end = _job_span(text, m.start())
+        if NEEDS_FULL_HISTORY.search(text, start, end):
+            continue
         # A commented-out or discussed setting is not a setting. Prose about
         # `fetch-depth: 0` is common in the docs of tools that avoid needing it.
         line_start = text.rfind("\n", 0, m.start()) + 1
@@ -1144,17 +1215,18 @@ def scan_file(path, disabled=frozenset()):
     # GL004 is the exception: it reads comments deliberately, to spot the tool
     # that needs the full history.
     code = _blank_comments(text, path)
-    if path.suffix == ".py":
-        _doc_tree = _parse_python(path, text)
-        if _doc_tree is not None:
-            code = _blank_python_docstrings(code, _doc_tree)
+    # Parsed once and reused: the docstring pass and the AST rules both need
+    # this tree, and `ast.parse` on every Python file twice is exactly the kind
+    # of waste this tool exists to point at.
+    tree = _parse_python(path, text) if path.suffix == ".py" else None
+    if tree is not None:
+        code = _blank_python_docstrings(code, tree)
     # Rules about long-lived loops, applied to test code, only ever produce
     # noise: a test's tight wait is bounded by the test run and is the point.
     if _is_test_file(path):
         disabled = disabled | {"GL001", "GL002", "GL007"}
     ast_rules = {"GL001", "GL007", "GL018", "GL023", "GL030", "GL031"}
-    if path.suffix == ".py" and ast_rules - disabled:
-        tree = _parse_python(path, text)
+    if ast_rules - disabled:
         if tree is not None:
             if "GL001" not in disabled:
                 yield from _ast_busy_loop_findings(path, tree)
@@ -1215,7 +1287,14 @@ def scan(paths, config=None):
             ]
         )
         for f in files:
-            if any(fnmatch.fnmatch(str(f), pat) for pat in config["ignore"]):
+            # Matched against the path both as given and with a leading `/`.
+            # `greenlint .` produces `tests/x.py`, which `*/tests/*` cannot
+            # match — so the obvious way to write an ignore glob silently did
+            # nothing, including in greenlint's own .greenlint.toml. Trying
+            # both keeps bare patterns like `tests/*` working too.
+            rel = f.as_posix()
+            forms = (rel, rel if rel.startswith("/") else "/" + rel)
+            if any(fnmatch.fnmatch(s, pat) for pat in config["ignore"] for s in forms):
                 continue
             findings.extend(scan_file(f, config["disable"]))
     order = {"high": 0, "medium": 1, "low": 2}

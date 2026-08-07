@@ -905,3 +905,123 @@ def test_swift_long_timer_interval_not_flagged(tmp_path):
         "Timer.scheduledTimer(withTimeInterval: 5.0, repeats: true) { _ in tick() }\n",
     )
     assert "GL002" not in rule_ids(scan([str(tmp_path)]))
+
+
+# --- PR #27 review follow-ups: each of these reproduced a real defect. ---
+
+
+def test_apostrophe_does_not_unblank_the_rest_of_the_file(tmp_path):
+    # `echo don't` opened a quote that never closed, so every comment after it
+    # stayed visible to the rules and prose was reported as code.
+    write(tmp_path, "x.sh", "echo don't\n# never use sleep 0.01 in a loop\n")
+    assert "GL002" not in rule_ids(scan([str(tmp_path)]))
+
+
+def test_apostrophe_does_not_hide_a_real_finding(tmp_path):
+    write(tmp_path, "x.sh", "echo don't\nsleep 0.01\n")
+    assert "GL002" in rule_ids(scan([str(tmp_path)]))
+
+
+def test_busy_loop_found_despite_return_in_nested_function(tmp_path):
+    # The `return` belongs to the callback, not to the loop, so it is not an
+    # exit condition — the loop still pegs a core.
+    write(
+        tmp_path,
+        "a.py",
+        "def serve():\n"
+        "    while True:\n"
+        "        def _cb():\n"
+        "            return 1\n"
+        "        _cb()\n",
+    )
+    assert "GL001" in rule_ids(scan([str(tmp_path)]))
+
+
+def test_quadratic_rebuild_name_bindings_are_per_scope(tmp_path):
+    # `total = 0` in a() must not exempt the genuine string rebuild in b().
+    write(
+        tmp_path,
+        "a.py",
+        "def a():\n"
+        "    total = 0\n"
+        "    for x in range(10):\n"
+        "        total += x\n"
+        "\n"
+        "def b():\n"
+        "    total = ''\n"
+        "    for x in range(10):\n"
+        "        total += str(x)\n",
+    )
+    findings = [f for f in scan([str(tmp_path)]) if f["rule"] == "GL007"]
+    assert [f["line"] for f in findings] == [9]
+
+
+def test_fetch_depth_exemption_is_per_job(tmp_path):
+    write(
+        tmp_path,
+        "w.yml",
+        "name: demo\n"
+        "jobs:\n"
+        "  secrets:\n"
+        "    steps:\n"
+        "      - uses: actions/checkout@v4\n"
+        "        with:\n"
+        "          fetch-depth: 0\n"
+        "      - uses: gitleaks/gitleaks-action@v2\n"
+        "  build:\n"
+        "    steps:\n"
+        "      - uses: actions/checkout@v4\n"
+        "        with:\n"
+        "          fetch-depth: 0\n"
+        "      - run: make build\n",
+    )
+    findings = [f for f in scan([str(tmp_path)]) if f["rule"] == "GL004"]
+    assert [f["line"] for f in findings] == [13]
+
+
+def test_python_file_is_parsed_once(tmp_path, monkeypatch):
+    import greenlint
+
+    f = write(tmp_path, "a.py", "x = 1\n")
+    calls = []
+    original = greenlint._parse_python
+    monkeypatch.setattr(
+        greenlint,
+        "_parse_python",
+        lambda p, t: (calls.append(p), original(p, t))[1],
+    )
+    list(greenlint.scan_file(f))
+    assert len(calls) == 1
+
+
+def test_multiline_ignore_array_is_parsed(tmp_path):
+    write(tmp_path, "tests/q.sql", "SELECT * FROM users;\n")
+    cfg = write(
+        tmp_path, ".greenlint.toml", 'ignore = [\n  "*/examples/*",\n  "*/tests/*",\n]\n'
+    )
+    assert scan([str(tmp_path)], load_config(str(cfg))) == []
+
+
+def test_relative_ignore_glob_applies(tmp_path, monkeypatch):
+    # `greenlint .` yields `tests/q.sql`, which `*/tests/*` cannot match unless
+    # the path is anchored — the globs silently did nothing.
+    write(tmp_path, "tests/q.sql", "SELECT * FROM users;\n")
+    cfg = write(tmp_path, ".greenlint.toml", 'ignore = ["*/tests/*"]\n')
+    monkeypatch.chdir(tmp_path)
+    assert scan(["."], load_config(str(cfg))) == []
+
+
+def test_string_instead_of_list_is_rejected(tmp_path):
+    import pytest
+
+    cfg = write(tmp_path, ".greenlint.toml", 'disable = "GL005"\n')
+    with pytest.raises(SystemExit, match="must be a list"):
+        load_config(str(cfg))
+
+
+def test_malformed_config_aborts(tmp_path):
+    import pytest
+
+    cfg = write(tmp_path, ".greenlint.toml", "disable = [\n")
+    with pytest.raises(SystemExit, match="invalid TOML"):
+        load_config(str(cfg))
