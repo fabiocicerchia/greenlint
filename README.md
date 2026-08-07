@@ -4,6 +4,7 @@
 [![Security](https://github.com/fabiocicerchia/greenlint/actions/workflows/security.yml/badge.svg)](https://github.com/fabiocicerchia/greenlint/actions/workflows/security.yml)
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
 [![OpenSSF Scorecard](https://api.securityscorecards.dev/projects/github.com/fabiocicerchia/greenlint/badge)](https://securityscorecards.dev/viewer/?uri=github.com/fabiocicerchia/greenlint)
+[![CI carbon](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/fabiocicerchia/greenlint/gh-pages/badge.json)](.github/workflows/carbon-badge.yml)
 [![Release](https://img.shields.io/github/v/release/fabiocicerchia/greenlint)](https://github.com/fabiocicerchia/greenlint/releases)
 
 Static analysis that flags **energy-wasteful patterns** across languages and
