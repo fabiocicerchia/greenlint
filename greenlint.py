@@ -22,49 +22,84 @@ import tomllib
 
 CONFIG_FILENAME = ".greenlint.toml"
 
-# Rough, order-of-magnitude estimates per occurrence — not a measurement, a
-# steer for which findings are worth fixing first. Based on typical marginal
-# grid intensity (~400 gCO2e/kWh) and a plausible instance-hours-affected
-# guess per pattern; wildly workload-dependent, treat as relative not exact.
+# Order-of-magnitude steers for which findings are worth fixing first — not
+# measurements. Two anchors make them checkable rather than plausible-sounding:
+#
+#   1 gCO2e ~= 500 seconds of one busy CPU core   (see core_seconds_per_gram)
+#   1 GB transferred ~= 15 gCO2e                  (~0.03 kWh/GB x grid)
+#
+# Where a rule saves a real physical quantity — an instance-day, a GB pulled,
+# a GB-month stored — the hint is a number. Where it saves a few microseconds
+# per call, it is *not*: a function call costs nanojoules, so any per-call gram
+# figure is fiction. Those hints state the scaling instead, which is the thing
+# that actually decides whether the rule is worth acting on.
+#
+# Everything here is wildly workload-dependent. Treat as relative, not exact.
+GRID_INTENSITY_G_PER_KWH = 480.0  # world average; same figure carbon-badge uses
+BUSY_CORE_WATTS = 15.0  # one core under load, incl. its share of host overhead
+G_CO2E_PER_GB = 15.0  # ~0.03 kWh/GB transferred x the grid factor above
+
+
+def core_seconds_per_gram(
+    grid_g_per_kwh=GRID_INTENSITY_G_PER_KWH, watts=BUSY_CORE_WATTS
+):
+    """Seconds of one busy CPU core that add up to 1 gCO2e.
+
+    The sanity check behind every hint below: at 480 gCO2e/kWh a gram is 7.5 kJ,
+    which is ~500 seconds of a 15 W core. Any rule claiming ~0.001 gCO2e per
+    call is therefore claiming half a core-second per call — which is why the
+    per-call hints below describe scaling rather than quoting a figure.
+    """
+    joules_per_gram = 3_600_000 / grid_g_per_kwh
+    return joules_per_gram / watts
+
+
+# Shared phrasing for costs too small to quote per occurrence.
+_HOT_PATH = "negligible per call; ~1 gCO2e per 500 core-seconds of work removed"
+
 CO2E_HINTS = {
-    "GL001": "~10-100s gCO2e/day per idle instance (continuous busy-poll CPU)",
-    "GL002": "~1-10s gCO2e/day per instance (elevated wake-up rate)",
-    "GL003": "~1-5 gCO2e per unnecessary run x 1440 runs/day saved by widening",
-    "GL004": "~1-3 gCO2e per full-history clone avoided",
-    "GL005": "~0.1-1 gCO2e per query x call volume (excess I/O/network)",
-    "GL006": "~5-20 gCO2e per pull avoided (smaller image, less transfer+storage)",
-    "GL007": "~0.01-0.1 gCO2e per call (extra allocation/GC churn)",
-    "GL008": "~100s-1000s gCO2e/day per oversized instance running idle",
-    "GL009": "~1-5 gCO2e per pull x pulls/day from avoidable recommended-package bloat",
-    "GL010": "~1-5 gCO2e per pull x pulls/day from cached wheel files baked into the image",
-    "GL011": "~0.01-0.1 gCO2e per unseen image loaded on page view",
-    "GL012": "~0.01-0.1 gCO2e per extra round-trip x (N-1) avoidable queries",
-    "GL013": "~10s-100s gCO2e/month per bucket left in hot storage indefinitely",
-    "GL014": "~10s-100s gCO2e/day per unbounded container encouraging node over-provisioning",
-    "GL015": "~1-5 gCO2e per pull x pulls/day from an outdated, less efficient runtime",
-    "GL016": "~10s-100s gCO2e/day per instance (ARM/Graviton is ~3-4x more power-efficient than x86)",
-    "GL017": "~1-10 gCO2e per view avoided by using MP4/WebP/AVIF instead of an animated GIF",
-    "GL018": "~0.01-1 gCO2e per call x n (quadratic vs. linear compute growth)",
-    "GL019": "~0.1-1 gCO2e per avoidable round-trip x (N-1) calls (network + remote CPU wake)",
-    "GL020": "~0.001-0.01 gCO2e per call (string work done even when the log level is disabled)",
-    "GL021": "~0.1-10 gCO2e per run x rows (10-100x more interpreter cycles than a vectorised op)",
-    "GL022": "~0.05-0.5 gCO2e per avoidable open/read x (N-1) iterations",
-    "GL023": "~0.01-1 gCO2e per call x n² vs n log n compute growth",
-    "GL024": "~100s-1000s gCO2e/day per instance kept always-on instead of scaling down",
-    "GL025": "~1-10 gCO2e/day per volume (marginally higher power draw per IOP than gp3)",
-    "GL026": "~1-10 gCO2e/month per GB of logs retained indefinitely",
-    "GL027": "~0.1-1 gCO2e per re-fetch a cache header would have avoided",
-    "GL028": "~0.001-0.01 gCO2e per import (extra modules loaded/bound at startup)",
-    "GL029": "~1-5 gCO2e per pull x pulls/day per avoidable extra image layer",
-    "GL030": "~0.001-0.01 gCO2e per iteration (building/unpacking the unused tuple half)",
-    "GL031": "~0.01-0.1 gCO2e per iteration (raising and unwinding on every pass)",
-    "GL032": "~0.01-0.1 gCO2e per call (repeated allocator overhead per iteration)",
-    "GL033": "~100s-1000s gCO2e/day per replica kept always-on instead of scaling down",
-    "GL034": "~10s-100s gCO2e/day per unbounded service encouraging host over-provisioning",
-    "GL035": "~0.001-0.05 gCO2e per call x sequence length (full enumeration vs. short-circuit)",
-    "GL036": "~0.001-0.05 gCO2e per call x hash size (O(n) scan vs. O(1) lookup)",
-    "GL037": "~0.001-0.05 gCO2e per call x collection size (two passes vs. one)",
-    "GL038": "~0.001-0.01 gCO2e per render (extra allocation + defeated memoisation)",
+    # --- Compute left running: real instance-hours, so real numbers. ---
+    "GL001": "~150-200 gCO2e/day per instance (one core pegged continuously)",
+    "GL002": "~10-50 gCO2e/day per instance (wake-ups blocking CPU idle states)",
+    "GL003": "~0.05-0.5 gCO2e per run; at 1440 runs/day that is ~70-700 gCO2e/day",
+    "GL008": "~300-1200 gCO2e/day per oversized instance (30-100 W drawn for nothing)",
+    "GL014": "~100s gCO2e/day if it forces one extra node; nothing if the cluster has slack",
+    "GL016": "~100-400 gCO2e/day per instance (ARM draws roughly 40% less for equal work)",
+    "GL024": "~300-1200 gCO2e/day per instance left running outside working hours",
+    "GL025": "~1-10 gCO2e/day per volume (marginally higher draw per IOP; weakly grounded)",
+    "GL033": "~300-1200 gCO2e/day per replica left running outside working hours",
+    "GL034": "~100s gCO2e/day if it forces one extra host; nothing if the host has slack",
+    # --- Storage: per GB-month. ---
+    "GL013": "~0.5 gCO2e per GB per month left in hot storage",
+    "GL026": "~0.5 gCO2e per GB per month of logs retained",
+    # --- Transfer: ~15 gCO2e/GB, so the size of the payload is the whole story. ---
+    "GL004": "~15 gCO2e per GB of history; a 200 MB repo is ~3 gCO2e per clone avoided",
+    "GL006": "~15 gCO2e per GB not transferred, per pull",
+    "GL009": "~15 gCO2e per GB of recommended packages avoided, per pull",
+    "GL010": "~15 gCO2e per GB of cached wheels not baked into the image, per pull",
+    "GL011": "~15 gCO2e per GB; a 200 KB unseen image is ~0.003 gCO2e per page view",
+    "GL015": "~15 gCO2e per GB, per pull (older runtimes are usually larger)",
+    "GL017": "~15 gCO2e per GB saved; a 5 MB GIF as MP4 is ~0.07 gCO2e per view",
+    "GL027": "~15 gCO2e per GB re-fetched that a cache header would have avoided",
+    "GL029": "~15 gCO2e per GB in the avoidable layer, per pull",
+    # --- Hot-path micro-costs: scaling, not fictional per-call grams. ---
+    "GL005": f"~15 gCO2e per GB of columns never read; {_HOT_PATH}",
+    "GL007": f"allocation and GC churn; {_HOT_PATH}",
+    "GL012": f"one round trip per row instead of one per query; {_HOT_PATH}",
+    "GL018": "grows as n squared; passes ~1 gCO2e once the extra work reaches ~500 core-seconds",
+    "GL019": f"network wait and a remote CPU wake per call; {_HOT_PATH}",
+    "GL020": f"string work done even when the level is disabled; {_HOT_PATH}",
+    "GL021": f"10-100x the interpreter work of a vectorised op; {_HOT_PATH}",
+    "GL022": f"reopening and rereading per iteration; {_HOT_PATH}",
+    "GL023": "n squared instead of n log n; passes ~1 gCO2e once the extra work reaches ~500 core-seconds",
+    "GL028": f"modules loaded and bound at every start; {_HOT_PATH}",
+    "GL030": f"building and discarding half a tuple per iteration; {_HOT_PATH}",
+    "GL031": f"raising and unwinding on every pass; {_HOT_PATH}",
+    "GL032": f"repeated allocator overhead per iteration; {_HOT_PATH}",
+    "GL035": f"full enumeration where a short-circuit would do; {_HOT_PATH}",
+    "GL036": f"an O(n) scan where a hash lookup is O(1); {_HOT_PATH}",
+    "GL037": f"two passes over the collection instead of one; {_HOT_PATH}",
+    "GL038": f"extra allocation and a defeated memoisation per render; {_HOT_PATH}",
 }
 
 RULES = [
@@ -254,7 +289,7 @@ RULES = [
             r'instance_type\s*=\s*"(?:t2|t3|m4|m5|c4|c5|r4|r5)\.[a-z0-9]+"', re.IGNORECASE
         ),
         "message": "x86 instance family with an ARM/Graviton equivalent available",
-        "suggestion": "ARM-based instances (t4g/m6g/c6g/r6g) deliver ~3-4x better performance-per-watt for compatible workloads",
+        "suggestion": "ARM-based instances (t4g/m6g/c6g/r6g) draw roughly 40% less for equal work; AWS publishes 'up to 60% less energy', independent benchmarks land nearer 1.5-2.5x",
     },
     {
         "id": "GL017",
