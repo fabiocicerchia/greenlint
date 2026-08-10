@@ -1,3 +1,4 @@
+import greenlint
 from greenlint import load_config, main, scan
 
 
@@ -1025,3 +1026,41 @@ def test_malformed_config_aborts(tmp_path):
     cfg = write(tmp_path, ".greenlint.toml", "disable = [\n")
     with pytest.raises(SystemExit, match="invalid TOML"):
         load_config(str(cfg))
+
+
+def test_core_seconds_per_gram_anchor():
+    """Every hint is sanity-checked against this: at 480 gCO2e/kWh a gram is
+    7.5 kJ, which is ~500 seconds of a 15 W core.
+
+    It is the arithmetic that condemned the old per-call figures. "~0.001 gCO2e
+    per call" claimed half a core-second for a string format, overstating it by
+    roughly a millionfold."""
+    assert greenlint.core_seconds_per_gram() == 500.0
+    # Dirtier grid -> fewer core-seconds buy a gram.
+    assert greenlint.core_seconds_per_gram(960.0) == 250.0
+    assert greenlint.core_seconds_per_gram(watts=30.0) == 250.0
+
+
+def test_no_hint_quotes_a_fictional_per_call_gram_figure():
+    """A function call costs nanojoules, so a per-call gram figure cannot be
+    real. Hot-path rules must describe scaling instead — this is what regressed
+    before, in prose nobody checked."""
+    per_call = [
+        rule_id
+        for rule_id, hint in greenlint.CO2E_HINTS.items()
+        if "gCO2e per call" in hint or "gCO2e per iteration" in hint
+    ]
+    assert per_call == [], f"per-call gram figures reintroduced: {per_call}"
+
+
+def test_cron_hint_multiplies_out_to_something_sane():
+    """GL003 used to read "~1-5 gCO2e per unnecessary run x 1440 runs/day",
+    which resolves to 1.4-7.2 kg/day for one cron entry — roughly 1000x high,
+    and published as a headline number."""
+    hint = greenlint.CO2E_HINTS["GL003"]
+    assert "kg" not in hint
+    # The hint now quotes the anchor and one worked example instead of a made-up
+    # per-run band: runtime/500 is the whole calculation, and a job that overruns
+    # its minute scales through the same formula instead of breaking it.
+    assert "500 core-seconds" in hint
+    assert "~6 gCO2e/day" in hint
