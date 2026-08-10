@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.2](https://github.com/fabiocicerchia/greenlint/compare/v0.1.1...v0.1.2) (2026-08-10)
+
+
+### Bug Fixes
+
+* correct the CO2e estimates, which were fiction on most rules ([#28](https://github.com/fabiocicerchia/greenlint/issues/28)) ([1433925](https://github.com/fabiocicerchia/greenlint/commit/1433925fee4e745fdcc99131ca9c5c16c882a28c))
+
 ## [0.1.1](https://github.com/fabiocicerchia/greenlint/compare/v0.1.0...v0.1.1) (2026-08-06)
 
 
