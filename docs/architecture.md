@@ -15,7 +15,8 @@ message, and energy-saving suggestion.
   `message`, `suggestion`. This list *is* the product; it grows over time.
 - **Scanner** — walks paths, filters files by extension, applies matching
   rules, collects findings.
-- **Reporters** — human-readable (default) and JSON (`--format json`).
+- **Reporters** — human-readable (default), JSON (`--format json`), and GitHub
+  workflow annotations (`--format github`).
 - **CLI** (`main`) — argument parsing, `--list-rules`, `--fail-on-findings`.
 
 ## Data flow
