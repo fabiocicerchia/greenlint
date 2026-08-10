@@ -149,9 +149,13 @@ Detection mechanism key:
 
 - **Languages:** `.tf .tofu` · **Severity:** low · **Mechanism:** regex
 - **Triggers on:** `instance_type` in the `t2/t3/m4/m5/c4/c5/r4/r5` families.
-- **Fix:** ARM-based instances (`t4g`/`m6g`/`c6g`/`r6g`) deliver ~3-4x better
-  performance-per-watt for compatible workloads — an informational nudge,
-  not every workload can move.
+- **Fix:** ARM-based instances (`t4g`/`m6g`/`c6g`/`r6g`) draw roughly **40%
+  less** energy for equal work — an informational nudge, not every workload can
+  move. Deliberately not the "3-4x more efficient" claim that circulates: AWS's
+  own published figure is *up to 60% less energy for equal work*
+  ([Graviton](https://aws.amazon.com/ec2/graviton/)) and independent benchmarks
+  land nearer 45-50%, so 40% is the conservative end. The sibling carbon-badge
+  tool uses the same 40%.
 
 ## GL017 — GIF referenced for image/animation
 

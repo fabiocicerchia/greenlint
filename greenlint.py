@@ -73,6 +73,14 @@ CONFIG_FILENAME = ".greenlint.toml"
 #     separately, we do not. 15 W is the round number above that band, chosen
 #     deliberately: it makes every compute figure below the generous end of
 #     plausible rather than the mean.
+#     The sibling carbon-badge tool prices a busy core at ~4.7 W, which looks
+#     like the two disagreeing 3x. They do not. It starts from Eco-CI's
+#     SPECpower curve for the one machine GitHub runs CI on (2.05 W/vCPU
+#     against CCF's cross-fleet 3.5 — a 1.7x spread between two published
+#     sources), and it knows those jobs ran on Azure, so it takes the
+#     hyperscale PUE and no safety margin. It is measuring a known machine; we
+#     are bounding an unknown one. Do not port its constant here, or ours
+#     there. See its docs/assumptions.md, "Reconciling with greenlint".
 GRID_INTENSITY_G_PER_KWH = 480.0
 BUSY_CORE_WATTS = 15.0
 KWH_PER_GB_TRANSFERRED = 0.03
