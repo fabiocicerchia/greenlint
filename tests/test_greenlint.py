@@ -1059,6 +1059,8 @@ def test_cron_hint_multiplies_out_to_something_sane():
     and published as a headline number."""
     hint = greenlint.CO2E_HINTS["GL003"]
     assert "kg" not in hint
-    # A minute-cron cannot run longer than a minute, so the per-run figure has
-    # to sit far below a gram: 500 core-seconds is a gram.
-    assert "0.05-0.5 gCO2e per run" in hint
+    # The hint now quotes the anchor and one worked example instead of a made-up
+    # per-run band: runtime/500 is the whole calculation, and a job that overruns
+    # its minute scales through the same formula instead of breaking it.
+    assert "500 core-seconds" in hint
+    assert "~6 gCO2e/day" in hint
