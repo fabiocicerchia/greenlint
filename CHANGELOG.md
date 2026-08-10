@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.3](https://github.com/fabiocicerchia/greenlint/compare/v0.1.2...v0.1.3) (2026-08-10)
+
+
+### Documentation
+
+* correct three rule descriptions that no longer match the code ([#31](https://github.com/fabiocicerchia/greenlint/issues/31)) ([279db17](https://github.com/fabiocicerchia/greenlint/commit/279db1705b1f079762f0f84689d1aa2a6b9ab422))
+
 ## [0.1.2](https://github.com/fabiocicerchia/greenlint/compare/v0.1.1...v0.1.2) (2026-08-10)
 
 
