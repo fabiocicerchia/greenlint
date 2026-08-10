@@ -362,7 +362,7 @@ RULES = [
             r'instance_type\s*=\s*"(?:t2|t3|m4|m5|c4|c5|r4|r5)\.[a-z0-9]+"', re.IGNORECASE
         ),
         "message": "x86 instance family with an ARM/Graviton equivalent available",
-        "suggestion": "ARM-based instances (t4g/m6g/c6g/r6g) draw roughly 40% less for equal work; AWS publishes 'up to 60% less energy', independent benchmarks land nearer 1.5-2.5x",
+        "suggestion": "ARM-based instances (t4g/m6g/c6g/r6g) draw roughly 40% less for equal work; AWS publishes 'up to 60% less energy', independent benchmarks land nearer 45-50%, so 40% is the conservative end",
     },
     {
         "id": "GL017",

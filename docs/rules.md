@@ -71,12 +71,17 @@ Detection mechanism key:
 - **Fix:** prefer `-slim`/alpine/distroless: smaller pulls, less storage,
   faster cold starts.
 
-## GL007 — append inside loop (possible O(n) rebuild pattern)
+## GL007 — quadratic rebuild in a loop (whole sequence copied each iteration)
 
-- **Languages:** `.py` · **Severity:** low · **Mechanism:** regex
-- **Triggers on:** a `.append(...)` call on the line after a `for`.
-- **Fix:** consider a comprehension or generator; less allocation churn per
-  iteration.
+- **Languages:** `.py` · **Severity:** low · **Mechanism:** AST
+- **Triggers on:** `x += <expr>` or `x = x + <expr>` inside a loop, where the
+  target is a plain name — on a list or a string that copies everything
+  accumulated so far on every pass, which is O(n²) allocation.
+- **Does not trigger on:** `.append(...)` in a loop. That is idiomatic and
+  already amortised O(1); an earlier version of this rule flagged it and was
+  wrong to.
+- **Example:** `for i in xs: out = out + [i]`
+- **Fix:** use `list.append()`, or collect the parts and `''.join()` them once.
 
 ## GL008 — very large instance type hardcoded
 
@@ -270,13 +275,19 @@ Detection mechanism key:
 - **Fix:** use `.keys()` or `.values()` directly instead of `.items()` when
   only one side is needed; skips building/unpacking the discarded half.
 
-## GL031 — try/except inside a loop
+## GL031 — exception swallowed every iteration (exceptions as control flow)
 
 - **Languages:** `.py` · **Severity:** low · **Mechanism:** AST
-- **Triggers on:** a `try` block anywhere inside a `for`/`while` loop.
-- **Fix:** exception handling has real per-entry overhead versus a plain
-  if-check; hoist the loop inside a single `try`/`except` instead of
-  wrapping each iteration.
+- **Triggers on:** a loop containing a handler whose whole body is `pass` or
+  `continue` — the exception is expected to fire on ordinary input, so the
+  raise and unwind cost is paid every time round.
+- **Does not trigger on:** a `try` block anywhere inside a loop. Since Python
+  3.11 a `try` that does not raise costs nothing at runtime, so the older,
+  broader form of this rule measured something that had stopped existing — and
+  it fired on every retry loop, per-item error collector and
+  `except OSError: break` read loop, all of which need the handler where it is.
+- **Example:** `for x in xs:` / `try: parse(x)` / `except ValueError: continue`
+- **Fix:** test the condition instead of catching it.
 
 ## GL032 — heap allocation inside a loop
 
