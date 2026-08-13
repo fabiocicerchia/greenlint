@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.4](https://github.com/fabiocicerchia/greenlint/compare/v0.1.3...v0.1.4) (2026-08-13)
+
+
+### Bug Fixes
+
+* security and code-quality findings ([#35](https://github.com/fabiocicerchia/greenlint/issues/35)) ([f1890f2](https://github.com/fabiocicerchia/greenlint/commit/f1890f2fcec64e0a06c84377ca18606f00d3f006))
+
 ## [0.1.3](https://github.com/fabiocicerchia/greenlint/compare/v0.1.2...v0.1.3) (2026-08-10)
 
 
