@@ -637,6 +637,28 @@ def test_numeric_accumulation_is_not_flagged(tmp_path):
     assert "GL007" not in rule_ids(scan([str(tmp_path)]))
 
 
+def test_tuple_unpacked_counters_are_not_flagged(tmp_path):
+    # `mwh, grams = 0.0, 0.0` binds two counters. Reading only single-name
+    # targets left both unclassified, so `mwh += v` looked like a rebuild.
+    write(
+        tmp_path,
+        "a.py",
+        "mwh, grams = 0.0, 0.0\nfor r in rows:\n    mwh += r\n    grams += r\n",
+    )
+    assert "GL007" not in rule_ids(scan([str(tmp_path)]))
+
+
+def test_tuple_unpacked_list_still_detects_rebuild(tmp_path):
+    # The other half of the pairing: `out` is a list here, `n` a counter, and
+    # `out = out + [i]` is still the rebuilding form.
+    write(
+        tmp_path,
+        "a.py",
+        "out, n = [], 0\nfor i in range(10):\n    out = out + [i]\n",
+    )
+    assert "GL007" in rule_ids(scan([str(tmp_path)]))
+
+
 def test_list_extend_via_augmented_assign_is_not_flagged(tmp_path):
     # `xs += [...]` is list.extend — in place, O(k). Only `xs = xs + [...]`
     # copies the whole list each pass.
@@ -682,7 +704,7 @@ def test_helm_template_not_flagged_for_missing_resources(tmp_path):
     write(
         tmp_path,
         "workload.yaml",
-        'apiVersion: apps/v1\nkind: Deployment\nspec:\n  template:\n'
+        "apiVersion: apps/v1\nkind: Deployment\nspec:\n  template:\n"
         '    {{- include "app.podSpec" . | nindent 4 }}\n',
     )
     assert "GL014" not in rule_ids(scan([str(tmp_path)]))
@@ -715,7 +737,7 @@ def test_pattern_in_a_comment_is_not_a_finding(tmp_path):
     write(tmp_path, "a.py", "# never write SELECT * FROM users\nq = 1\n")
     write(tmp_path, "b.sql", "-- bad: SELECT * FROM users;\nSELECT id FROM users;\n")
     write(tmp_path, "c.go", "// avoid time.Sleep(10 * time.Millisecond)\n")
-    write(tmp_path, "d.yml", '# not a cron: * * * * * schedule\nx: 1\n')
+    write(tmp_path, "d.yml", "# not a cron: * * * * * schedule\nx: 1\n")
     assert rule_ids(scan([str(tmp_path)])) == set()
 
 
@@ -929,11 +951,7 @@ def test_busy_loop_found_despite_return_in_nested_function(tmp_path):
     write(
         tmp_path,
         "a.py",
-        "def serve():\n"
-        "    while True:\n"
-        "        def _cb():\n"
-        "            return 1\n"
-        "        _cb()\n",
+        "def serve():\n    while True:\n        def _cb():\n            return 1\n        _cb()\n",
     )
     assert "GL001" in rule_ids(scan([str(tmp_path)]))
 
@@ -997,9 +1015,7 @@ def test_python_file_is_parsed_once(tmp_path, monkeypatch):
 
 def test_multiline_ignore_array_is_parsed(tmp_path):
     write(tmp_path, "tests/q.sql", "SELECT * FROM users;\n")
-    cfg = write(
-        tmp_path, ".greenlint.toml", 'ignore = [\n  "*/examples/*",\n  "*/tests/*",\n]\n'
-    )
+    cfg = write(tmp_path, ".greenlint.toml", 'ignore = [\n  "*/examples/*",\n  "*/tests/*",\n]\n')
     assert scan([str(tmp_path)], load_config(str(cfg))) == []
 
 

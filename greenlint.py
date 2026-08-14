@@ -16,9 +16,8 @@ import fnmatch
 import json
 import re
 import sys
-from pathlib import Path
-
 import tomllib
+from pathlib import Path
 
 CONFIG_FILENAME = ".greenlint.toml"
 
@@ -87,9 +86,7 @@ KWH_PER_GB_TRANSFERRED = 0.03
 G_CO2E_PER_GB = KWH_PER_GB_TRANSFERRED * GRID_INTENSITY_G_PER_KWH  # 14.4, quoted as ~15
 
 
-def core_seconds_per_gram(
-    grid_g_per_kwh=GRID_INTENSITY_G_PER_KWH, watts=BUSY_CORE_WATTS
-):
+def core_seconds_per_gram(grid_g_per_kwh=GRID_INTENSITY_G_PER_KWH, watts=BUSY_CORE_WATTS):
     """Seconds of one busy CPU core that add up to 1 gCO2e.
 
     The sanity check behind every hint below: at 480 gCO2e/kWh a gram is 7.5 kJ,
@@ -604,14 +601,35 @@ def load_config(path=None):
 # Line- and block-comment syntax per extension. Dockerfile/unknown default to `#`.
 _SLASH = ("//", ("/*", "*/"))
 COMMENT_SYNTAX = {
-    ".go": _SLASH, ".js": _SLASH, ".ts": _SLASH, ".jsx": _SLASH, ".tsx": _SLASH,
-    ".c": _SLASH, ".h": _SLASH, ".cpp": _SLASH, ".cc": _SLASH, ".hpp": _SLASH,
-    ".java": _SLASH, ".rs": _SLASH, ".kt": _SLASH, ".swift": _SLASH, ".cs": _SLASH,
-    ".php": _SLASH, ".scala": _SLASH,
+    ".go": _SLASH,
+    ".js": _SLASH,
+    ".ts": _SLASH,
+    ".jsx": _SLASH,
+    ".tsx": _SLASH,
+    ".c": _SLASH,
+    ".h": _SLASH,
+    ".cpp": _SLASH,
+    ".cc": _SLASH,
+    ".hpp": _SLASH,
+    ".java": _SLASH,
+    ".rs": _SLASH,
+    ".kt": _SLASH,
+    ".swift": _SLASH,
+    ".cs": _SLASH,
+    ".php": _SLASH,
+    ".scala": _SLASH,
     ".sql": ("--", ("/*", "*/")),
-    ".py": ("#", None), ".sh": ("#", None), ".bash": ("#", None), ".rb": ("#", None),
-    ".yml": ("#", None), ".yaml": ("#", None), ".tf": ("#", None), ".tofu": ("#", None),
-    ".toml": ("#", None), ".pl": ("#", None), ".dockerfile": ("#", None),
+    ".py": ("#", None),
+    ".sh": ("#", None),
+    ".bash": ("#", None),
+    ".rb": ("#", None),
+    ".yml": ("#", None),
+    ".yaml": ("#", None),
+    ".tf": ("#", None),
+    ".tofu": ("#", None),
+    ".toml": ("#", None),
+    ".pl": ("#", None),
+    ".dockerfile": ("#", None),
 }
 
 
@@ -698,9 +716,7 @@ def _blank_python_docstrings(code, tree):
         off += len(ln)
     out = list(code)
     for node in ast.walk(tree):
-        if not isinstance(
-            node, (ast.Module, ast.ClassDef, ast.FunctionDef, ast.AsyncFunctionDef)
-        ):
+        if not isinstance(node, (ast.Module, ast.ClassDef, ast.FunctionDef, ast.AsyncFunctionDef)):
             continue
         doc = node.body[0] if node.body else None
         if not (
@@ -957,9 +973,7 @@ def _is_scalar_expr(node):
     not scalar, because `data += chunk` is exactly the case worth catching.
     """
     if isinstance(node, ast.Constant):
-        return isinstance(node.value, (int, float, complex)) and not isinstance(
-            node.value, bool
-        )
+        return isinstance(node.value, (int, float, complex)) and not isinstance(node.value, bool)
     if isinstance(node, ast.Call):
         func = node.func
         name = getattr(func, "id", None) or getattr(func, "attr", None)
@@ -990,20 +1004,34 @@ def _names_bound_to_lists(nodes):
     is the difference between `errors += e` being a counter and a rebuild.
     """
     lists, scalars = set(), set()
-    for node in nodes:
-        if not isinstance(node, (ast.Assign, ast.AnnAssign)):
-            continue
-        value = node.value
-        targets = node.targets if isinstance(node, ast.Assign) else [node.target]
-        names = {t.id for t in targets if isinstance(t, ast.Name)}
+
+    def classify(target, value):
+        # Unpacking binds each name to its own initialiser, so pair the sides
+        # up rather than judging the tuple as a whole: `mwh, grams = 0.0, 0.0`
+        # is two counters, and reading only single-name targets left both
+        # unclassified — which flagged `mwh += r` as a rebuild.
+        if isinstance(target, (ast.Tuple, ast.List)) and isinstance(value, (ast.Tuple, ast.List)):
+            if len(target.elts) == len(value.elts):
+                for t, v in zip(target.elts, value.elts, strict=True):
+                    classify(t, v)
+            return
+        if not isinstance(target, ast.Name):
+            return
         if isinstance(value, (ast.List, ast.ListComp)):
-            lists |= names
+            lists.add(target.id)
         elif (
             isinstance(value, ast.Constant)
             and isinstance(value.value, (int, float))
             and not isinstance(value.value, bool)
         ):
-            scalars |= names
+            scalars.add(target.id)
+
+    for node in nodes:
+        if not isinstance(node, (ast.Assign, ast.AnnAssign)):
+            continue
+        targets = node.targets if isinstance(node, ast.Assign) else [node.target]
+        for target in targets:
+            classify(target, node.value)
     return lists, scalars
 
 
@@ -1059,8 +1087,7 @@ def _ast_quadratic_rebuild_findings(path, tree):
                 # was seen being initialised to one. Only the rebinding form
                 # (`xs = xs + [a]`) copies everything accumulated so far.
                 if isinstance(stmt, ast.AugAssign) and (
-                    isinstance(value, (ast.List, ast.ListComp))
-                    or target.id in list_names
+                    isinstance(value, (ast.List, ast.ListComp)) or target.id in list_names
                 ):
                     continue
                 seen.add(stmt.lineno)
@@ -1118,8 +1145,7 @@ def _ast_try_in_loop_findings(path, tree):
             if not isinstance(stmt, ast.Try) or stmt.lineno in seen:
                 continue
             swallowed = any(
-                all(isinstance(b, (ast.Pass, ast.Continue)) for b in h.body)
-                for h in stmt.handlers
+                all(isinstance(b, (ast.Pass, ast.Continue)) for b in h.body) for h in stmt.handlers
             )
             if swallowed and _has_cheap_alternative(stmt.body):
                 seen.add(stmt.lineno)
@@ -1256,7 +1282,7 @@ def _job_span(text, pos):
     jobs = re.search(r"^jobs:[ \t]*$", text, re.MULTILINE)
     if not jobs or pos < jobs.end():
         return 0, len(text)
-    body = text[jobs.end():]
+    body = text[jobs.end() :]
     # The first key under `jobs:` sets the indent at which a sibling job starts.
     first = re.search(r"^([ \t]+)[\w-]+:[ \t]*$", body, re.MULTILINE)
     if not first:
@@ -1334,20 +1360,19 @@ def scan_file(path, disabled=frozenset()):
     if _is_test_file(path):
         disabled = disabled | {"GL001", "GL002", "GL007"}
     ast_rules = {"GL001", "GL007", "GL018", "GL023", "GL030", "GL031"}
-    if ast_rules - disabled:
-        if tree is not None:
-            if "GL001" not in disabled:
-                yield from _ast_busy_loop_findings(path, tree)
-            if "GL007" not in disabled:
-                yield from _ast_quadratic_rebuild_findings(path, tree)
-            if "GL018" not in disabled:
-                yield from _ast_nested_loop_findings(path, tree)
-            if "GL023" not in disabled:
-                yield from _ast_bubble_sort_findings(path, tree)
-            if "GL030" not in disabled:
-                yield from _ast_dict_iterator_findings(path, tree)
-            if "GL031" not in disabled:
-                yield from _ast_try_in_loop_findings(path, tree)
+    if ast_rules - disabled and tree is not None:
+        if "GL001" not in disabled:
+            yield from _ast_busy_loop_findings(path, tree)
+        if "GL007" not in disabled:
+            yield from _ast_quadratic_rebuild_findings(path, tree)
+        if "GL018" not in disabled:
+            yield from _ast_nested_loop_findings(path, tree)
+        if "GL023" not in disabled:
+            yield from _ast_bubble_sort_findings(path, tree)
+        if "GL030" not in disabled:
+            yield from _ast_dict_iterator_findings(path, tree)
+        if "GL031" not in disabled:
+            yield from _ast_try_in_loop_findings(path, tree)
     if path.suffix in (".tf", ".tofu"):
         if "GL013" not in disabled:
             yield from _tf_s3_lifecycle_findings(path, code)
