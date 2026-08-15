@@ -1080,3 +1080,138 @@ def test_cron_hint_multiplies_out_to_something_sane():
     # its minute scales through the same formula instead of breaking it.
     assert "500 core-seconds" in hint
     assert "~6 gCO2e/day" in hint
+
+
+# --- Coverage added for C#, Kotlin, Swift and Ruby (issue #34) ---------------
+#
+# Every rule gets both halves: a true positive, and a near-miss that must NOT
+# fire. A rule with only the first is how a linter earns the reputation of
+# being noise, and these languages had one rule each — a clean run said
+# "barely checked", not "clean".
+
+def scan_one(tmp_path, name, content):
+    write(tmp_path, name, content)
+    return rule_ids(scan([str(tmp_path)]))
+
+
+class TestCSharpRules:
+    def test_new_httpclient_per_call(self, tmp_path):
+        assert "GL039" in scan_one(tmp_path, "a.cs", "var c = new HttpClient();\n")
+
+    def test_a_reused_client_is_not_flagged(self, tmp_path):
+        # The fix the rule asks for must not itself trip the rule.
+        assert "GL039" not in scan_one(
+            tmp_path, "b.cs", "private static readonly HttpClient Client = _factory.CreateClient();\n"
+        )
+
+    def test_blocking_on_a_task(self, tmp_path):
+        ids = scan_one(tmp_path, "c.cs", "var r = FetchAsync().Result;\ntask.Wait();\n")
+        assert "GL040" in ids
+
+    def test_await_is_not_flagged(self, tmp_path):
+        assert "GL040" not in scan_one(tmp_path, "d.cs", "var r = await FetchAsync();\n")
+
+    def test_tolist_just_to_iterate(self, tmp_path):
+        assert "GL041" in scan_one(
+            tmp_path, "e.cs", "foreach (var x in items.Where(i => i.Ok).ToList()) { }\n"
+        )
+
+    def test_tolist_kept_as_a_variable_is_not_flagged(self, tmp_path):
+        # Materialising to reuse it is legitimate; only the throwaway is not.
+        assert "GL041" not in scan_one(
+            tmp_path, "f.cs", "var list = items.Where(i => i.Ok).ToList();\nforeach (var x in list) { }\n"
+        )
+
+
+class TestKotlinRules:
+    def test_globalscope(self, tmp_path):
+        assert "GL042" in scan_one(tmp_path, "a.kt", "GlobalScope.launch { work() }\n")
+
+    def test_a_scoped_launch_is_not_flagged(self, tmp_path):
+        assert "GL042" not in scan_one(tmp_path, "b.kt", "viewModelScope.launch { work() }\n")
+
+    def test_filter_map_chain(self, tmp_path):
+        assert "GL043" in scan_one(
+            tmp_path, "c.kt", "val out = xs.filter { it.ok }.map { it.name }\n"
+        )
+
+    def test_mapnotnull_is_not_flagged(self, tmp_path):
+        assert "GL043" not in scan_one(
+            tmp_path, "d.kt", "val out = xs.mapNotNull { if (it.ok) it.name else null }\n"
+        )
+
+    def test_runblocking(self, tmp_path):
+        assert "GL044" in scan_one(tmp_path, "e.kt", "runBlocking { fetch() }\n")
+
+    def test_a_suspend_call_is_not_flagged(self, tmp_path):
+        assert "GL044" not in scan_one(tmp_path, "f.kt", "suspend fun go() { fetch() }\n")
+
+
+class TestSwiftRules:
+    def test_filter_map_chain(self, tmp_path):
+        assert "GL045" in scan_one(
+            tmp_path, "a.swift", "let out = xs.filter { $0.ok }.map { $0.name }\n"
+        )
+
+    def test_compactmap_is_not_flagged(self, tmp_path):
+        assert "GL045" not in scan_one(
+            tmp_path, "b.swift", "let out = xs.compactMap { $0.ok ? $0.name : nil }\n"
+        )
+
+    def test_dispatch_sync(self, tmp_path):
+        assert "GL046" in scan_one(tmp_path, "c.swift", "DispatchQueue.main.sync { render() }\n")
+
+    def test_dispatch_async_is_not_flagged(self, tmp_path):
+        assert "GL046" not in scan_one(tmp_path, "d.swift", "DispatchQueue.main.async { render() }\n")
+
+    def test_a_new_session_per_request(self, tmp_path):
+        assert "GL047" in scan_one(
+            tmp_path, "e.swift", "let s = URLSession(configuration: .default)\n"
+        )
+
+    def test_shared_session_is_not_flagged(self, tmp_path):
+        assert "GL047" not in scan_one(tmp_path, "f.swift", "let s = URLSession.shared\n")
+
+
+class TestRubyRules:
+    def test_string_built_with_plus_equals_in_a_loop(self, tmp_path):
+        assert "GL048" in scan_one(
+            tmp_path, "a.rb", "items.each do |i|\n  out += i.to_s\nend\n"
+        )
+
+    def test_shovel_operator_is_not_flagged(self, tmp_path):
+        # << appends in place; it is the fix, not the smell.
+        assert "GL048" not in scan_one(
+            tmp_path, "b.rb", "items.each do |i|\n  out << i.to_s\nend\n"
+        )
+
+    def test_query_inside_a_loop(self, tmp_path):
+        assert "GL049" in scan_one(
+            tmp_path, "c.rb", "orders.each do |o|\n  o.customer = Customer.find_by(id: o.cid)\nend\n"
+        )
+
+    def test_a_preloaded_association_is_not_flagged(self, tmp_path):
+        assert "GL049" not in scan_one(
+            tmp_path, "d.rb", "Order.includes(:customer).each do |o|\n  puts o.customer.name\nend\n"
+        )
+
+    def test_map_flatten(self, tmp_path):
+        assert "GL050" in scan_one(tmp_path, "e.rb", "rows.map { |r| r.tags }.flatten\n")
+
+    def test_flat_map_is_not_flagged(self, tmp_path):
+        assert "GL050" not in scan_one(tmp_path, "f.rb", "rows.flat_map { |r| r.tags }\n")
+
+
+def test_every_rule_states_its_energy_rationale():
+    # A rule with no rationale is a style opinion wearing a carbon badge.
+    for rule in greenlint.RULES:
+        assert rule["id"] in greenlint.CO2E_HINTS, f"{rule['id']} has no CO2e hint"
+        assert rule["suggestion"], f"{rule['id']} has no suggestion"
+
+
+def test_comment_syntax_covers_every_language_with_a_rule():
+    # An extension with rules but no comment syntax cannot be suppressed
+    # inline, which is the escape hatch every false positive needs.
+    exts = {ext for rule in greenlint.RULES for ext in rule["langs"] if ext.startswith(".")}
+    known = set(greenlint.COMMENT_SYNTAX)
+    assert exts <= known, f"no comment syntax for {sorted(exts - known)}"
