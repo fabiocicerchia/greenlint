@@ -1331,6 +1331,18 @@ def _compose_resources_findings(path, text):
         yield _finding(rule, path, text.count("\n", 0, m.start()) + 1)
 
 
+SEVERITY_ORDER = {"high": 0, "medium": 1, "low": 2}
+
+
+def finding_sort_key(finding):
+    """Sort key putting the findings worth fixing first. Named and exported so
+    a front end that assembles its own list — the editor extension merging a
+    freshly scanned buffer into a cached project scan — orders it the way the
+    CLI would rather than inventing a second ordering.
+    """
+    return (SEVERITY_ORDER[finding["severity"]], finding["file"], finding["line"])
+
+
 def applicable(rule, path):
     """Return True if the rule targets the file's language/extension."""
     if path.name == "Dockerfile" and "Dockerfile" in rule["langs"]:
@@ -1338,12 +1350,35 @@ def applicable(rule, path):
     return path.suffix in rule["langs"]
 
 
-def scan_file(path, disabled=frozenset()):
-    """Yield findings for every enabled rule that matches the file's contents."""
-    try:
-        text = path.read_text(errors="replace")
-    except OSError:
-        return
+def scannable(path):
+    """True if any rule targets this file's language at all.
+
+    Derived from `RULES` rather than a hardcoded extension list, so a rule for
+    a new language brings its files into scope automatically. `scan_file()` on
+    a file no rule targets yields nothing, so this only ever skips work — which
+    is why the editor extension checks it before reading a file that a project
+    scan just walked past. The CLI does not: reading a PNG and matching nothing
+    is wasted I/O, but changing what the CLI touches is a bigger decision than
+    making the editor's background scan cheap.
+    """
+    return any(applicable(rule, path) for rule in RULES)
+
+
+def scan_file(path, disabled=frozenset(), text=None):
+    """Yield findings for every enabled rule that matches the file's contents.
+
+    `text` supplies the contents instead of reading them, for callers that
+    already hold them — an editor scanning an unsaved buffer, say. `path` is
+    still what picks the language, so it must be the name the buffer will be
+    saved under. Without this an editor has to write a temp file per keystroke
+    to get a scan, which is a lot of disk churn for a tool about not wasting
+    energy.
+    """
+    if text is None:
+        try:
+            text = path.read_text(errors="replace")
+        except OSError:
+            return
     # Everything that pattern-matches works on this view, in which comment
     # bodies are spaces. Offsets and line numbers still line up with the file.
     # GL004 is the exception: it reads comments deliberately, to spot the tool
@@ -1404,10 +1439,38 @@ def scan_file(path, disabled=frozenset()):
             yield _finding(rule, path, line)
 
 
-def scan(paths, config=None):
-    """Scan files/directories and return findings sorted by severity."""
+def is_ignored(path, config=None):
+    """True if an `ignore` glob covers this path.
+
+    Matched against the path both as given and with a leading `/`.
+    `greenlint .` produces `tests/x.py`, which `*/tests/*` cannot match — so the
+    obvious way to write an ignore glob silently did nothing, including in
+    greenlint's own .greenlint.toml. Trying both keeps bare patterns like
+    `tests/*` working too.
+
+    Its own function because a walk is not the only caller: the editor
+    extension scans one open buffer at a time, and a file the CLI ignores must
+    not sprout squiggles just because it was reached by being opened rather
+    than by being walked to.
+    """
+    ignore = (config or {}).get("ignore") or []
+    if not ignore:
+        return False
+    rel = Path(path).as_posix()
+    forms = (rel, rel if rel.startswith("/") else "/" + rel)
+    return any(fnmatch.fnmatch(s, pat) for pat in ignore for s in forms)
+
+
+def iter_files(paths, config=None):
+    """Yield every file under `paths` that the config does not ignore.
+
+    Split out of `scan()` so that other front ends — the editor extension in
+    `editors/vscode/`, which walks the tree itself to cache per file — select
+    exactly the same files the CLI does. Two copies of this logic would drift,
+    and a file the CLI ignores still being flagged in the editor is the kind of
+    disagreement nobody debugs, they just stop trusting the tool.
+    """
     config = config or {"disable": set(), "ignore": []}
-    findings = []
     for root in paths:
         p = Path(root)
         files = (
@@ -1420,18 +1483,18 @@ def scan(paths, config=None):
             ]
         )
         for f in files:
-            # Matched against the path both as given and with a leading `/`.
-            # `greenlint .` produces `tests/x.py`, which `*/tests/*` cannot
-            # match — so the obvious way to write an ignore glob silently did
-            # nothing, including in greenlint's own .greenlint.toml. Trying
-            # both keeps bare patterns like `tests/*` working too.
-            rel = f.as_posix()
-            forms = (rel, rel if rel.startswith("/") else "/" + rel)
-            if any(fnmatch.fnmatch(s, pat) for pat in config["ignore"] for s in forms):
+            if is_ignored(f, config):
                 continue
-            findings.extend(scan_file(f, config["disable"]))
-    order = {"high": 0, "medium": 1, "low": 2}
-    findings.sort(key=lambda x: (order[x["severity"]], x["file"], x["line"]))
+            yield f
+
+
+def scan(paths, config=None):
+    """Scan files/directories and return findings sorted by severity."""
+    config = config or {"disable": set(), "ignore": []}
+    findings = []
+    for f in iter_files(paths, config):
+        findings.extend(scan_file(f, config["disable"]))
+    findings.sort(key=finding_sort_key)
     return findings
 
 

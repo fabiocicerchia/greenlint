@@ -1080,3 +1080,52 @@ def test_cron_hint_multiplies_out_to_something_sane():
     # its minute scales through the same formula instead of breaking it.
     assert "500 core-seconds" in hint
     assert "~6 gCO2e/day" in hint
+
+
+def test_scan_file_accepts_text_instead_of_reading_the_file(tmp_path):
+    """The editor extension scans unsaved buffers. Without a text override it
+    would have to write a temp file per keystroke to get a finding."""
+    path = tmp_path / "q.sql"  # never created on disk
+    findings = list(greenlint.scan_file(path, text="SELECT * FROM users;\n"))
+    assert rule_ids(findings) == {"GL005"}
+    assert findings[0]["file"] == str(path)
+
+
+def test_scan_file_text_override_still_picks_language_from_the_path(tmp_path):
+    """`SELECT *` in a .md file is prose, not a query: the buffer's contents
+    decide what matches, its name decides which rules are even tried."""
+    assert list(greenlint.scan_file(tmp_path / "notes.md", text="SELECT * FROM users;\n")) == []
+
+
+def test_iter_files_selects_what_scan_scans(tmp_path):
+    """Two walkers would drift, and a file the CLI ignores still being flagged
+    in the editor is the kind of disagreement nobody debugs."""
+    write(tmp_path, "vendor/q.sql", "SELECT * FROM users;\n")
+    write(tmp_path, "src/q.sql", "SELECT * FROM users;\n")
+    cfg = load_config(str(write(tmp_path, ".greenlint.toml", 'ignore = ["*/vendor/*"]\n')))
+    walked = {str(f) for f in greenlint.iter_files([str(tmp_path)], cfg)}
+    assert str(tmp_path / "src" / "q.sql") in walked
+    assert str(tmp_path / "vendor" / "q.sql") not in walked
+    assert {f["file"] for f in scan([str(tmp_path)], cfg)} == {str(tmp_path / "src" / "q.sql")}
+
+
+def test_finding_sort_key_orders_high_severity_first(tmp_path):
+    write(tmp_path, "ci.yml", "cron: '* * * * *'\nfetch-depth: 0\n")
+    findings = scan([str(tmp_path)])
+    assert findings == sorted(findings, key=greenlint.finding_sort_key)
+    assert findings[0]["severity"] == "high"
+
+
+def test_scannable_matches_whether_scan_file_can_find_anything(tmp_path):
+    """The editor's prefilter must never skip a file the CLI would report on."""
+    assert greenlint.scannable(tmp_path / "a.py")
+    assert greenlint.scannable(tmp_path / "Dockerfile")
+    assert not greenlint.scannable(tmp_path / "logo.png")
+    assert not greenlint.scannable(tmp_path / "Dockerfile.prod")  # applicable() is exact-name
+
+
+def test_is_ignored_matches_the_walkers_own_filtering(tmp_path):
+    cfg = {"disable": set(), "ignore": ["*/vendor/*"]}
+    assert greenlint.is_ignored(tmp_path / "vendor" / "q.sql", cfg)
+    assert not greenlint.is_ignored(tmp_path / "src" / "q.sql", cfg)
+    assert not greenlint.is_ignored(tmp_path / "vendor" / "q.sql", {"ignore": []})
