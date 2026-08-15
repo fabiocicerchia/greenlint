@@ -60,5 +60,40 @@ language, at the cost of a longer pattern. `GL005` (`SELECT * FROM`) needs no
 per-language alternatives at all since it's matching an embedded SQL string
 literal, whose text looks the same regardless of the host language.
 
+## Editor integration
+
+`editors/vscode/` holds a VS Code extension. It runs the same `RULES` table
+rather than reimplementing anything: there is one rule set, and a rule added to
+`greenlint.py` appears in the editor with no change on the other side.
+
+Three small pieces of the module exist for it, and only for it:
+
+- **`scan_file(path, disabled, text=None)`** — the `text` override scans a
+  buffer that has not been saved. Without it an editor has to write a temp file
+  per keystroke to get a finding, which is a lot of disk churn for a tool about
+  not wasting energy. `path` still decides the language, so it must be the name
+  the buffer will be saved under.
+- **`iter_files(paths, config)`** — the walk and the ignore-glob match, split out
+  of `scan()`. The extension caches per file so it needs to drive the walk
+  itself; two copies of this logic would drift, and a file the CLI ignores
+  still being flagged in the editor is the kind of disagreement nobody debugs.
+- **`scannable(path)`** and **`finding_sort_key(finding)`** — "would any rule
+  even look at this file?", derived from `RULES` rather than a hardcoded list,
+  and the CLI's ordering, so a front end assembling its own list produces the
+  same order. `scan_file()` on a file no rule targets yields nothing either way;
+  the predicate just lets a caller skip the read. The CLI does not use it —
+  reading a PNG and matching nothing is wasted I/O, but changing what the CLI
+  touches is a bigger decision than making a background scan cheap.
+
+`editors/vscode/server/greenlint_server.py` is a long-lived process speaking
+newline-delimited JSON over stdio. It exists because a CLI run spends ~100 ms on
+interpreter startup and regex compilation before reading a byte — per save that
+is tolerable, per keystroke it is the whole cost — and because a cache is only
+worth having if it outlives the request. Results are held against both a
+`(mtime, size)` stamp and a content hash, so an unchanged file is answered
+without being opened and a rewritten-but-identical file is answered without
+running a rule. A project scan services buffer scans between batches of files,
+so a full walk never blocks what the developer is looking at.
+
 Record further significant choices here (or in a `docs/adr/` folder if they
 pile up).

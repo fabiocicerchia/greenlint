@@ -33,6 +33,22 @@ jobs:
       - name: Pytest
         run: pytest -q
 
+  # The extension is TypeScript in a Python repo: without a compile in CI, a
+  # type error in it is invisible until someone opens the editor. No setup-node
+  # step — the runner image already ships a Node new enough for tsc, and this
+  # way the job adds no third-party action to pin.
+  vscode-extension:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: editors/vscode
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+      - name: Install from the lockfile
+        run: npm ci
+      - name: Typecheck and compile
+        run: npm run compile
+
   build:
     runs-on: ubuntu-latest
     steps:
