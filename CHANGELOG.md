@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.5](https://github.com/fabiocicerchia/greenlint/compare/v0.1.4...v0.1.5) (2026-08-15)
+
+
+### Bug Fixes
+
+* classify tuple-unpacked scalars in GL007 ([#43](https://github.com/fabiocicerchia/greenlint/issues/43)) ([6dda8c1](https://github.com/fabiocicerchia/greenlint/commit/6dda8c1799be0133a1b4f115b3440c2958bafc0d))
+
 ## [0.1.4](https://github.com/fabiocicerchia/greenlint/compare/v0.1.3...v0.1.4) (2026-08-13)
 
 
