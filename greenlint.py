@@ -655,7 +655,9 @@ RULES = [
         "id": "GL049",
         "langs": {".rb"},
         "severity": "medium",
-        "pattern": re.compile(r"\.(?:where|find_by|find)\([^)]*\)[^\n]*\n(?:[^\n]*\n){0,3}?[^\n]*\.each\b|\.each\s*(?:do\s*\|[^|]*\||\{\s*\|[^|]*\|)[^\n]{0,80}\n[^\n]*\.(?:where|find_by)\("),
+        "pattern": re.compile(
+            r"\.(?:where|find_by|find)\([^)]*\)[^\n]*\n(?:[^\n]*\n){0,3}?[^\n]*\.each\b|\.each\s*(?:do\s*\|[^|]*\||\{\s*\|[^|]*\|)[^\n]{0,80}\n[^\n]*\.(?:where|find_by)\("
+        ),
         "message": "query inside an each loop (N+1)",
         "suggestion": "load the association up front with includes/preload; one query per row is one network round trip and one remote query plan per row",
     },

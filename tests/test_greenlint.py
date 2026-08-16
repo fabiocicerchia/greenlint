@@ -1089,6 +1089,7 @@ def test_cron_hint_multiplies_out_to_something_sane():
 # being noise, and these languages had one rule each — a clean run said
 # "barely checked", not "clean".
 
+
 def scan_one(tmp_path, name, content):
     write(tmp_path, name, content)
     return rule_ids(scan([str(tmp_path)]))
@@ -1101,7 +1102,9 @@ class TestCSharpRules:
     def test_a_reused_client_is_not_flagged(self, tmp_path):
         # The fix the rule asks for must not itself trip the rule.
         assert "GL039" not in scan_one(
-            tmp_path, "b.cs", "private static readonly HttpClient Client = _factory.CreateClient();\n"
+            tmp_path,
+            "b.cs",
+            "private static readonly HttpClient Client = _factory.CreateClient();\n",
         )
 
     def test_blocking_on_a_task(self, tmp_path):
@@ -1119,7 +1122,9 @@ class TestCSharpRules:
     def test_tolist_kept_as_a_variable_is_not_flagged(self, tmp_path):
         # Materialising to reuse it is legitimate; only the throwaway is not.
         assert "GL041" not in scan_one(
-            tmp_path, "f.cs", "var list = items.Where(i => i.Ok).ToList();\nforeach (var x in list) { }\n"
+            tmp_path,
+            "f.cs",
+            "var list = items.Where(i => i.Ok).ToList();\nforeach (var x in list) { }\n",
         )
 
 
@@ -1162,7 +1167,9 @@ class TestSwiftRules:
         assert "GL046" in scan_one(tmp_path, "c.swift", "DispatchQueue.main.sync { render() }\n")
 
     def test_dispatch_async_is_not_flagged(self, tmp_path):
-        assert "GL046" not in scan_one(tmp_path, "d.swift", "DispatchQueue.main.async { render() }\n")
+        assert "GL046" not in scan_one(
+            tmp_path, "d.swift", "DispatchQueue.main.async { render() }\n"
+        )
 
     def test_a_new_session_per_request(self, tmp_path):
         assert "GL047" in scan_one(
@@ -1175,9 +1182,7 @@ class TestSwiftRules:
 
 class TestRubyRules:
     def test_string_built_with_plus_equals_in_a_loop(self, tmp_path):
-        assert "GL048" in scan_one(
-            tmp_path, "a.rb", "items.each do |i|\n  out += i.to_s\nend\n"
-        )
+        assert "GL048" in scan_one(tmp_path, "a.rb", "items.each do |i|\n  out += i.to_s\nend\n")
 
     def test_shovel_operator_is_not_flagged(self, tmp_path):
         # << appends in place; it is the fix, not the smell.
@@ -1187,7 +1192,9 @@ class TestRubyRules:
 
     def test_query_inside_a_loop(self, tmp_path):
         assert "GL049" in scan_one(
-            tmp_path, "c.rb", "orders.each do |o|\n  o.customer = Customer.find_by(id: o.cid)\nend\n"
+            tmp_path,
+            "c.rb",
+            "orders.each do |o|\n  o.customer = Customer.find_by(id: o.cid)\nend\n",
         )
 
     def test_a_preloaded_association_is_not_flagged(self, tmp_path):

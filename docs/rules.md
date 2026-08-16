@@ -465,4 +465,3 @@ energy rationale are the most valuable contribution.
 - **Triggers on:** `.map { … }.flatten` or `.map(&:x).compact`.
 - **Fix:** `flat_map` or `filter_map`. The intermediate array is allocated and
   walked only to be thrown away.
-
