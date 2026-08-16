@@ -14,6 +14,26 @@ Detection mechanism key:
   *absence* of something across a whole file or resource block (what a
   single regex match can't express — see `docs/architecture.md`).
 
+## Coverage by language
+
+A clean run means "none of the rules below matched", which is not the same as
+"this code is efficient". Coverage is uneven and this table says how uneven, so
+a green result is read for what it is.
+
+| Language | Rules | Depth |
+|---|---:|---|
+| Python | many, incl. AST | **deep** — the only language with AST rules, so the checks are precise rather than textual |
+| JS/TS + JSX/TSX | several | **moderate** |
+| Dockerfile / YAML / SQL / Terraform | several | **moderate** — infrastructure patterns, where a single line has the largest effect |
+| Go, Rust, Java, PHP, C/C++ | 1-2 each | **shallow** — a clean run says little |
+| C#, Kotlin, Swift, Ruby | 3+ each | **shallow but real** — the common hot-path and connection-churn mistakes, not the language's whole surface |
+| CSS, HTML | 1-2 each | **shallow** |
+
+The shallow languages are shallow on purpose: a rule that fires on correct code
+costs more attention than it saves, so only patterns with a defensible energy
+rationale and a low false-positive rate are in. See `CONTRIBUTING.md` for what
+a new rule has to show.
+
 ---
 
 ## GL001 — busy loop without sleep
@@ -352,3 +372,96 @@ See [`docs/rules.md`](rules.md) for the full reference — what each rule
 detects, how it's triggered, and the remediation. Rule development is
 deliberately open-ended — the rule set *is* the product. Proposals with an
 energy rationale are the most valuable contribution.
+
+## GL039 — new HttpClient per call
+
+- **Languages:** `.cs` · **Severity:** medium · **Mechanism:** regex
+- **Triggers on:** `new HttpClient(`.
+- **Fix:** reuse one client (`IHttpClientFactory`, or a static instance). Each
+  new client opens a fresh connection and repeats the TLS handshake, which is
+  CPU on both ends and a socket the OS holds in TIME_WAIT afterwards.
+
+## GL040 — blocking on a Task (.Result / .Wait())
+
+- **Languages:** `.cs` · **Severity:** medium · **Mechanism:** regex
+- **Triggers on:** `.Result` or `.Wait()`.
+- **Fix:** `await` it. Blocking a pool thread makes the pool grow to replace
+  it, and the extra threads cost memory and context switches for work that was
+  already asynchronous.
+
+## GL041 — ToList() materialised just to iterate it once
+
+- **Languages:** `.cs` · **Severity:** low · **Mechanism:** regex
+- **Triggers on:** `foreach (… in ….ToList())`.
+- **Fix:** iterate the sequence directly. `ToList()` allocates the whole
+  collection to walk it once and then throws it away. Materialising to *reuse*
+  it is legitimate and does not trigger.
+
+## GL042 — GlobalScope coroutine
+
+- **Languages:** `.kt` · **Severity:** medium · **Mechanism:** regex
+- **Triggers on:** `GlobalScope.launch` / `GlobalScope.async`.
+- **Fix:** use a scoped `CoroutineScope`. A GlobalScope coroutine is never
+  cancelled with its caller, so it keeps burning CPU on a result nobody reads.
+
+## GL043 — filter{}.map{} chain (two passes over the collection)
+
+- **Languages:** `.kt` · **Severity:** low · **Mechanism:** regex
+- **Triggers on:** `.filter { … }.map { … }`.
+- **Fix:** `mapNotNull`, or `asSequence()` before the chain, so the collection
+  is walked once and no intermediate list is allocated.
+
+## GL044 — runBlocking
+
+- **Languages:** `.kt` · **Severity:** medium · **Mechanism:** regex
+- **Triggers on:** `runBlocking { … }`.
+- **Fix:** suspend the caller instead. `runBlocking` parks a real thread until
+  the coroutine finishes. In `main()` and tests it is the entry point and the
+  finding can be suppressed inline.
+
+## GL045 — filter{}.map{} chain (two passes over the collection)
+
+- **Languages:** `.swift` · **Severity:** low · **Mechanism:** regex
+- **Triggers on:** `.filter { … }.map { … }`.
+- **Fix:** `compactMap`, or `.lazy` before the chain, so the sequence is walked
+  once without an intermediate array.
+
+## GL046 — DispatchQueue.sync
+
+- **Languages:** `.swift` · **Severity:** medium · **Mechanism:** regex
+- **Triggers on:** `DispatchQueue.<queue>.sync {`.
+- **Fix:** it blocks the calling thread until the block returns, so a thread
+  sits idle holding its stack and scheduler slot. Use `async` with a
+  completion, or `async`/`await`.
+
+## GL047 — a new URLSession per request
+
+- **Languages:** `.swift` · **Severity:** low · **Mechanism:** regex
+- **Triggers on:** `URLSession(configuration: .default)`.
+- **Fix:** reuse `URLSession.shared` or one stored session. A fresh session
+  drops the connection pool, so every request pays a new handshake.
+
+## GL048 — string built with += inside a loop
+
+- **Languages:** `.rb` · **Severity:** medium · **Mechanism:** regex
+- **Triggers on:** `+=` with a string-shaped right-hand side (a literal,
+  `to_s`, or an interpolation) inside an `each` block.
+- **Fix:** use `<<`, or collect into an array and `join` at the end. `+=`
+  allocates a new string each iteration, so building an n-character string
+  costs O(n²) copying. `total += price` is arithmetic, not string building,
+  and does not trigger.
+
+## GL049 — query inside an each loop (N+1)
+
+- **Languages:** `.rb` · **Severity:** medium · **Mechanism:** regex
+- **Triggers on:** a `where`/`find_by`/`find` call within a few lines of an
+  `each`.
+- **Fix:** load the association up front with `includes`/`preload`. One query
+  per row is one network round trip and one remote query plan per row.
+
+## GL050 — map().flatten() / map().compact()
+
+- **Languages:** `.rb` · **Severity:** low · **Mechanism:** regex
+- **Triggers on:** `.map { … }.flatten` or `.map(&:x).compact`.
+- **Fix:** `flat_map` or `filter_map`. The intermediate array is allocated and
+  walked only to be thrown away.

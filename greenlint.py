@@ -170,6 +170,19 @@ CO2E_HINTS = {
     "GL036": f"an O(n) scan where a hash lookup is O(1); {_HOT_PATH}",
     "GL037": f"two passes over the collection instead of one; {_HOT_PATH}",
     "GL038": f"extra allocation and a defeated memoisation per render; {_HOT_PATH}",
+    # --- Added coverage for C#, Kotlin, Swift and Ruby (see docs/rules.md) ---
+    "GL039": "a TLS handshake and a new connection per call, CPU on both ends",
+    "GL040": f"a pool thread parked, and the pool grown to replace it; {_HOT_PATH}",
+    "GL041": f"a whole collection allocated to walk it once; {_HOT_PATH}",
+    "GL042": "work that outlives its caller: CPU spent on a result nobody reads",
+    "GL043": f"two passes and an intermediate list instead of one pass; {_HOT_PATH}",
+    "GL044": f"a real thread parked for the duration of the coroutine; {_HOT_PATH}",
+    "GL045": f"two passes and an intermediate array instead of one pass; {_HOT_PATH}",
+    "GL046": f"a thread blocked and idle until the block returns; {_HOT_PATH}",
+    "GL047": "a dropped connection pool, so a handshake per request",
+    "GL048": "quadratic in the string built; passes ~1 gCO2e once the extra work reaches ~500 core-seconds",
+    "GL049": f"one round trip and one remote query plan per row; {_HOT_PATH}",
+    "GL050": f"an intermediate collection allocated and discarded; {_HOT_PATH}",
 }
 
 RULES = [
@@ -545,6 +558,117 @@ RULES = [
         "message": "select().map() chain (two passes over the collection)",
         "suggestion": "use filter_map to select and transform in a single pass instead of two full iterations",
     },
+    # --- C#: two rules was "barely checked" (see docs/rules.md coverage) ---
+    {
+        "id": "GL039",
+        "langs": {".cs"},
+        "severity": "medium",
+        "pattern": re.compile(r"\bnew\s+HttpClient\s*\("),
+        "message": "new HttpClient per call",
+        "suggestion": "reuse one client (IHttpClientFactory or a static instance); each new client opens a fresh connection and repeats the TLS handshake, which is CPU on both ends",
+    },
+    {
+        "id": "GL040",
+        "langs": {".cs"},
+        "severity": "medium",
+        "pattern": re.compile(r"\.(?:Result\b|Wait\(\))"),
+        "message": "blocking on a Task (.Result / .Wait())",
+        "suggestion": "await it; blocking a pool thread makes the pool grow, and the extra threads cost memory and context switches for work that was already asynchronous",
+    },
+    {
+        "id": "GL041",
+        "langs": {".cs"},
+        "severity": "low",
+        # .*? rather than [^)]*: the collection expression usually contains
+        # its own parentheses (a lambda), which a negated-class scan cannot
+        # cross.
+        "pattern": re.compile(r"foreach\s*\(.*?\bin\b.*?\.ToList\(\)"),
+        "message": "ToList() materialised just to iterate it once",
+        "suggestion": "iterate the sequence directly; ToList() allocates the whole collection to walk it once and then throws it away",
+    },
+    # --- Kotlin ---
+    {
+        "id": "GL042",
+        "langs": {".kt"},
+        "severity": "medium",
+        "pattern": re.compile(r"\bGlobalScope\.(?:launch|async)\b"),
+        "message": "GlobalScope coroutine",
+        "suggestion": "use a scoped CoroutineScope; a GlobalScope coroutine is never cancelled with its caller, so work continues after nobody wants the result",
+    },
+    {
+        "id": "GL043",
+        "langs": {".kt"},
+        "severity": "low",
+        "pattern": re.compile(r"\.filter\s*\{[^{}]*\}\s*\.map\s*\{"),
+        "message": "filter{}.map{} chain (two passes over the collection)",
+        "suggestion": "use mapNotNull, or asSequence() before the chain, so the collection is walked once and no intermediate list is allocated",
+    },
+    {
+        "id": "GL044",
+        "langs": {".kt"},
+        "severity": "medium",
+        "pattern": re.compile(r"\brunBlocking\s*(?:\([^)]*\))?\s*\{"),
+        "message": "runBlocking",
+        "suggestion": "runBlocking parks a real thread until the coroutine finishes; suspend the caller instead, outside of main() and tests where it is the entry point",
+    },
+    # --- Swift ---
+    {
+        "id": "GL045",
+        "langs": {".swift"},
+        "severity": "low",
+        "pattern": re.compile(r"\.filter\s*\{[^{}]*\}\s*\.map\s*\{"),
+        "message": "filter{}.map{} chain (two passes over the collection)",
+        "suggestion": "use compactMap, or .lazy before the chain, so the sequence is walked once without an intermediate array",
+    },
+    {
+        "id": "GL046",
+        "langs": {".swift"},
+        "severity": "medium",
+        "pattern": re.compile(r"DispatchQueue\.\w+\.sync\s*\{"),
+        "message": "DispatchQueue.sync",
+        "suggestion": "blocks the calling thread until the block returns, so a thread sits idle burning its stack and scheduler slot; use async with a completion or async/await",
+    },
+    {
+        "id": "GL047",
+        "langs": {".swift"},
+        "severity": "low",
+        "pattern": re.compile(r"URLSession\(configuration:\s*\.default\)"),
+        "message": "a new URLSession per request",
+        "suggestion": "reuse URLSession.shared or one stored session; a fresh session drops the connection pool, so every request pays a new handshake",
+    },
+    # --- Ruby ---
+    {
+        "id": "GL048",
+        "langs": {".rb"},
+        "severity": "medium",
+        # The += has to look like string building — a literal, an
+        # interpolation, or a to_s — so `total += price` (a number, which is
+        # not quadratic) does not fire.
+        "pattern": re.compile(
+            r"\.each\s*(?:do\s*\|[^|]*\||\{\s*\|[^|]*\|)[^\n]*\n"
+            r"(?:[^\n]*\n){0,4}?[^\n]*\b\w+\s*\+=\s*[^\n]*(?:[\"']|to_s\b|#\{)"
+        ),
+        "message": "string built with += inside a loop",
+        "suggestion": "use << or an array joined at the end; += allocates a new string each iteration, so the loop is quadratic in the length it builds",
+    },
+    {
+        "id": "GL049",
+        "langs": {".rb"},
+        "severity": "medium",
+        "pattern": re.compile(
+            r"\.(?:where|find_by|find)\([^)]*\)[^\n]*\n(?:[^\n]*\n){0,3}?[^\n]*\.each\b|\.each\s*(?:do\s*\|[^|]*\||\{\s*\|[^|]*\|)[^\n]{0,80}\n[^\n]*\.(?:where|find_by)\("
+        ),
+        "message": "query inside an each loop (N+1)",
+        "suggestion": "load the association up front with includes/preload; one query per row is one network round trip and one remote query plan per row",
+    },
+    {
+        "id": "GL050",
+        "langs": {".rb"},
+        "severity": "low",
+        "pattern": re.compile(r"\.map\s*(?:\(&:\w+[?!]?\)|\{[^{}]*\})\s*\.(?:flatten|compact)\b"),
+        "message": "map().flatten() / map().compact() (an intermediate array)",
+        "suggestion": "use flat_map or filter_map; the intermediate array is allocated and walked only to be thrown away",
+    },
     {
         "id": "GL038",
         "langs": {".jsx", ".tsx"},
@@ -601,6 +725,12 @@ def load_config(path=None):
 # Line- and block-comment syntax per extension. Dockerfile/unknown default to `#`.
 _SLASH = ("//", ("/*", "*/"))
 COMMENT_SYNTAX = {
+    # CSS and HTML carry rules but had no entry at all. Both are listed with a
+    # None line-comment form because neither language has one: `//` in CSS
+    # would eat the rest of any line containing `url(http://…)`, which is a
+    # worse bug than the gap it closes.
+    ".css": (None, ("/*", "*/")),
+    ".html": (None, ("<!--", "-->")),
     ".go": _SLASH,
     ".js": _SLASH,
     ".ts": _SLASH,
