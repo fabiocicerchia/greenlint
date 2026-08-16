@@ -243,7 +243,7 @@ export class ScanServer implements vscode.Disposable {
     try {
       message = JSON.parse(line) as Record<string, unknown>;
     } catch {
-      this.log.appendLine(`[greenlint] unparseable line from the scan server: ${line}`);
+      this.log.appendLine(`[greenlint] unparsable line from the scan server: ${line}`);
       return;
     }
     if (message.event === 'ready') {
