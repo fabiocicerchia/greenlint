@@ -9,6 +9,9 @@ a file rewritten with identical contents must not run a rule.
 import importlib.util
 import io
 import json
+import subprocess
+import sys
+import types
 from pathlib import Path
 
 import pytest
@@ -188,3 +191,47 @@ def test_an_ignored_file_is_not_scanned_just_because_it_was_opened(server, tmp_p
     assert ask(server, op="scanFile", path=str(path), root=root)["findings"] == []
     text_scan = ask(server, op="scanText", path=str(path), root=root, text="SELECT * FROM t;\n")
     assert text_scan["findings"] == []
+
+
+def test_missing_api_names_what_an_older_greenlint_lacks():
+    # A 0.1.0-shaped module: imports fine, missing the editor API.
+    old = types.SimpleNamespace(
+        CONFIG_FILENAME=".greenlint.toml",
+        CO2E_HINTS={},
+        RULES=[],
+        load_config=lambda path=None: {},
+        scan_file=lambda path, disabled=frozenset(): [],
+    )
+    assert server_module.missing_api(greenlint) == []
+    missing = server_module.missing_api(old)
+    assert "iter_files" in missing
+    # Present but older: the buffer scan needs the keyword, not just the name.
+    assert "scan_file(text=)" in missing
+
+
+def test_an_old_greenlint_refuses_to_start_and_says_why(tmp_path):
+    """It used to import happily and fail on the first project scan with
+    "module 'greenlint' has no attribute 'iter_files'", which reads as a bug in
+    the extension rather than a version to upgrade. Refusing at startup also
+    lets the extension move on to the next candidate interpreter."""
+    stub = write(
+        tmp_path,
+        "greenlint.py",
+        "CONFIG_FILENAME = '.greenlint.toml'\nCO2E_HINTS = {}\nRULES = []\n"
+        "def load_config(path=None): return {}\n"
+        "def scan_file(path, disabled=frozenset()): return []\n",
+    )
+    result = subprocess.run(
+        [sys.executable, str(SERVER_PATH), "--greenlint", str(stub)],
+        input="",
+        capture_output=True,
+        text=True,
+        timeout=60,
+        check=False,
+    )
+    assert result.returncode == 1
+    payload = json.loads(result.stdout.strip())
+    assert payload["fatal"] is True
+    assert "too old" in payload["error"]
+    assert "iter_files" in payload["error"]
+    assert "pipx install --force" in payload["error"]

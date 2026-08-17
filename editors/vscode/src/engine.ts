@@ -90,6 +90,12 @@ export class ScanServer implements vscode.Disposable {
    * An explicitly configured path is the only candidate — a typo there should
    * be an error, not a silent fallback to some other greenlint whose rules the
    * user never asked for.
+   *
+   * Otherwise a greenlint.py in the workspace comes before the installed
+   * package, for two reasons that turn out to be the same one: someone editing
+   * the rules wants to see their edits, and an installed release can be older
+   * than the module surface this extension needs. A candidate whose greenlint
+   * is too old refuses to start, so the loop simply moves on to the next.
    */
   private candidates(): Array<{ python: string; module?: string }> {
     const pythons = this.settings.pythonPath
@@ -99,7 +105,7 @@ export class ScanServer implements vscode.Disposable {
         : ['python3', 'python'];
     const modules: Array<string | undefined> = this.settings.greenlintPath
       ? [this.settings.greenlintPath]
-      : [undefined, ...workspaceGreenlintModules()];
+      : [...workspaceGreenlintModules(), undefined];
     const pairs: Array<{ python: string; module?: string }> = [];
     for (const python of pythons) {
       for (const module of modules) {
@@ -141,10 +147,12 @@ export class ScanServer implements vscode.Disposable {
         this.killProcess(new ScanServerError(reason));
       }
     }
+    // First line first: it is the only part a notification toast shows.
     throw new ScanServerError(
-      `could not start the greenlint scan server.\n${failures.join('\n')}\n` +
-        'Install it with `pipx install git+https://github.com/fabiocicerchia/greenlint`, ' +
-        'or point `greenlint.pythonPath` / `greenlint.greenlintPath` at your copy.',
+      'could not start the greenlint scan server — install or upgrade greenlint ' +
+        '(`pipx install --force git+https://github.com/fabiocicerchia/greenlint`), ' +
+        'or set `greenlint.pythonPath` / `greenlint.greenlintPath`.\n' +
+        `Tried:\n${failures.join('\n')}`,
     );
   }
 
@@ -197,7 +205,11 @@ export class ScanServer implements vscode.Disposable {
       };
       this.onFailed = fail;
       proc.on('error', (error) => fail(new ScanServerError(error.message)));
-      proc.on('exit', (code, signal) => {
+      // `close`, not `exit`: a server that refuses to start writes *why* to
+      // stdout and then exits, and `exit` can beat the last stdout chunk. That
+      // race is the difference between "greenlint 0.1.0 is too old, upgrade it"
+      // and "exited (code 1)".
+      proc.on('close', (code, signal) => {
         const reason = new ScanServerError(`scan server exited (code ${code}, signal ${signal})`);
         fail(reason);
         // Only the current process may tear down shared state: a candidate

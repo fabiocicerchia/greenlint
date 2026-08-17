@@ -34,6 +34,7 @@ Ops:
 import argparse
 import hashlib
 import importlib.util
+import inspect
 import json
 import os
 import queue
@@ -74,6 +75,35 @@ def load_greenlint(module_path=None):
     import greenlint
 
     return greenlint
+
+
+# The module surface this server calls. Checked at startup rather than
+# discovered when a scan fails: an older greenlint imports perfectly and then
+# raises `has no attribute 'iter_files'` on the first project scan, which
+# reads like a bug in the extension rather than a version to upgrade. Checking
+# capabilities rather than a version number means this stays correct without
+# anyone remembering to bump a floor.
+REQUIRED_API = (
+    "CONFIG_FILENAME",
+    "CO2E_HINTS",
+    "RULES",
+    "finding_sort_key",
+    "is_ignored",
+    "iter_files",
+    "load_config",
+    "scan_file",
+    "scannable",
+)
+
+
+def missing_api(gl):
+    """Names this server needs that the loaded greenlint does not have."""
+    missing = [name for name in REQUIRED_API if not hasattr(gl, name)]
+    # Present but older: the buffer scan depends on the keyword, not just on
+    # the function existing.
+    if "scan_file" not in missing and "text" not in inspect.signature(gl.scan_file).parameters:
+        missing.append("scan_file(text=)")
+    return missing
 
 
 def greenlint_version(gl):
@@ -439,6 +469,14 @@ def main(argv=None):
 
     try:
         gl = load_greenlint(args.greenlint or os.environ.get("GREENLINT_MODULE"))
+        missing = missing_api(gl)
+        if missing:
+            raise ImportError(
+                f"greenlint {greenlint_version(gl)} at {getattr(gl, '__file__', '?')} is too old "
+                f"for this extension: it has no {', '.join(missing)}. Upgrade with "
+                "`pipx install --force git+https://github.com/fabiocicerchia/greenlint` "
+                "(or `pip install -U`), or point `greenlint.greenlintPath` at a checkout."
+            )
     except Exception as exc:  # noqa: BLE001 - the extension turns this into a prompt
         out.write(json.dumps({"id": 0, "ok": False, "fatal": True, "error": f"{exc}"}) + "\n")
         out.flush()

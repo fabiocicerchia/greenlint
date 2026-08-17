@@ -47,11 +47,18 @@ Python 3.11+ and greenlint on the machine:
 pipx install git+https://github.com/fabiocicerchia/greenlint
 ```
 
-The extension finds it by itself: it tries `python3`, then `python` (`python`
-then `py` on Windows), importing the installed package. Failing that it looks
-for a `greenlint.py` in the workspace root, so a checkout of the linter is
-linted by its own working copy. Both are overridable — `greenlint.pythonPath`,
+The extension finds it by itself: `python3`, then `python` (`python` then `py`
+on Windows), loading a `greenlint.py` from the workspace root if there is one —
+so a checkout of the linter is linted by its own working copy — and otherwise
+the installed package. Both are overridable: `greenlint.pythonPath`,
 `greenlint.greenlintPath`.
+
+It needs a greenlint with the editor scan API (`iter_files`, `scannable`,
+`is_ignored`, `scan_file(text=)`). A release older than that refuses to start
+and says so, naming what is missing; `pipx install --force
+git+https://github.com/fabiocicerchia/greenlint` upgrades it. The check is on
+those names rather than a version number, so it stays honest without anyone
+maintaining a floor.
 
 ## Settings
 

@@ -2,7 +2,7 @@
   "name": "greenlint",
   "displayName": "greenlint",
   "description": "Flags energy-wasteful code and config patterns as you type, with the reason each one wastes energy.",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "publisher": "fabiocicerchia",
   "license": "Apache-2.0",
   "icon": "media/icon.png",
@@ -94,7 +94,7 @@
         "greenlint.greenlintPath": {
           "type": "string",
           "default": "",
-          "description": "Path to greenlint.py or the directory holding it. Empty means use the installed greenlint package, falling back to a greenlint.py in the workspace root."
+          "description": "Path to greenlint.py or the directory holding it. Empty means a greenlint.py in the workspace root if there is one, then the installed greenlint package."
         },
         "greenlint.scanProjectOnStartup": {
           "type": "boolean",
