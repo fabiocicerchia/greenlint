@@ -235,3 +235,50 @@ def test_an_old_greenlint_refuses_to_start_and_says_why(tmp_path):
     assert "too old" in payload["error"]
     assert "iter_files" in payload["error"]
     assert "pipx install --force" in payload["error"]
+
+
+def responses(server):
+    """Every line the server has written, progress events included."""
+    return [json.loads(line) for line in server.out.getvalue().splitlines()]
+
+
+def test_a_long_project_scan_reports_progress(server, tmp_path, monkeypatch):
+    """Silence and a hang look identical from the client, and the client's only
+    recourse is a timeout — which is how a slow-but-fine scan of a large tree
+    came back as "scanProject timed out"."""
+    monkeypatch.setattr(server_module, "PROGRESS_INTERVAL_S", 0)
+    for index in range(64):
+        write(tmp_path, f"q{index}.sql", "SELECT * FROM t;\n")
+    server.dispatch({"id": 1, "op": "scanProject", "root": str(tmp_path), "paths": [str(tmp_path)]})
+    progress = [line for line in responses(server) if line.get("event") == "progress"]
+    assert progress, "a long scan said nothing until it was done"
+    assert progress[0]["files"] == server_module.INTERLEAVE_EVERY
+    assert progress[-1]["findings"] > 0
+    assert responses(server)[-1]["ok"] is True
+
+
+def test_a_project_scan_answers_a_buffer_scan_before_it_finishes(server, tmp_path):
+    """Typing must not wait for a full walk to end. The buffer scan is queued
+    before the project scan starts, so if it is answered first the interleaving
+    is what did it."""
+    for index in range(64):
+        write(tmp_path, f"q{index}.sql", "SELECT * FROM t;\n")
+    server.inbox.put(
+        json.dumps(
+            {"id": 2, "op": "scanText", "path": str(tmp_path / "buf.sql"), "text": "SELECT 1;"}
+        )
+    )
+    server.dispatch({"id": 1, "op": "scanProject", "root": str(tmp_path), "paths": [str(tmp_path)]})
+    answered = [line["id"] for line in responses(server) if "ok" in line]
+    assert answered.index(2) < answered.index(1)
+
+
+def test_another_project_scan_arriving_mid_walk_is_deferred_not_nested(server, tmp_path):
+    write(tmp_path, "q.sql", "SELECT * FROM t;\n")
+    for index in range(64):
+        write(tmp_path, f"f{index}.py", "x = 1\n")
+    args = {"op": "scanProject", "root": str(tmp_path), "paths": [str(tmp_path)]}
+    server.inbox.put(json.dumps({"id": 2, **args}))
+    server.dispatch({"id": 1, **args})
+    assert [line["id"] for line in responses(server) if "ok" in line] == [1]
+    assert len(server.deferred) == 1

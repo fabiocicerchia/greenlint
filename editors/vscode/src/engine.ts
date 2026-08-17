@@ -10,12 +10,18 @@ import type { Finding, RuleInfo, ScanStats, ServerInfo } from './types';
 const START_TIMEOUT_MS = 20_000;
 const REQUEST_TIMEOUT_MS = 120_000;
 
+export interface ScanProgress {
+  files: number;
+  findings: number;
+}
+
 interface Pending {
   resolve: (value: Record<string, unknown>) => void;
   reject: (reason: Error) => void;
   op: string;
   startedAt: number;
   timer: NodeJS.Timeout;
+  onProgress?: (progress: ScanProgress) => void;
 }
 
 export class ScanServerError extends Error {}
@@ -290,6 +296,19 @@ export class ScanServer implements vscode.Disposable {
       this.onReady?.();
       return;
     }
+    if (message.event === 'progress') {
+      // Liveness, not an answer: a scan that is still walking must not time
+      // out, and must not resolve either.
+      const pending = this.pending.get(message.id as number);
+      if (pending) {
+        this.rearm(message.id as number, pending);
+        pending.onProgress?.({
+          files: Number(message.files ?? 0),
+          findings: Number(message.findings ?? 0),
+        });
+      }
+      return;
+    }
     if (message.fatal) {
       this.onFailed?.(new ScanServerError(String(message.error)));
       return;
@@ -318,33 +337,54 @@ export class ScanServer implements vscode.Disposable {
     pending.resolve(message);
   }
 
-  private request<T>(op: string, payload: Record<string, unknown>): Promise<T> {
+  /** Restart a pending request's timeout. The timeout measures silence, not
+   * total duration: a project scan of a large tree is slow but not stuck. */
+  private rearm(id: number, pending: Pending): void {
+    clearTimeout(pending.timer);
+    pending.timer = setTimeout(() => {
+      this.pending.delete(id);
+      pending.reject(
+        new ScanServerError(
+          `${pending.op} timed out after ${REQUEST_TIMEOUT_MS / 1000}s with no progress`,
+        ),
+      );
+    }, REQUEST_TIMEOUT_MS);
+  }
+
+  private request<T>(
+    op: string,
+    payload: Record<string, unknown>,
+    onProgress?: (progress: ScanProgress) => void,
+  ): Promise<T> {
     const proc = this.proc;
     if (!proc?.stdin) {
       return Promise.reject(new ScanServerError('scan server is not running'));
     }
     const id = this.nextId++;
     const promise = new Promise<T>((resolve, reject) => {
-      const timer = setTimeout(() => {
-        this.pending.delete(id);
-        reject(new ScanServerError(`${op} timed out`));
-      }, REQUEST_TIMEOUT_MS);
-      this.pending.set(id, {
+      const pending: Pending = {
         resolve: resolve as (value: Record<string, unknown>) => void,
         reject,
         op,
         startedAt: Date.now(),
-        timer,
-      });
+        timer: setTimeout(() => undefined, 0),
+        onProgress,
+      };
+      this.pending.set(id, pending);
+      this.rearm(id, pending);
     });
     proc.stdin.write(`${JSON.stringify({ id, op, ...payload })}\n`);
     return promise;
   }
 
   /** Start if needed, then send. Every public call goes through here. */
-  private async call<T>(op: string, payload: Record<string, unknown> = {}): Promise<T> {
+  private async call<T>(
+    op: string,
+    payload: Record<string, unknown> = {},
+    onProgress?: (progress: ScanProgress) => void,
+  ): Promise<T> {
     await this.start();
-    return this.request<T>(op, payload);
+    return this.request<T>(op, payload, onProgress);
   }
 
   // --- operations -------------------------------------------------------
@@ -369,12 +409,18 @@ export class ScanServer implements vscode.Disposable {
 
   async scanProject(
     folder: vscode.WorkspaceFolder,
+    onProgress?: (progress: ScanProgress) => void,
   ): Promise<{ findings: Finding[]; stats?: ScanStats; cancelled?: boolean }> {
-    return this.call('scanProject', {
-      root: folder.uri.fsPath,
-      paths: [folder.uri.fsPath],
-      maxFileBytes: this.settings.maxFileBytes,
-    });
+    this.log.appendLine(`[greenlint] scanning ${folder.uri.fsPath}`);
+    return this.call(
+      'scanProject',
+      {
+        root: folder.uri.fsPath,
+        paths: [folder.uri.fsPath],
+        maxFileBytes: this.settings.maxFileBytes,
+      },
+      onProgress,
+    );
   }
 
   async rules(): Promise<RuleInfo[]> {

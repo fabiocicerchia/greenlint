@@ -157,6 +157,23 @@ In rough order of effect: add `ignore` globs to `.greenlint.toml` (they are
 shared with CI, so this is worth doing anyway), turn off
 `scanProjectOnStartup`, set `run` to `onSave`, and lower `maxFileBytes`.
 
+The one to check first is what the workspace root actually is. A root one level
+too high — a folder of projects rather than a project — turns a scan of a few
+hundred files into a scan of a disk, and nothing in the editor makes that
+obvious. The scan says how many files it walked, and warns once past 20,000.
+The log line is the ground truth:
+
+```
+[greenlint] scanning /home/you/Projects
+[greenlint] scanned /home/you/Projects: 31,402 files in 24,110 ms (…)
+```
+
+A project scan is never silent while it works, so a slow one and a stuck one
+are distinguishable: progress arrives twice a second, and the timeout measures
+silence rather than duration. Typing stays responsive throughout — buffer scans
+are answered between batches of files, in milliseconds, while the walk
+continues.
+
 ## Development
 
 ```sh

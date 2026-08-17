@@ -1473,14 +1473,17 @@ def iter_files(paths, config=None):
     config = config or {"disable": set(), "ignore": []}
     for root in paths:
         p = Path(root)
+        # Lazily: this used to build the whole recursive listing before yielding
+        # anything, so pointing it at a large tree bought a long silence and a
+        # list of every path in it before the first file was even looked at.
         files = (
-            [p]
+            iter([p])
             if p.is_file()
-            else [
+            else (
                 f
                 for f in p.rglob("*")
                 if f.is_file() and ".git" not in f.parts and "node_modules" not in f.parts
-            ]
+            )
         )
         for f in files:
             if is_ignored(f, config):

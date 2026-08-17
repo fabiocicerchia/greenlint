@@ -52,6 +52,8 @@ DEFAULT_MAX_FILE_BYTES = 1_000_000
 # enough that typing stays responsive during a full scan, large enough that the
 # queue poll is not itself the workload.
 INTERLEAVE_EVERY = 16
+# How often a long project scan says it is still going.
+PROGRESS_INTERVAL_S = 0.5
 
 
 def load_greenlint(module_path=None):
@@ -321,6 +323,7 @@ class Server:
         findings = []
         counts = {"stat": 0, "hash": 0, "scan": 0, "skip": 0}
         seen = 0
+        reported = started
         for path in self.gl.iter_files(paths, config):
             seen += 1
             if seen % INTERLEAVE_EVERY == 0:
@@ -330,6 +333,21 @@ class Server:
                 if request.get("id") in self.cancelled:
                     self.cancelled.discard(request["id"])
                     return {"cancelled": True, "findings": []}
+                now = time.perf_counter()
+                if now - reported >= PROGRESS_INTERVAL_S:
+                    reported = now
+                    # Not just for the progress bar: it is the difference
+                    # between a client waiting on a scan and a client waiting
+                    # on nothing, which from the outside look identical until
+                    # one of them times out.
+                    self.send(
+                        {
+                            "id": request.get("id"),
+                            "event": "progress",
+                            "files": seen,
+                            "findings": len(findings),
+                        }
+                    )
             found, how = self.scan_path(path, config, max_bytes)
             counts[how] += 1
             if found:

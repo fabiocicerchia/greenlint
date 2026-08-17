@@ -22,6 +22,8 @@ const EXTERNAL_CHANGE_DEBOUNCE_MS = 1_500;
 /** Past this many changed files, one project scan is cheaper than the batch —
  * it walks with the stat cache and only reads what actually changed. */
 const BATCH_TO_PROJECT_SCAN = 50;
+/** A walk larger than this is usually a workspace root one level too high. */
+const BIG_WALK_FILES = 20_000;
 
 let controller: Controller | undefined;
 
@@ -56,6 +58,7 @@ class Controller implements vscode.Disposable {
   private supportedExtensions?: Set<string>;
   private lastStats?: ScanStats;
   private lastErrorShown?: string;
+  private readonly warnedAboutWalkSize = new Set<string>();
   private projectScanRunning = false;
 
   constructor(private readonly context: vscode.ExtensionContext) {
@@ -333,7 +336,7 @@ class Controller implements vscode.Disposable {
       return;
     }
     this.projectScanRunning = true;
-    const run = async () => {
+    const run = async (report?: (message: string) => void) => {
       await this.loadRuleLanguages();
       // Unsaved buffers are what the developer is actually looking at; a scan
       // of their last-saved bytes would overwrite the truth with history.
@@ -341,7 +344,9 @@ class Controller implements vscode.Disposable {
         vscode.workspace.textDocuments.filter((doc) => doc.isDirty).map((doc) => doc.uri.fsPath),
       );
       for (const folder of folders) {
-        const response = await this.server.scanProject(folder);
+        const response = await this.server.scanProject(folder, (progress) =>
+          report?.(`${progress.files} files, ${progress.findings} findings`),
+        );
         if (response.cancelled) {
           continue;
         }
@@ -349,12 +354,13 @@ class Controller implements vscode.Disposable {
         this.store.replaceUnder(folder.uri.fsPath, response.findings, dirty);
         if (response.stats) {
           this.log.appendLine(
-            `[greenlint] scanned ${workspaceRelative(folder.uri.fsPath) || folder.name}: ` +
+            `[greenlint] scanned ${folder.uri.fsPath}: ` +
               `${response.stats.files} files in ${response.stats.ms} ms ` +
               `(${response.stats.scanned} read and scanned, ` +
               `${response.stats.reusedFromStat + response.stats.reusedFromHash} from cache, ` +
               `${response.stats.skipped} skipped)`,
           );
+          this.warnIfWalkingTooMuch(folder, response.stats.files);
         }
       }
     };
@@ -364,7 +370,7 @@ class Controller implements vscode.Disposable {
       } else {
         await vscode.window.withProgress(
           { location: vscode.ProgressLocation.Window, title: 'greenlint: scanning workspace' },
-          run,
+          (progress) => run((message) => progress.report({ message })),
         );
       }
     } catch (error) {
@@ -372,6 +378,28 @@ class Controller implements vscode.Disposable {
     } finally {
       this.projectScanRunning = false;
     }
+  }
+
+  /**
+   * A workspace root one level too high — a folder of projects rather than a
+   * project — turns a scan of a few hundred files into a scan of a disk. It is
+   * invisible from inside the editor, so it gets said out loud once.
+   */
+  private warnIfWalkingTooMuch(folder: vscode.WorkspaceFolder, files: number): void {
+    if (files < BIG_WALK_FILES || this.warnedAboutWalkSize.has(folder.uri.fsPath)) {
+      return;
+    }
+    this.warnedAboutWalkSize.add(folder.uri.fsPath);
+    const message =
+      `greenlint walked ${files.toLocaleString()} files under ${folder.uri.fsPath}. ` +
+      'If that is more than you meant to scan, add `ignore` globs to .greenlint.toml ' +
+      '(CI reads the same ones) or turn off greenlint.scanProjectOnStartup.';
+    this.log.appendLine(`[greenlint] ${message}`);
+    void vscode.window.showWarningMessage(message, 'Show Log').then((choice) => {
+      if (choice === 'Show Log') {
+        this.log.show(true);
+      }
+    });
   }
 
   private async clearCache(): Promise<void> {
