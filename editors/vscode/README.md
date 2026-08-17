@@ -16,7 +16,9 @@ a rule added to the linter shows up in the editor with no change on this side.
 - **Hover tooltips** with the rule id, what was found, *what to do instead*, and
   an order-of-magnitude CO2e figure — the "why" is the point of the tool.
 - **A Findings panel** at the bottom of the window, filtered to the current file
-  or showing the whole project, groupable by severity, file or rule.
+  or showing the whole project, groupable by severity, file or rule. A project
+  scan streams into it — findings appear as they are made rather than after the
+  walk finishes — and the totals are computed once at the end.
 - **An HTML report**, in a webview or exported as a standalone file. Everything
   in the UI is native VS Code — diagnostics, the tree view, quick picks, the
   status bar — and the report is drawn from VS Code's own theme variables, so it
@@ -169,10 +171,20 @@ The log line is the ground truth:
 ```
 
 A project scan is never silent while it works, so a slow one and a stuck one
-are distinguishable: progress arrives twice a second, and the timeout measures
-silence rather than duration. Typing stays responsive throughout — buffer scans
-are answered between batches of files, in milliseconds, while the walk
-continues.
+are distinguishable: findings stream into the panel twice a second, and the
+timeout measures silence rather than duration. Typing stays responsive
+throughout — buffer scans are answered between batches of files, in
+milliseconds, while the walk continues.
+
+On a 30,000-file tree the first findings land in the panel at ~0.5 s rather
+than at ~30 s, and each one crosses the pipe once: the batches are the
+delivery, so the final message carries the totals rather than repeating the
+findings. Those totals — per severity, per rule, per file — are computed once
+at the end over the finished set, which is also when the report repaints and
+the status bar tooltip updates. They are counts and nothing else: the CO2e
+hints describe different physical quantities (grams per GB, grams per
+instance-day, "negligible per call"), so adding them into a single score would
+produce a number with no unit and a false air of precision.
 
 ## Development
 

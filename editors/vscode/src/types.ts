@@ -33,6 +33,20 @@ export interface ScanStats {
   cache: { entries: number; statHits: number; hashHits: number; misses: number };
 }
 
+/** The end-of-scan aggregate, computed once over the whole set.
+ *
+ * Counts and nothing else: the CO2e hints are prose about different physical
+ * quantities — grams per GB, grams per instance-day, "negligible per call" —
+ * so a single number summing them would have no unit and a false air of
+ * precision, which is the one thing greenlint is careful not to produce.
+ */
+export interface ScanSummary {
+  total: number;
+  bySeverity: Record<Severity, number>;
+  byRule: Record<string, number>;
+  files: number;
+}
+
 export interface ServerInfo {
   protocol: number;
   version: string;

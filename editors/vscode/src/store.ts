@@ -24,54 +24,106 @@ export class FindingStore {
   readonly onDidChange = this.emitter.event;
   lastProjectScan?: Date;
 
-  setFile(fsPath: string, findings: Finding[]): void {
+  /** Running totals. Maintained rather than recomputed: a streaming scan
+   * updates the badge and the panel title on every batch, and walking every
+   * finding each time would make the display cost grow with the results. */
+  private readonly totalsBySeverity: Record<Severity, number> = { high: 0, medium: 0, low: 0 };
+  private total = 0;
+
+  private track(findings: Finding[], sign: 1 | -1): void {
+    for (const finding of findings) {
+      this.totalsBySeverity[finding.severity] += sign;
+      this.total += sign;
+    }
+  }
+
+  private put(fsPath: string, findings: Finding[]): boolean {
+    const previous = this.byFile.get(fsPath);
+    if (previous) {
+      this.track(previous, -1);
+    }
     if (findings.length === 0) {
-      if (!this.byFile.delete(fsPath)) {
-        // Nothing there before and nothing now: no event, so a clean file being
-        // scanned on every keystroke does not repaint the panel each time.
-        return;
-      }
-    } else {
-      this.byFile.set(fsPath, [...findings].sort(compareFindings));
+      return this.byFile.delete(fsPath);
+    }
+    this.byFile.set(fsPath, [...findings].sort(compareFindings));
+    this.track(findings, 1);
+    return true;
+  }
+
+  setFile(fsPath: string, findings: Finding[]): void {
+    if (!this.put(fsPath, findings)) {
+      // Nothing there before and nothing now: no event, so a clean file being
+      // scanned on every keystroke does not repaint the panel each time.
+      return;
     }
     this.emitter.fire({ files: [fsPath], replaced: false });
   }
 
-  /** Swap in a project scan's results, keeping the given paths untouched
-   * (unsaved buffers, whose on-disk contents are not what is being edited). */
-  replaceUnder(root: string, findings: Finding[], keep: ReadonlySet<string>): void {
-    const prefix = root.endsWith(path.sep) ? root : root + path.sep;
-    for (const file of [...this.byFile.keys()]) {
-      if ((file === root || file.startsWith(prefix)) && !keep.has(file)) {
-        this.byFile.delete(file);
-      }
-    }
+  /**
+   * Fold in one batch of a streaming project scan.
+   *
+   * One event for the whole batch, not one per file: the panel repaints once
+   * per batch either way, and the diagnostics update is per file regardless.
+   */
+  mergeBatch(findings: Finding[], skip: ReadonlySet<string> = new Set()): void {
+    const byFile = new Map<string, Finding[]>();
     for (const finding of findings) {
-      if (keep.has(finding.file)) {
+      if (skip.has(finding.file)) {
         continue;
       }
-      const bucket = this.byFile.get(finding.file);
+      const bucket = byFile.get(finding.file);
       if (bucket) {
         bucket.push(finding);
       } else {
-        this.byFile.set(finding.file, [finding]);
+        byFile.set(finding.file, [finding]);
       }
     }
-    for (const bucket of this.byFile.values()) {
-      bucket.sort(compareFindings);
+    if (byFile.size === 0) {
+      return;
+    }
+    for (const [file, bucket] of byFile) {
+      // A file is scanned once per walk, so its findings arrive in one batch
+      // and this replaces rather than accumulates.
+      this.put(file, bucket);
+    }
+    this.emitter.fire({ files: [...byFile.keys()], replaced: false });
+  }
+
+  /**
+   * End of a streaming scan: drop what the walk did not report.
+   *
+   * `keep` is the files the scan found something in, so anything else under
+   * the root has been fixed or deleted since the last scan. Only correct once
+   * the walk has finished — pruning a partial scan would delete findings for
+   * files it simply had not reached yet.
+   */
+  pruneUnder(root: string, keep: ReadonlySet<string>, dirty: ReadonlySet<string>): void {
+    const prefix = root.endsWith(path.sep) ? root : root + path.sep;
+    const removed: string[] = [];
+    for (const file of [...this.byFile.keys()]) {
+      if ((file === root || file.startsWith(prefix)) && !keep.has(file) && !dirty.has(file)) {
+        this.put(file, []);
+        removed.push(file);
+      }
     }
     this.lastProjectScan = new Date();
-    this.emitter.fire({ files: [], replaced: true });
+    if (removed.length > 0) {
+      this.emitter.fire({ files: removed, replaced: false });
+    }
   }
 
   forget(fsPath: string): void {
-    if (this.byFile.delete(fsPath)) {
+    if (this.put(fsPath, [])) {
       this.emitter.fire({ files: [fsPath], replaced: false });
     }
   }
 
   clear(): void {
     this.byFile.clear();
+    this.total = 0;
+    this.totalsBySeverity.high = 0;
+    this.totalsBySeverity.medium = 0;
+    this.totalsBySeverity.low = 0;
     this.lastProjectScan = undefined;
     this.emitter.fire({ files: [], replaced: true });
   }
@@ -89,14 +141,17 @@ export class FindingStore {
   }
 
   get size(): number {
-    let total = 0;
-    for (const bucket of this.byFile.values()) {
-      total += bucket.length;
-    }
-    return total;
+    return this.total;
   }
 
-  countsBySeverity(findings: Finding[] = this.all()): Record<Severity, number> {
+  /** The running totals, free to read. */
+  totals(): Record<Severity, number> {
+    return { ...this.totalsBySeverity };
+  }
+
+  /** Totals over an arbitrary list — a filtered view, say — which has to be
+   * counted because it is not what the store is keeping track of. */
+  countsBySeverity(findings: Finding[]): Record<Severity, number> {
     const counts: Record<Severity, number> = { high: 0, medium: 0, low: 0 };
     for (const finding of findings) {
       counts[finding.severity] += 1;

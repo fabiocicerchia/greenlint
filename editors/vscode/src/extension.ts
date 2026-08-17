@@ -13,7 +13,7 @@ import { ScanServer } from './engine';
 import { FindingsProvider, type Grouping, type Scope, workspaceRelative } from './findingsView';
 import { renderReport } from './report';
 import { FindingStore } from './store';
-import type { Finding, ScanStats, Severity } from './types';
+import type { Finding, ScanStats, ScanSummary, Severity } from './types';
 
 /** External changes are batched: a `git checkout` touches hundreds of files,
  * and scanning each one as its event lands is the thundering herd this whole
@@ -57,6 +57,7 @@ class Controller implements vscode.Disposable {
   private reportTimer?: NodeJS.Timeout;
   private supportedExtensions?: Set<string>;
   private lastStats?: ScanStats;
+  private lastSummary?: ScanSummary;
   private lastErrorShown?: string;
   private readonly warnedAboutWalkSize = new Set<string>();
   private projectScanRunning = false;
@@ -344,14 +345,31 @@ class Controller implements vscode.Disposable {
         vscode.workspace.textDocuments.filter((doc) => doc.isDirty).map((doc) => doc.uri.fsPath),
       );
       for (const folder of folders) {
-        const response = await this.server.scanProject(folder, (progress) =>
-          report?.(`${progress.files} files, ${progress.findings} findings`),
-        );
+        // Findings arrive in batches and go straight into the panel, so it
+        // fills as the walk goes. Nothing is pruned until the walk finishes:
+        // a file the scan has not reached yet is not a file with no findings.
+        const reported = new Set<string>();
+        const response = await this.server.scanProject(folder, (progress) => {
+          report?.(`${progress.files} files, ${progress.found} findings`);
+          for (const finding of progress.batch) {
+            reported.add(finding.file);
+          }
+          this.store.mergeBatch(progress.batch, dirty);
+        });
         if (response.cancelled) {
           continue;
         }
         this.lastStats = response.stats;
-        this.store.replaceUnder(folder.uri.fsPath, response.findings, dirty);
+        this.lastSummary = response.summary;
+        this.store.pruneUnder(folder.uri.fsPath, reported, dirty);
+        if (response.summary) {
+          const { bySeverity, total, files } = response.summary;
+          this.log.appendLine(
+            `[greenlint] ${total} finding${total === 1 ? '' : 's'} in ${files} file${
+              files === 1 ? '' : 's'
+            } — ${bySeverity.high} high, ${bySeverity.medium} medium, ${bySeverity.low} low`,
+          );
+        }
         if (response.stats) {
           this.log.appendLine(
             `[greenlint] scanned ${folder.uri.fsPath}: ` +
@@ -377,6 +395,9 @@ class Controller implements vscode.Disposable {
       this.reportError(error);
     } finally {
       this.projectScanRunning = false;
+      // The aggregate, once, over the finished set.
+      this.refreshReport(true);
+      this.updateStatus();
     }
   }
 
@@ -469,10 +490,41 @@ class Controller implements vscode.Disposable {
     this.tree.description = this.findings.describeScope();
     this.tree.badge =
       total > 0 ? { value: total, tooltip: `${total} greenlint findings` } : undefined;
-    const counts = this.store.countsBySeverity();
+    const counts = this.store.totals();
     this.status.text = total === 0 ? '$(circle-large-outline) greenlint' : `$(flame) ${counts.high} $(warning) ${counts.medium} $(info) ${counts.low}`;
-    this.status.tooltip = total === 0 ? 'greenlint: nothing found' : `greenlint: ${total} findings`;
+    this.status.tooltip = this.describeLastScan(total);
     this.status.show();
+  }
+
+  /**
+   * The end-of-scan aggregate, as computed once over the finished set rather
+   * than accumulated from the batches — so it reflects the whole project even
+   * while the panel is showing one file.
+   */
+  private describeLastScan(total: number): vscode.MarkdownString {
+    const tooltip = new vscode.MarkdownString(undefined, true);
+    if (total === 0 && !this.lastSummary) {
+      tooltip.appendMarkdown('greenlint: nothing found');
+      return tooltip;
+    }
+    const summary = this.lastSummary;
+    tooltip.appendMarkdown(
+      summary
+        ? `**greenlint** — ${summary.total} finding${summary.total === 1 ? '' : 's'} ` +
+            `in ${summary.files} file${summary.files === 1 ? '' : 's'}\n\n` +
+            `$(flame) ${summary.bySeverity.high} high · ` +
+            `$(warning) ${summary.bySeverity.medium} medium · ` +
+            `$(info) ${summary.bySeverity.low} low`
+        : `**greenlint** — ${total} finding${total === 1 ? '' : 's'}`,
+    );
+    if (this.lastStats) {
+      tooltip.appendMarkdown(
+        `\n\nLast scan: ${this.lastStats.files} files in ${this.lastStats.ms} ms ` +
+          `(${this.lastStats.scanned} scanned, ` +
+          `${this.lastStats.reusedFromStat + this.lastStats.reusedFromHash} cached)`,
+      );
+    }
+    return tooltip;
   }
 
   private setScope(scope: Scope): void {
@@ -550,6 +602,11 @@ class Controller implements vscode.Disposable {
   /** Repainting a webview is not free, so a burst of scans coalesces into one. */
   private refreshReport(immediate = false): void {
     if (!this.reportPanel) {
+      return;
+    }
+    // A streaming scan repaints this on every batch otherwise, which is a full
+    // re-render of the document for a partial answer. It gets one at the end.
+    if (this.projectScanRunning && !immediate) {
       return;
     }
     clearTimeout(this.reportTimer);

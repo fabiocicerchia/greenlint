@@ -95,5 +95,13 @@ without being opened and a rewritten-but-identical file is answered without
 running a rule. A project scan services buffer scans between batches of files,
 so a full walk never blocks what the developer is looking at.
 
+A project scan streams: each progress event carries the findings made since the
+last one, so the panel fills as the walk goes and the client can tell a slow
+scan from a stuck one. The final message then carries the totals rather than
+the findings again — they have already crossed the pipe once. Those totals are
+counts per severity, per rule and per file, and deliberately not a single
+score: the CO2e hints describe different physical quantities, so summing them
+would produce a number with no unit.
+
 Record further significant choices here (or in a `docs/adr/` folder if they
 pile up).

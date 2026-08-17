@@ -253,7 +253,7 @@ def test_a_long_project_scan_reports_progress(server, tmp_path, monkeypatch):
     progress = [line for line in responses(server) if line.get("event") == "progress"]
     assert progress, "a long scan said nothing until it was done"
     assert progress[0]["files"] == server_module.INTERLEAVE_EVERY
-    assert progress[-1]["findings"] > 0
+    assert progress[-1]["found"] > 0
     assert responses(server)[-1]["ok"] is True
 
 
@@ -282,3 +282,72 @@ def test_another_project_scan_arriving_mid_walk_is_deferred_not_nested(server, t
     server.dispatch({"id": 1, **args})
     assert [line["id"] for line in responses(server) if "ok" in line] == [1]
     assert len(server.deferred) == 1
+
+
+def test_streaming_delivers_findings_in_batches_as_they_are_made(server, tmp_path, monkeypatch):
+    """The panel should fill while the walk runs, not after it. Each progress
+    event carries what was found since the last one."""
+    monkeypatch.setattr(server_module, "PROGRESS_INTERVAL_S", 0)
+    for index in range(64):
+        write(tmp_path, f"q{index}.sql", "SELECT * FROM t;\n")
+    server.dispatch(
+        {
+            "id": 1,
+            "op": "scanProject",
+            "root": str(tmp_path),
+            "paths": [str(tmp_path)],
+            "stream": True,
+        }
+    )
+    lines = responses(server)
+    streamed = [f for line in lines if line.get("event") == "progress" for f in line["batch"]]
+    assert len(streamed) == 64
+    # Delivered once, not once per batch and again at the end.
+    final = lines[-1]
+    assert final["streamed"] is True
+    assert final["findings"] == []
+
+
+def test_streaming_and_batching_agree_with_one_shot_and_with_the_cli(server, tmp_path, monkeypatch):
+    monkeypatch.setattr(server_module, "PROGRESS_INTERVAL_S", 0)
+    for index in range(40):
+        write(tmp_path, f"q{index}.sql", "SELECT * FROM t;\n")
+    write(tmp_path, "ci.yml", "on:\n  schedule:\n    - cron: '* * * * *'\n")
+    args = {"op": "scanProject", "root": str(tmp_path), "paths": [str(tmp_path)]}
+    server.dispatch({"id": 1, "stream": True, **args})
+    streamed = [
+        f for line in responses(server) if line.get("event") == "progress" for f in line["batch"]
+    ]
+    expected = greenlint.scan([str(tmp_path)], greenlint.load_config(str(tmp_path)))
+    assert sorted(streamed, key=greenlint.finding_sort_key) == expected
+
+
+def test_the_summary_is_the_whole_scan_not_a_batch(server, tmp_path, monkeypatch):
+    monkeypatch.setattr(server_module, "PROGRESS_INTERVAL_S", 0)
+    for index in range(20):
+        write(tmp_path, f"q{index}.sql", "SELECT * FROM t;\n")
+    write(tmp_path, "ci.yml", "on:\n  schedule:\n    - cron: '* * * * *'\n")
+    server.dispatch(
+        {
+            "id": 1,
+            "op": "scanProject",
+            "root": str(tmp_path),
+            "paths": [str(tmp_path)],
+            "stream": True,
+        }
+    )
+    summary = responses(server)[-1]["summary"]
+    assert summary["total"] == 21
+    assert summary["bySeverity"] == {"high": 1, "medium": 20, "low": 0}
+    assert summary["files"] == 21
+    assert list(summary["byRule"]) == ["GL005", "GL003"]  # busiest rule first
+
+
+def test_a_non_streaming_scan_still_returns_everything(server, tmp_path):
+    """The one-shot shape stays valid: streaming is a request the client opts
+    into, not a change to what a project scan means."""
+    write(tmp_path, "q.sql", "SELECT * FROM t;\n")
+    response = ask(server, op="scanProject", root=str(tmp_path), paths=[str(tmp_path)])
+    assert response["streamed"] is False
+    assert [f["rule"] for f in response["findings"]] == ["GL005"]
+    assert response["summary"]["total"] == 1

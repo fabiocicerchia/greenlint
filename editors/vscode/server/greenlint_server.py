@@ -26,7 +26,9 @@ Ops:
   rules                                   -> the full rule table
   scanText   {path, text, root}           -> findings for an unsaved buffer
   scanFile   {path, root}                 -> findings for a file on disk
-  scanProject{root, paths}                -> findings for the whole tree
+  scanProject{root, paths, stream}        -> findings for the whole tree, in
+                                             progress-event batches when
+                                             streaming, plus an end summary
   invalidate {paths}|{}                   -> drop cache entries (or all)
   cancel     {cancel: id}                 -> stop an in-flight project scan
 """
@@ -315,15 +317,41 @@ class Server:
         return findings, "scan"
 
     def scan_project(self, request):
+        """Walk the tree, reporting findings as they are made.
+
+        `stream: true` turns the progress events into the delivery mechanism
+        rather than a status line: each carries the findings made since the last
+        one, so a panel fills as the walk goes instead of staying empty until
+        the end. The final response then carries the totals and not the findings
+        again — a large scan should cross the pipe once, not twice.
+        """
         root = request.get("root")
         paths = request.get("paths") or ([root] if root else ["."])
         max_bytes = request.get("maxFileBytes", DEFAULT_MAX_FILE_BYTES)
+        stream = bool(request.get("stream"))
         config = self.config_for(root)
         started = time.perf_counter()
         findings = []
+        batch = []
         counts = {"stat": 0, "hash": 0, "scan": 0, "skip": 0}
         seen = 0
         reported = started
+
+        def report():
+            # Not just for the progress bar: silence is the difference between
+            # a client waiting on a scan and a client waiting on nothing, which
+            # look identical from outside until one of them times out.
+            self.send(
+                {
+                    "id": request.get("id"),
+                    "event": "progress",
+                    "files": seen,
+                    "found": len(findings),
+                    "batch": batch if stream else [],
+                }
+            )
+            batch.clear()
+
         for path in self.gl.iter_files(paths, config):
             seen += 1
             if seen % INTERLEAVE_EVERY == 0:
@@ -336,25 +364,21 @@ class Server:
                 now = time.perf_counter()
                 if now - reported >= PROGRESS_INTERVAL_S:
                     reported = now
-                    # Not just for the progress bar: it is the difference
-                    # between a client waiting on a scan and a client waiting
-                    # on nothing, which from the outside look identical until
-                    # one of them times out.
-                    self.send(
-                        {
-                            "id": request.get("id"),
-                            "event": "progress",
-                            "files": seen,
-                            "findings": len(findings),
-                        }
-                    )
+                    report()
             found, how = self.scan_path(path, config, max_bytes)
             counts[how] += 1
             if found:
                 findings.extend(found)
+                batch.extend(found)
+        if stream and batch:
+            report()  # whatever the last interval did not cover
         findings.sort(key=self.gl.finding_sort_key)
         return {
-            "findings": findings,
+            # Streaming already delivered these one batch at a time; sending
+            # them again would double the cost of the thing being optimised.
+            "findings": [] if stream else findings,
+            "streamed": stream,
+            "summary": self.summarise(findings),
             "stats": {
                 "files": seen,
                 "reusedFromStat": counts["stat"],
@@ -364,6 +388,30 @@ class Server:
                 "ms": round((time.perf_counter() - started) * 1000),
                 "cache": self.cache.stats(),
             },
+        }
+
+    @staticmethod
+    def summarise(findings):
+        """The totals, computed once at the end over the whole set.
+
+        Deliberately counts and nothing else. The CO2e hints are prose about
+        different physical quantities — grams per GB, grams per instance-day,
+        "negligible per call" — so adding them up would produce a number with
+        no unit and a false air of precision, which is the one thing this tool
+        is careful not to do.
+        """
+        by_severity = {"high": 0, "medium": 0, "low": 0}
+        by_rule = {}
+        files = set()
+        for finding in findings:
+            by_severity[finding["severity"]] += 1
+            by_rule[finding["rule"]] = by_rule.get(finding["rule"], 0) + 1
+            files.add(finding["file"])
+        return {
+            "total": len(findings),
+            "bySeverity": by_severity,
+            "byRule": dict(sorted(by_rule.items(), key=lambda kv: (-kv[1], kv[0]))),
+            "files": len(files),
         }
 
     # --- dispatch --------------------------------------------------------

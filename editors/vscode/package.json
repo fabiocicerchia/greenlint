@@ -2,7 +2,7 @@
   "name": "greenlint",
   "displayName": "greenlint",
   "description": "Flags energy-wasteful code and config patterns as you type, with the reason each one wastes energy.",
-  "version": "0.1.3",
+  "version": "0.2.0",
   "publisher": "fabiocicerchia",
   "license": "Apache-2.0",
   "icon": "media/icon.png",

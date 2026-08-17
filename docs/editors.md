@@ -8,7 +8,8 @@ runs the same rule set as the CLI, while you type.
 - squiggles on the offending line, with a hover explaining what was found, what
   to do instead, and roughly what it costs;
 - a **Findings** panel at the bottom of the window, scoped to the current file
-  or the whole project, groupable by severity, file or rule;
+  or the whole project, groupable by severity, file or rule, filled by a
+  project scan as it walks rather than after it finishes;
 - an HTML report, in a webview or exported as a standalone file, drawn from
   VS Code's own theme variables — as is the rest of the UI, which is native
   throughout: diagnostics, tree view, quick picks, status bar;

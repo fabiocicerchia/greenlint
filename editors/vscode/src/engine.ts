@@ -5,14 +5,18 @@ import * as path from 'path';
 import * as vscode from 'vscode';
 
 import type { Settings } from './config';
-import type { Finding, RuleInfo, ScanStats, ServerInfo } from './types';
+import type { Finding, RuleInfo, ScanStats, ScanSummary, ServerInfo } from './types';
 
 const START_TIMEOUT_MS = 20_000;
 const REQUEST_TIMEOUT_MS = 120_000;
 
 export interface ScanProgress {
+  /** Files walked so far. */
   files: number;
-  findings: number;
+  /** Findings made so far, across every batch. */
+  found: number;
+  /** Findings made since the previous progress event. */
+  batch: Finding[];
 }
 
 interface Pending {
@@ -304,7 +308,8 @@ export class ScanServer implements vscode.Disposable {
         this.rearm(message.id as number, pending);
         pending.onProgress?.({
           files: Number(message.files ?? 0),
-          findings: Number(message.findings ?? 0),
+          found: Number(message.found ?? 0),
+          batch: (message.batch as Finding[] | undefined) ?? [],
         });
       }
       return;
@@ -407,10 +412,15 @@ export class ScanServer implements vscode.Disposable {
     return response.findings;
   }
 
+  /**
+   * Walk a workspace folder, delivering findings through `onProgress` as they
+   * are made. The resolved value carries the totals, not the findings — they
+   * have already been handed over batch by batch.
+   */
   async scanProject(
     folder: vscode.WorkspaceFolder,
     onProgress?: (progress: ScanProgress) => void,
-  ): Promise<{ findings: Finding[]; stats?: ScanStats; cancelled?: boolean }> {
+  ): Promise<{ summary?: ScanSummary; stats?: ScanStats; cancelled?: boolean }> {
     this.log.appendLine(`[greenlint] scanning ${folder.uri.fsPath}`);
     return this.call(
       'scanProject',
@@ -418,6 +428,7 @@ export class ScanServer implements vscode.Disposable {
         root: folder.uri.fsPath,
         paths: [folder.uri.fsPath],
         maxFileBytes: this.settings.maxFileBytes,
+        stream: true,
       },
       onProgress,
     );
