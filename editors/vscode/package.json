@@ -334,7 +334,7 @@
     "compile": "tsc -p ./",
     "watch": "tsc -watch -p ./",
     "vscode:prepublish": "npm run compile",
-    "package": "node -e \"require('fs').copyFileSync('../../LICENSE','LICENSE')\" && vsce package"
+    "package": "node -e \"require('fs').copyFileSync('../../LICENSE','LICENSE')\" && npx --yes @vscode/vsce package"
   },
   "devDependencies": {
     "@types/node": "^20.11.30",
