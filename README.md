@@ -59,8 +59,13 @@ More in [`docs/getting-started.md`](docs/getting-started.md).
 rule set as you type: squiggles with a hover explaining what to do instead, a
 Findings panel scoped to the file or the whole project, and an HTML report. It
 drives `greenlint.py` itself through a warm scan server with a stat+hash cache,
-so an unchanged file is never opened and an unchanged tree is never read — see
-[`docs/editors.md`](docs/editors.md).
+so an unchanged file is never opened and an unchanged tree is never read.
+
+```sh
+make ext-install   # build the .vsix and install it into VS Code
+```
+
+More in [`docs/editors.md`](docs/editors.md).
 
 ## Documentation
 

@@ -27,6 +27,18 @@ a rule added to the linter shows up in the editor with no change on this side.
 - **`.greenlint.toml` is honoured** exactly as the CLI honours it: same walker,
   same ignore globs, same disable list. What CI blocks on is what you see.
 
+## Install
+
+Not on the Marketplace yet, so build it from the checkout — from the repository
+root:
+
+```sh
+make ext-install    # builds the .vsix and installs it into VS Code
+```
+
+`make ext-build` stops at the `.vsix` if you would rather install it from the
+Extensions view (`...` → *Install from VSIX*). Reload the window afterwards.
+
 ## Requirements
 
 Python 3.11+ and greenlint on the machine:
@@ -138,14 +150,16 @@ npm install
 npm run compile     # or: npm run watch
 ```
 
-Then <kbd>F5</kbd> in VS Code to launch an Extension Development Host. The scan
-server is `server/greenlint_server.py`; it speaks newline-delimited JSON over
-stdio and is covered by the repository's pytest suite
+Then <kbd>F5</kbd> in VS Code to launch an Extension Development Host, which
+loads the extension without installing it.
+
+The scan server is `server/greenlint_server.py`; it speaks newline-delimited
+JSON over stdio and is covered by the repository's pytest suite
 (`tests/test_vscode_server.py`), so its caching behaviour is asserted rather
 than assumed.
 
-`npm run package` builds a `.vsix` (it copies the repository's `LICENSE` in
-first, which is why that file is gitignored here).
+`npm run package` (what `make ext-build` calls) produces the `.vsix`. It copies
+the repository's `LICENSE` in first, which is why that file is gitignored here.
 
 ## Licence
 

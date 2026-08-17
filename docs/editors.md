@@ -33,11 +33,11 @@ repository is linted by its own working copy.
 Until it is published to the Marketplace, build it from the checkout:
 
 ```sh
-cd editors/vscode
-npm install
-npm run package     # produces greenlint-<version>.vsix
-code --install-extension greenlint-*.vsix
+make ext-install    # builds the .vsix and installs it into VS Code
 ```
+
+`make ext-build` stops at the `.vsix` if you would rather install it from the
+Extensions view (`...` → *Install from VSIX*). Reload the window afterwards.
 
 ### Keeping it cheap
 
