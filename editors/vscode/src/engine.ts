@@ -98,18 +98,33 @@ export class ScanServer implements vscode.Disposable {
    * is too old refuses to start, so the loop simply moves on to the next.
    */
   private candidates(): Array<{ python: string; module?: string }> {
-    const pythons = this.settings.pythonPath
+    if (this.settings.pythonPath && this.settings.greenlintPath) {
+      return [{ python: this.settings.pythonPath, module: this.settings.greenlintPath }];
+    }
+    const plain = this.settings.pythonPath
       ? [this.settings.pythonPath]
       : process.platform === 'win32'
         ? ['python', 'py']
         : ['python3', 'python'];
-    const modules: Array<string | undefined> = this.settings.greenlintPath
-      ? [this.settings.greenlintPath]
-      : [...workspaceGreenlintModules(), undefined];
     const pairs: Array<{ python: string; module?: string }> = [];
-    for (const python of pythons) {
-      for (const module of modules) {
+    // A module loaded from a path needs no particular interpreter — any Python
+    // that runs will import it — so these come first and only need `plain`.
+    for (const module of this.settings.greenlintPath
+      ? [this.settings.greenlintPath]
+      : workspaceGreenlintModules()) {
+      for (const python of plain) {
         pairs.push({ python, module });
+      }
+    }
+    if (!this.settings.greenlintPath) {
+      // `import greenlint`, which is a question about the interpreter rather
+      // than about greenlint: pipx and venv installs are deliberately invisible
+      // to the `python3` on PATH, so the interpreter that owns the `greenlint`
+      // command gets a turn too.
+      for (const python of this.settings.pythonPath
+        ? plain
+        : dedupe([...plain, ...interpretersOwningGreenlint()])) {
+        pairs.push({ python });
       }
     }
     return pairs;
@@ -130,7 +145,15 @@ export class ScanServer implements vscode.Disposable {
 
   private async startOnce(): Promise<ServerInfo> {
     const failures: string[] = [];
-    for (const candidate of this.candidates()) {
+    const candidates = this.candidates();
+    // Printed up front because the interesting failure is often what is *not*
+    // in this list — no workspace greenlint.py, or a single configured path.
+    this.log.appendLine(
+      `[greenlint] looking for greenlint in order: ${candidates
+        .map((c) => `${c.python}${c.module ? ` + ${c.module}` : ' + installed package'}`)
+        .join(', ')}`,
+    );
+    for (const candidate of candidates) {
       try {
         const info = await this.spawn(candidate.python, candidate.module);
         this.log.appendLine(
@@ -147,13 +170,18 @@ export class ScanServer implements vscode.Disposable {
         this.killProcess(new ScanServerError(reason));
       }
     }
-    // First line first: it is the only part a notification toast shows.
-    throw new ScanServerError(
-      'could not start the greenlint scan server — install or upgrade greenlint ' +
-        '(`pipx install --force git+https://github.com/fabiocicerchia/greenlint`), ' +
-        'or set `greenlint.pythonPath` / `greenlint.greenlintPath`.\n' +
-        `Tried:\n${failures.join('\n')}`,
-    );
+    // First line first: it is the only part a notification toast shows. When
+    // every candidate failed the same way — an installed greenlint that is too
+    // old, say — that reason is far more useful than generic advice, so it
+    // leads instead.
+    const reasons = dedupe(failures.map((failure) => failure.replace(/^[^:]*: /, '')));
+    const headline =
+      reasons.length === 1
+        ? reasons[0]
+        : 'could not start the scan server — install or upgrade greenlint ' +
+          '(`pip install -U git+https://github.com/fabiocicerchia/greenlint`, or `pipx` ' +
+          'if you have it), or set `greenlint.pythonPath` / `greenlint.greenlintPath`.';
+    throw new ScanServerError(`${headline}\nTried:\n${failures.join('\n')}`);
   }
 
   private spawn(python: string, module?: string): Promise<ServerInfo> {
@@ -377,4 +405,66 @@ function workspaceGreenlintModules(): string[] {
     }
   }
   return found;
+}
+
+function dedupe(values: string[]): string[] {
+  return [...new Set(values)];
+}
+
+/**
+ * Interpreters that can plausibly `import greenlint` even though the `python3`
+ * on PATH cannot.
+ *
+ * The documented install is `pipx`, which puts greenlint in its own virtualenv
+ * precisely so it does not appear in any interpreter on PATH — so looking only
+ * at `python3` fails for exactly the users who followed the instructions. Two
+ * cheap ways to find the real one: the shebang of the `greenlint` command
+ * (a console script names its own interpreter on line one), and pipx's
+ * standard venv layout.
+ */
+function interpretersOwningGreenlint(): string[] {
+  const found: string[] = [];
+  const script = onPath('greenlint');
+  if (script) {
+    try {
+      const shebang = /^#!\s*("?)(\S+?)\1(?:\s|$)/.exec(
+        fs.readFileSync(script, 'utf8').slice(0, 512).split('\n')[0] ?? '',
+      );
+      // A pyenv or asdf shim is a shell script, so its shebang is a shell —
+      // only take the line seriously when it actually names a Python.
+      if (shebang && /python/i.test(path.basename(shebang[2]))) {
+        found.push(shebang[2]);
+      }
+    } catch {
+      // Unreadable or binary: nothing to learn, and not worth reporting.
+    }
+  }
+  const home = process.env.HOME ?? process.env.USERPROFILE;
+  if (home) {
+    const pipx =
+      process.platform === 'win32'
+        ? path.join(home, 'pipx', 'venvs', 'greenlint', 'Scripts', 'python.exe')
+        : path.join(home, '.local', 'pipx', 'venvs', 'greenlint', 'bin', 'python');
+    if (fs.existsSync(pipx)) {
+      found.push(pipx);
+    }
+  }
+  return found;
+}
+
+/** First executable named `command` on PATH. */
+function onPath(command: string): string | undefined {
+  const extensions = process.platform === 'win32' ? ['.exe', '.cmd', '.bat', ''] : [''];
+  for (const dir of (process.env.PATH ?? '').split(path.delimiter)) {
+    if (!dir) {
+      continue;
+    }
+    for (const extension of extensions) {
+      const candidate = path.join(dir, command + extension);
+      if (fs.existsSync(candidate)) {
+        return candidate;
+      }
+    }
+  }
+  return undefined;
 }

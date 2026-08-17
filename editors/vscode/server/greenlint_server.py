@@ -473,9 +473,10 @@ def main(argv=None):
         if missing:
             raise ImportError(
                 f"greenlint {greenlint_version(gl)} at {getattr(gl, '__file__', '?')} is too old "
-                f"for this extension: it has no {', '.join(missing)}. Upgrade with "
-                "`pipx install --force git+https://github.com/fabiocicerchia/greenlint` "
-                "(or `pip install -U`), or point `greenlint.greenlintPath` at a checkout."
+                f"for this extension: it has no {', '.join(missing)}. Upgrade it with "
+                "`pip install -U git+https://github.com/fabiocicerchia/greenlint` "
+                "(or `pipx install --force ...` if that is how it was installed), or point "
+                "`greenlint.greenlintPath` at a checkout."
             )
     except Exception as exc:  # noqa: BLE001 - the extension turns this into a prompt
         out.write(json.dumps({"id": 0, "ok": False, "fatal": True, "error": f"{exc}"}) + "\n")

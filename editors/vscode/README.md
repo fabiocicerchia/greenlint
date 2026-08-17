@@ -41,24 +41,32 @@ Extensions view (`...` → *Install from VSIX*). Reload the window afterwards.
 
 ## Requirements
 
-Python 3.11+ and greenlint on the machine:
+Python 3.11+ and greenlint on the machine — any of:
 
 ```sh
+pip install git+https://github.com/fabiocicerchia/greenlint
 pipx install git+https://github.com/fabiocicerchia/greenlint
+pip install -e .    # from a checkout: `make dev`, and rule edits are live
 ```
 
-The extension finds it by itself: `python3`, then `python` (`python` then `py`
-on Windows), loading a `greenlint.py` from the workspace root if there is one —
-so a checkout of the linter is linted by its own working copy — and otherwise
-the installed package. Both are overridable: `greenlint.pythonPath`,
-`greenlint.greenlintPath`.
+It looks for greenlint in this order, and logs the list it will try:
+
+1. `greenlint.greenlintPath`, if you set it — the only candidate, because a
+   typo there should be an error rather than a silent fallback to some other
+   greenlint whose rules you never asked for;
+2. a `greenlint.py` in a workspace root, so a checkout of the linter is linted
+   by its own working copy;
+3. `import greenlint` from `python3`, then `python` (`python` then `py` on
+   Windows), then the interpreter that owns the `greenlint` command — read
+   from its shebang — and pipx's venv. A pipx install is deliberately
+   invisible to the `python3` on PATH, so looking only there would fail for
+   exactly the people who followed the pipx instruction.
 
 It needs a greenlint with the editor scan API (`iter_files`, `scannable`,
-`is_ignored`, `scan_file(text=)`). A release older than that refuses to start
-and says so, naming what is missing; `pipx install --force
-git+https://github.com/fabiocicerchia/greenlint` upgrades it. The check is on
-those names rather than a version number, so it stays honest without anyone
-maintaining a floor.
+`is_ignored`, `scan_file(text=)`). An older release refuses to start and says
+which names are missing, and the search moves on to the next candidate. The
+check is on the names rather than a version number, so it stays honest without
+anyone maintaining a floor.
 
 ## Settings
 
