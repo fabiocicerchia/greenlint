@@ -13,10 +13,12 @@ and what to do instead.
 import argparse
 import ast
 import fnmatch
+import functools
 import json
 import re
 import sys
 import tomllib
+from collections import deque
 from pathlib import Path
 
 CONFIG_FILENAME = ".greenlint.toml"
@@ -633,6 +635,51 @@ COMMENT_SYNTAX = {
 }
 
 
+# Everything but a newline, for blanking a span while keeping offsets and line
+# numbers pointing at the real file.
+_NOT_NEWLINE = re.compile(r"[^\n]")
+
+
+def _blank_spans(text, spans):
+    """Replace each `(start, end)` span with spaces, newlines kept.
+
+    Spliced from slices rather than edited character by character: the blanked
+    regions are a small fraction of a file, and `re.sub` does the per-character
+    part in C. Nothing to blank means the original string is handed straight
+    back, with nothing allocated at all.
+    """
+    if not spans:
+        return text
+    pieces, prev = [], 0
+    for start, end in spans:
+        pieces.append(text[prev:start])
+        pieces.append(_NOT_NEWLINE.sub(" ", text[start:end]))
+        prev = end
+    pieces.append(text[prev:])
+    return "".join(pieces)
+
+
+@functools.cache
+def _comment_scanners(line_tok, block):
+    """(outside-a-string, {quote: inside-that-string}) jump patterns.
+
+    Outside a string the only characters that matter are a quote, a line
+    comment token and a block opener — a newline resets nothing, since there is
+    no open quote to reset. Inside one, only the closing quote, a backslash and
+    a newline. Alternation order matters: the old loop tested quotes before
+    comment tokens, and at a position that could be either, `re` takes the
+    first alternative, so the order here keeps that precedence.
+
+    Cached because there is one pattern per language, not one per file.
+    """
+    alternatives = ["[\"']", re.escape(line_tok)]
+    if block:
+        alternatives.append(re.escape(block[0]))
+    outside = re.compile("|".join(alternatives))
+    inside = {quote: re.compile(f"[\\n\\\\{quote}]") for quote in "\"'"}
+    return outside, inside
+
+
 def _blank_comments(text, path):
     """Return `text` with comment bodies replaced by spaces.
 
@@ -660,24 +707,46 @@ def _blank_comments(text, path):
     )
     if not line_tok:
         return text
-    out = list(text)
+    # Two C-speed substring searches before any character-at-a-time work: a
+    # file with no comment token in it has nothing to blank, and in a scan of a
+    # real tree that is a large share of the files. The loop below is the only
+    # part of a scan whose cost is per character rather than per match.
+    if line_tok not in text and not (block and block[0] in text):
+        return text
+    # Spans to blank, rather than a mutable copy of the file: `list(text)` is
+    # one pointer per character — 8 bytes of list for every byte of source —
+    # allocated for every file scanned, and thrown away by the join.
+    # Jump between the characters that can change anything instead of visiting
+    # every one. Source is overwhelmingly ordinary code: on the standard
+    # library this loop ran once per character and was the single largest cost
+    # in a scan. `re` does the skipping in C; the Python below still runs once
+    # per interesting position, and the decisions it makes are unchanged.
+    outside, inside = _comment_scanners(line_tok, block)
+    spans = []
     i, n, quote = 0, len(text), None
     while i < n:
-        ch = text[i]
-        if ch == "\n":
-            quote = None
-            i += 1
-            continue
         if quote:
-            # A trailing backslash is a line continuation, not an escape of the
-            # newline we use to resynchronise.
-            if ch == "\\" and i + 1 < n and text[i + 1] != "\n":
-                i += 2
-                continue
-            if ch == quote:
+            match = inside[quote].search(text, i)
+            if match is None:
+                break
+            i = match.start()
+            ch = text[i]
+            if ch == "\n":
+                quote = None
+            elif ch == "\\":
+                # A trailing backslash is a line continuation, not an escape of
+                # the newline we use to resynchronise.
+                if i + 1 < n and text[i + 1] != "\n":
+                    i += 1
+            else:  # the closing quote
                 quote = None
             i += 1
             continue
+        match = outside.search(text, i)
+        if match is None:
+            break
+        i = match.start()
+        ch = text[i]
         if ch in "\"'":
             if ch == "'" and 0 < i < n - 1 and text[i - 1].isalpha() and text[i + 1].isalpha():
                 i += 1  # don't / it's / won't
@@ -686,38 +755,33 @@ def _blank_comments(text, path):
             i += 1
             continue
         if text.startswith(line_tok, i):
-            while i < n and text[i] != "\n":
-                out[i] = " "
-                i += 1
-            continue
-        if block and text.startswith(block[0], i):
-            end = text.find(block[1], i + len(block[0]))
-            end = n if end == -1 else end + len(block[1])
-            for j in range(i, end):
-                if out[j] != "\n":
-                    out[j] = " "
+            end = text.find("\n", i)
+            end = n if end == -1 else end
+            spans.append((i, end))
             i = end
             continue
-        i += 1
-    return "".join(out)
+        end = text.find(block[1], i + len(block[0]))
+        end = n if end == -1 else end + len(block[1])
+        spans.append((i, end))
+        i = end
+    return _blank_spans(text, spans)
 
 
-def _blank_python_docstrings(code, tree):
+def _blank_python_docstrings(code, index):
     """Blank module/class/function docstrings, preserving offsets.
 
     A docstring is prose, and prose about a pattern is not the pattern — the
     same reason comments are blanked. Ordinary string literals are left alone:
     `q = "SELECT * FROM t"` is a real query.
+
+    Reads its docstring holders off the shared index rather than walking the
+    tree for them, so a Python file is traversed once for this and every AST
+    rule together.
     """
-    lines = code.splitlines(keepends=True)
-    starts, off = [], 0
-    for ln in lines:
-        starts.append(off)
-        off += len(ln)
-    out = list(code)
-    for node in ast.walk(tree):
-        if not isinstance(node, (ast.Module, ast.ClassDef, ast.FunctionDef, ast.AsyncFunctionDef)):
-            continue
+    holders = [index.tree, *index.functions, *index.classes]
+    spans = []
+    starts = None
+    for node in holders:
         doc = node.body[0] if node.body else None
         if not (
             isinstance(doc, ast.Expr)
@@ -725,12 +789,20 @@ def _blank_python_docstrings(code, tree):
             and isinstance(doc.value.value, str)
         ):
             continue
-        s = starts[doc.lineno - 1] + doc.col_offset
-        e = starts[doc.end_lineno - 1] + doc.end_col_offset
-        for j in range(s, min(e, len(out))):
-            if out[j] != "\n":
-                out[j] = " "
-    return "".join(out)
+        if starts is None:
+            # Only built once a docstring is actually found: a file with none
+            # (every generated or one-liner module in a tree) pays nothing.
+            starts, off = [], 0
+            for line in code.splitlines(keepends=True):
+                starts.append(off)
+                off += len(line)
+        start = starts[doc.lineno - 1] + doc.col_offset
+        end = starts[doc.end_lineno - 1] + doc.end_col_offset
+        spans.append((start, min(end, len(code))))
+    # Docstrings come off the index in traversal order, which is not file
+    # order once functions nest; splicing needs them left to right.
+    spans.sort()
+    return _blank_spans(code, spans)
 
 
 def _is_go_template(text):
@@ -781,6 +853,78 @@ def _parse_python(path, text):
         return None
 
 
+# The same boundaries `SCOPE_BOUNDARIES` names, as a set of exact types for the
+# indexing pass — which tests `type(node) in ...` rather than `isinstance`.
+_SCOPE_KINDS = frozenset((ast.FunctionDef, ast.AsyncFunctionDef, ast.Lambda, ast.ClassDef))
+
+
+class PythonIndex:
+    """The nodes every Python AST rule needs, collected in one traversal.
+
+    Six rules each called `ast.walk(tree)` to pick out the handful of node
+    types they care about, so a scan walked each file's tree six times over.
+    Profiling a 4,000-file scan put ~65% of the entire run inside
+    `ast.iter_child_nodes`, which was that redundancy and nothing else.
+
+    `enclosing` is the other half: the rules that ask "is this inside a loop?"
+    used to answer it by walking the subtree of every loop, which is quadratic
+    in nesting depth. Carrying the loop stack down during the one traversal
+    answers the same question by looking up.
+    """
+
+    __slots__ = ("classes", "fors", "functions", "loop_scopes", "tree", "tries", "whiles")
+
+    def __init__(self, tree):
+        self.tree = tree
+        # (node, enclosing loops) pairs, outermost first.
+        self.fors = []
+        self.whiles = []
+        self.tries = []
+        self.functions = []
+        self.classes = []
+        # Scopes containing at least one loop of their own. A scope with none
+        # cannot produce a GL007 finding, and most functions have none, so this
+        # is what lets that rule skip them without walking them to find out.
+        self.loop_scopes = set()
+
+
+def index_python(tree):
+    """Build a `PythonIndex` from one breadth-first pass.
+
+    Breadth-first because that is `ast.walk`'s order, and the rules used to
+    read their nodes from `ast.walk` — keeping it means each rule still sees
+    its nodes in the order it always did.
+    """
+    index = PythonIndex(tree)
+    queue = deque([(tree, (), tree)])
+    while queue:
+        node, loops, scope = queue.popleft()
+        kind = type(node)
+        # Exact types, not isinstance: `AsyncFor` and `TryStar` are siblings of
+        # `For` and `Try` rather than subclasses, and the rules never matched
+        # them. This keeps that true rather than quietly widening them.
+        if kind is ast.For:
+            index.fors.append((node, loops))
+            index.loop_scopes.add(scope)
+            loops = (*loops, node)
+        elif kind is ast.While:
+            index.whiles.append((node, loops))
+            index.loop_scopes.add(scope)
+            loops = (*loops, node)
+        elif kind is ast.Try:
+            index.tries.append((node, loops))
+        elif kind is ast.FunctionDef or kind is ast.AsyncFunctionDef:
+            index.functions.append(node)
+        elif kind is ast.ClassDef:
+            index.classes.append(node)
+        # A nested def/class/lambda starts a scope of its own, which is the
+        # boundary `_walk_own` respects and the one GL007 judges names against.
+        child_scope = node if kind in _SCOPE_KINDS else scope
+        for child in ast.iter_child_nodes(node):
+            queue.append((child, loops, child_scope))
+    return index
+
+
 # A nested function, lambda or class body is its own scope: its statements and
 # its name bindings belong to it, not to the code that encloses it.
 SCOPE_BOUNDARIES = (ast.FunctionDef, ast.AsyncFunctionDef, ast.Lambda, ast.ClassDef)
@@ -801,6 +945,24 @@ def _walk_own(node):
             if isinstance(child, SCOPE_BOUNDARIES):
                 continue
             stack.append(child)
+
+
+def _walk_own_loops(node):
+    """`_walk_own`, pairing each node with the loops enclosing it in this scope.
+
+    Same reason `PythonIndex` carries a loop stack: asking "is this statement
+    inside a loop?" by re-walking the subtree of every loop is quadratic in
+    nesting, and the answer is already known on the way down.
+    """
+    stack = [(node, ())]
+    while stack:
+        cur, loops = stack.pop()
+        yield cur, loops
+        inner = (*loops, cur) if isinstance(cur, (ast.For, ast.While)) else loops
+        for child in ast.iter_child_nodes(cur):
+            if isinstance(child, SCOPE_BOUNDARIES):
+                continue
+            stack.append((child, inner))
 
 
 def _loop_can_exit(loop):
@@ -845,7 +1007,7 @@ def _nearest_loop(root, target):
     return found
 
 
-def _ast_busy_loop_findings(path, tree):
+def _ast_busy_loop_findings(path, index):
     """AST-based replacement for GL001 on Python: the regex version flags
     `while True:` unless "sleep" appears *anywhere* in the file, which both
     misses loops whose sleep is in an unrelated function and flags loops that
@@ -853,12 +1015,8 @@ def _ast_busy_loop_findings(path, tree):
     Walking the loop body directly for a real sleep call fixes both.
     """
     rule = RULES_BY_ID["GL001"]
-    for node in ast.walk(tree):
-        if not (
-            isinstance(node, ast.While)
-            and isinstance(node.test, ast.Constant)
-            and node.test.value is True
-        ):
+    for node, _ in index.whiles:
+        if not (isinstance(node.test, ast.Constant) and node.test.value is True):
             continue
         sleeps = any(
             isinstance(n, ast.Call)
@@ -874,7 +1032,7 @@ def _ast_busy_loop_findings(path, tree):
         yield _finding(rule, path, node.lineno)
 
 
-def _ast_nested_loop_findings(path, tree):
+def _ast_nested_loop_findings(path, index):
     """GL018: an inner `for` loop iterating over the same named collection as
     an enclosing `for` loop — a manual all-pairs O(n^2) scan (e.g. checking
     every element against every other). Only matches when both loops iterate
@@ -885,19 +1043,17 @@ def _ast_nested_loop_findings(path, tree):
     """
     rule = RULES_BY_ID["GL018"]
     seen = set()
-    for node in ast.walk(tree):
-        if not (isinstance(node, ast.For) and isinstance(node.iter, ast.Name)):
+    for node, enclosing in index.fors:
+        if not isinstance(node.iter, ast.Name) or node.lineno in seen:
             continue
-        for inner in ast.walk(node):
-            if (
-                inner is not node
-                and isinstance(inner, ast.For)
-                and isinstance(inner.iter, ast.Name)
-                and inner.iter.id == node.iter.id
-                and inner.lineno not in seen
-            ):
-                seen.add(inner.lineno)
-                yield _finding(rule, path, inner.lineno)
+        if any(
+            type(outer) is ast.For
+            and isinstance(outer.iter, ast.Name)
+            and outer.iter.id == node.iter.id
+            for outer in enclosing
+        ):
+            seen.add(node.lineno)
+            yield _finding(rule, path, node.lineno)
 
 
 def _is_tuple_swap(stmt):
@@ -917,35 +1073,28 @@ def _is_tuple_swap(stmt):
     )
 
 
-def _ast_bubble_sort_findings(path, tree):
+def _ast_bubble_sort_findings(path, index):
     """GL023: a `for` loop nested inside another `for` loop whose body
     contains an element swap — the textbook shape of a hand-rolled bubble or
     selection sort.
     """
     rule = RULES_BY_ID["GL023"]
     seen = set()
-    for node in ast.walk(tree):
-        if not isinstance(node, ast.For):
+    for node, enclosing in index.fors:
+        if node.lineno in seen or not any(type(outer) is ast.For for outer in enclosing):
             continue
-        for inner in ast.walk(node):
-            if inner is node or not isinstance(inner, ast.For) or inner.lineno in seen:
-                continue
-            if any(_is_tuple_swap(stmt) for stmt in ast.walk(inner)):
-                seen.add(inner.lineno)
-                yield _finding(rule, path, inner.lineno)
+        if any(_is_tuple_swap(stmt) for stmt in ast.walk(node)):
+            seen.add(node.lineno)
+            yield _finding(rule, path, node.lineno)
 
 
-def _ast_dict_iterator_findings(path, tree):
+def _ast_dict_iterator_findings(path, index):
     """GL030: `for k, v in d.items()` where the key or the value is discarded
     (bound to `_`) — the discarded half didn't need building/unpacking at all.
     """
     rule = RULES_BY_ID["GL030"]
-    for node in ast.walk(tree):
-        if not (
-            isinstance(node, ast.For)
-            and isinstance(node.target, ast.Tuple)
-            and len(node.target.elts) == 2
-        ):
+    for node, _ in index.fors:
+        if not (isinstance(node.target, ast.Tuple) and len(node.target.elts) == 2):
             continue
         if not (
             isinstance(node.iter, ast.Call)
@@ -1035,7 +1184,7 @@ def _names_bound_to_lists(nodes):
     return lists, scalars
 
 
-def _ast_quadratic_rebuild_findings(path, tree):
+def _ast_quadratic_rebuild_findings(path, index):
     """GL007: accumulating with `+`/`+=` inside a loop, which copies the whole
     sequence built so far on every iteration — O(n^2) allocation where
     `list.append` / `''.join` are linear.
@@ -1048,50 +1197,53 @@ def _ast_quadratic_rebuild_findings(path, tree):
     rule = RULES_BY_ID["GL007"]
     seen = set()
     # One pass per scope, each judged against only its own name bindings.
-    scopes = [tree] + [
-        n for n in ast.walk(tree) if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef))
-    ]
+    scopes = [index.tree, *index.functions]
     for scope in scopes:
-        own = list(_walk_own(scope))
-        list_names, scalar_names = _names_bound_to_lists(own)
-        for node in own:
-            if not isinstance(node, (ast.For, ast.While)):
+        # A scope with no loop of its own cannot produce a finding here, and
+        # most functions have none — so it is never walked at all.
+        if scope not in index.loop_scopes:
+            continue
+        # One walk per scope, not one per scope plus one per loop in it: every
+        # statement already knows which loops it sits inside.
+        own = list(_walk_own_loops(scope))
+        list_names, scalar_names = _names_bound_to_lists(node for node, _ in own)
+        for stmt, enclosing in own:
+            if not enclosing:
                 continue
-            for stmt in _walk_own(node):
-                if not isinstance(stmt, (ast.AugAssign, ast.Assign)) or stmt.lineno in seen:
+            if not isinstance(stmt, (ast.AugAssign, ast.Assign)) or stmt.lineno in seen:
+                continue
+            target = value = None
+            if isinstance(stmt, ast.AugAssign) and isinstance(stmt.op, ast.Add):
+                target, value = stmt.target, stmt.value
+            elif (
+                isinstance(stmt, ast.Assign)
+                and len(stmt.targets) == 1
+                and isinstance(stmt.value, ast.BinOp)
+                and isinstance(stmt.value.op, ast.Add)
+            ):
+                target, value = stmt.targets[0], stmt.value
+            if not isinstance(target, ast.Name):
+                continue
+            # `x = x + ...` only — `x = y + z` rebinds, not accumulates.
+            if isinstance(stmt, ast.Assign):
+                left = stmt.value.left
+                if not (isinstance(left, ast.Name) and left.id == target.id):
                     continue
-                target = value = None
-                if isinstance(stmt, ast.AugAssign) and isinstance(stmt.op, ast.Add):
-                    target, value = stmt.target, stmt.value
-                elif (
-                    isinstance(stmt, ast.Assign)
-                    and len(stmt.targets) == 1
-                    and isinstance(stmt.value, ast.BinOp)
-                    and isinstance(stmt.value.op, ast.Add)
-                ):
-                    target, value = stmt.targets[0], stmt.value
-                if not isinstance(target, ast.Name):
-                    continue
-                # `x = x + ...` only — `x = y + z` rebinds, not accumulates.
-                if isinstance(stmt, ast.Assign):
-                    left = stmt.value.left
-                    if not (isinstance(left, ast.Name) and left.id == target.id):
-                        continue
-                # A numeric counter (`total += 1`, `seen += len(chunk)`, `kwh +=
-                # watts * hours / 1000`) accumulates in O(1) — not a rebuild.
-                if _is_scalar_expr(value) or target.id in scalar_names:
-                    continue
-                # `xs += ...` is `list.extend` when xs is a list: in place,
-                # O(k), no copy. Either the list literal on the right proves it
-                # (`+=` a list is a TypeError for str/bytes/tuple), or the name
-                # was seen being initialised to one. Only the rebinding form
-                # (`xs = xs + [a]`) copies everything accumulated so far.
-                if isinstance(stmt, ast.AugAssign) and (
-                    isinstance(value, (ast.List, ast.ListComp)) or target.id in list_names
-                ):
-                    continue
-                seen.add(stmt.lineno)
-                yield _finding(rule, path, stmt.lineno)
+            # A numeric counter (`total += 1`, `seen += len(chunk)`, `kwh +=
+            # watts * hours / 1000`) accumulates in O(1) — not a rebuild.
+            if _is_scalar_expr(value) or target.id in scalar_names:
+                continue
+            # `xs += ...` is `list.extend` when xs is a list: in place,
+            # O(k), no copy. Either the list literal on the right proves it
+            # (`+=` a list is a TypeError for str/bytes/tuple), or the name
+            # was seen being initialised to one. Only the rebinding form
+            # (`xs = xs + [a]`) copies everything accumulated so far.
+            if isinstance(stmt, ast.AugAssign) and (
+                isinstance(value, (ast.List, ast.ListComp)) or target.id in list_names
+            ):
+                continue
+            seen.add(stmt.lineno)
+            yield _finding(rule, path, stmt.lineno)
 
 
 # Conversions whose failure is routinely used as a type test, where a
@@ -1121,7 +1273,7 @@ def _has_cheap_alternative(body):
     return False
 
 
-def _ast_try_in_loop_findings(path, tree):
+def _ast_try_in_loop_findings(path, index):
     """GL031: exceptions used as per-iteration control flow inside a loop —
     a handler whose whole body is `pass` or `continue`, i.e. the exception is
     expected to fire on ordinary input and the raise/unwind cost is paid every
@@ -1138,18 +1290,15 @@ def _ast_try_in_loop_findings(path, tree):
     """
     rule = RULES_BY_ID["GL031"]
     seen = set()
-    for node in ast.walk(tree):
-        if not isinstance(node, (ast.For, ast.While)):
+    for stmt, enclosing in index.tries:
+        if not enclosing or stmt.lineno in seen:
             continue
-        for stmt in ast.walk(node):
-            if not isinstance(stmt, ast.Try) or stmt.lineno in seen:
-                continue
-            swallowed = any(
-                all(isinstance(b, (ast.Pass, ast.Continue)) for b in h.body) for h in stmt.handlers
-            )
-            if swallowed and _has_cheap_alternative(stmt.body):
-                seen.add(stmt.lineno)
-                yield _finding(rule, path, stmt.lineno)
+        swallowed = any(
+            all(isinstance(b, (ast.Pass, ast.Continue)) for b in h.body) for h in stmt.handlers
+        )
+        if swallowed and _has_cheap_alternative(stmt.body):
+            seen.add(stmt.lineno)
+            yield _finding(rule, path, stmt.lineno)
 
 
 def _tf_resource_blocks(text, resource_type):
@@ -1388,26 +1537,29 @@ def scan_file(path, disabled=frozenset(), text=None):
     # this tree, and `ast.parse` on every Python file twice is exactly the kind
     # of waste this tool exists to point at.
     tree = _parse_python(path, text) if path.suffix == ".py" else None
-    if tree is not None:
-        code = _blank_python_docstrings(code, tree)
+    # Indexed once and shared, for the same reason the tree is parsed once: the
+    # docstring pass and all six AST rules want the same handful of node types.
+    index = index_python(tree) if tree is not None else None
+    if index is not None:
+        code = _blank_python_docstrings(code, index)
     # Rules about long-lived loops, applied to test code, only ever produce
     # noise: a test's tight wait is bounded by the test run and is the point.
     if _is_test_file(path):
         disabled = disabled | {"GL001", "GL002", "GL007"}
     ast_rules = {"GL001", "GL007", "GL018", "GL023", "GL030", "GL031"}
-    if ast_rules - disabled and tree is not None:
+    if ast_rules - disabled and index is not None:
         if "GL001" not in disabled:
-            yield from _ast_busy_loop_findings(path, tree)
+            yield from _ast_busy_loop_findings(path, index)
         if "GL007" not in disabled:
-            yield from _ast_quadratic_rebuild_findings(path, tree)
+            yield from _ast_quadratic_rebuild_findings(path, index)
         if "GL018" not in disabled:
-            yield from _ast_nested_loop_findings(path, tree)
+            yield from _ast_nested_loop_findings(path, index)
         if "GL023" not in disabled:
-            yield from _ast_bubble_sort_findings(path, tree)
+            yield from _ast_bubble_sort_findings(path, index)
         if "GL030" not in disabled:
-            yield from _ast_dict_iterator_findings(path, tree)
+            yield from _ast_dict_iterator_findings(path, index)
         if "GL031" not in disabled:
-            yield from _ast_try_in_loop_findings(path, tree)
+            yield from _ast_try_in_loop_findings(path, index)
     if path.suffix in (".tf", ".tofu"):
         if "GL013" not in disabled:
             yield from _tf_s3_lifecycle_findings(path, code)

@@ -1,3 +1,7 @@
+from pathlib import Path
+
+import pytest
+
 import greenlint
 from greenlint import load_config, main, scan
 
@@ -1129,3 +1133,113 @@ def test_is_ignored_matches_the_walkers_own_filtering(tmp_path):
     assert greenlint.is_ignored(tmp_path / "vendor" / "q.sql", cfg)
     assert not greenlint.is_ignored(tmp_path / "src" / "q.sql", cfg)
     assert not greenlint.is_ignored(tmp_path / "vendor" / "q.sql", {"ignore": []})
+
+
+# --- the shared AST index -------------------------------------------------
+# These lock in what the rules read off it. The rules used to walk the tree
+# themselves, six times over; nothing about their answers may depend on that
+# having become one walk.
+
+
+def test_index_python_collects_loops_functions_and_classes():
+    tree = greenlint._parse_python(Path("a.py"), SAMPLE)
+    index = greenlint.index_python(tree)
+    assert [node.lineno for node, _ in index.fors] == [4, 5, 9]
+    assert [node.lineno for node, _ in index.whiles] == [2]
+    assert [node.lineno for node, _ in index.tries] == [10]
+    assert [node.name for node in index.functions] == ["loops", "clean", "method"]
+    assert [node.name for node in index.classes] == ["K"]
+
+
+def test_index_python_records_the_loops_enclosing_each_node():
+    tree = greenlint._parse_python(Path("a.py"), SAMPLE)
+    index = greenlint.index_python(tree)
+    enclosing = {node.lineno: [loop.lineno for loop in loops] for node, loops in index.fors}
+    assert enclosing == {4: [], 5: [4], 9: []}
+    # The `try` on line 10 is inside the loop on line 9: that is exactly the
+    # question GL031 used to answer by walking every loop's subtree.
+    assert [[loop.lineno for loop in loops] for _, loops in index.tries] == [[9]]
+
+
+def test_index_python_marks_only_scopes_that_own_a_loop():
+    """GL007 skips a scope with no loop in it rather than walking it to find
+    out, and most functions have no loop."""
+    tree = greenlint._parse_python(Path("a.py"), SAMPLE)
+    index = greenlint.index_python(tree)
+    owners = {getattr(scope, "name", "<module>") for scope in index.loop_scopes}
+    assert owners == {"loops", "method"}
+    assert not any(getattr(scope, "name", "") == "clean" for scope in index.loop_scopes)
+
+
+SAMPLE = """\
+def loops(xs):
+    while True:
+        pass
+    for x in xs:
+        for y in xs:
+            pass
+class K:
+    def method(self, xs):
+        for x in xs:
+            try:
+                pass
+            except ValueError:
+                continue
+def clean(a, b):
+    return a + b
+"""
+
+
+# --- comment blanking -----------------------------------------------------
+# Rewritten to jump between interesting characters instead of visiting every
+# one. Verified against the previous implementation over ~158,000 generated
+# (text, language) pairs; these are the shapes worth keeping in the suite.
+
+
+@pytest.mark.parametrize(
+    ("name", "text", "expected"),
+    [
+        ("f.py", "x = 1  # SELECT * FROM t\n", "x = 1                   \n"),
+        # A docstring is prose; an ordinary string literal is a real query.
+        (
+            "f.py",
+            "'''SELECT * FROM t'''\nq = 'SELECT * FROM t'\n",
+            "'''SELECT * FROM t'''\nq = 'SELECT * FROM t'\n",
+        ),
+        # An apostrophe must not open a string that swallows the rest of the file.
+        ("f.sh", "echo don't # SELECT * FROM t\n", "echo don't                  \n"),
+        ("f.sql", "SELECT * FROM t; -- SELECT * FROM u\n", "SELECT * FROM t;                   \n"),
+        (
+            "f.js",
+            "/* SELECT * FROM t */ q('SELECT * FROM u') // SELECT * FROM v\n",
+            "                      q('SELECT * FROM u')                   \n",
+        ),
+        ("f.js", "/* unterminated SELECT * FROM t\n", "                               \n"),
+        # A quote is reset at the newline, so the next line's comment is seen.
+        (
+            "f.sh",
+            "a = 'unterminated\nb # SELECT * FROM t\n",
+            "a = 'unterminated\nb                  \n",
+        ),
+        ("f.py", "no comment token here at all\n", "no comment token here at all\n"),
+        # No comment syntax known for this extension: left alone entirely.
+        ("f.md", "# SELECT * FROM t\n", "# SELECT * FROM t\n"),
+    ],
+)
+def test_blank_comments_shapes(name, text, expected):
+    assert greenlint._blank_comments(text, Path(name)) == expected
+
+
+def test_blank_comments_preserves_length_and_newlines():
+    text = "a = 1  # one\nb = 2  /* two */ c\n# three\n"
+    for name in ("f.py", "f.js", "f.sql", "f.sh"):
+        blanked = greenlint._blank_comments(text, Path(name))
+        assert len(blanked) == len(text)
+        assert [i for i, c in enumerate(blanked) if c == "\n"] == [
+            i for i, c in enumerate(text) if c == "\n"
+        ]
+
+
+def test_blank_spans_returns_the_original_when_there_is_nothing_to_blank():
+    text = "unchanged\n"
+    assert greenlint._blank_spans(text, []) is text

@@ -119,6 +119,14 @@ and nothing else. Turn on `greenlint.trace` and the output channel prints the
 mix for every scan — `312 files in 74 ms (8 scanned, 304 reused from cache, 41
 skipped)` — so this is something you can check rather than take on trust.
 
+**The scan itself got cheaper.** The rules share one pass over each Python
+file's syntax tree instead of walking it once per rule, and the comment blanker
+jumps between the characters that matter instead of visiting every one. That is
+~2.8x on real Python code, for identical findings — see
+[`docs/architecture.md`](https://github.com/fabiocicerchia/greenlint/blob/main/docs/architecture.md).
+A 30,000-file tree takes ~9 s rather than ~23 s, and the second scan of it
+takes none of that.
+
 **Files no rule targets are never opened.** The set of extensions comes from the
 rule table itself, so it is exactly right and stays right as rules are added. In
 a normal repository this drops most of the tree — images, lockfiles, binaries —

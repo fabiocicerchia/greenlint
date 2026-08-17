@@ -51,6 +51,31 @@ than regex for anything shape-based. `_parse_python()` parses each `.py`
 file's AST once per scan and hands the same tree to every AST rule, rather
 than each rule re-parsing.
 
+Parsing once was only half of it: each rule then called `ast.walk(tree)` to
+find the handful of node types it cared about, so a scan walked every tree six
+or seven times over. Profiling put ~65% of a whole run inside
+`ast.iter_child_nodes`. `index_python()` now makes one breadth-first pass and
+collects what every rule needs — the loops, tries, functions and classes, each
+paired with the loops enclosing it, plus which scopes own a loop at all. Two
+consequences beyond the obvious one: "is this statement inside a loop?" is a
+lookup rather than a walk of every loop's subtree (which was quadratic in
+nesting depth), and GL007 skips a scope with no loop in it without walking it
+to find out — which is most functions. Breadth-first because that is
+`ast.walk`'s order, so each rule still sees its nodes in the order it did
+before.
+
+`_blank_comments()` is the other half of a scan's cost, and the only part
+whose work is per character rather than per match. It now jumps between the
+characters that can change anything — a quote, a comment token, a block opener
+— with `re` doing the skipping in C, and records spans to blank rather than
+editing a per-character copy of the file (`list(text)` is eight bytes of list
+for every byte of source, allocated for every file scanned). A file with no
+comment token in it returns immediately.
+
+Together these are ~2.8x on real Python with byte-identical findings; the
+rewrite was checked against the previous implementation over ~158,000
+generated (text, language) pairs plus every file in the standard library.
+
 Cross-language rules (e.g. GL002 sub-100ms polling, GL005 `SELECT *`) use one
 compiled regex with a `|`-separated alternative per language's idiom (Python
 `time.sleep()`, Go `time.Sleep()`, Rust `thread::sleep()`, bash `sleep`, PHP/
