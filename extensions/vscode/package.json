@@ -2,7 +2,7 @@
   "name": "greenlint",
   "displayName": "greenlint",
   "description": "Flags energy-wasteful code and config patterns as you type, with the reason each one wastes energy.",
-  "version": "0.1.5",
+  "version": "0.2.0",
   "publisher": "fabiocicerchia",
   "license": "Apache-2.0",
   "icon": "media/icon.png",
@@ -220,7 +220,7 @@
     "viewsWelcome": [
       {
         "view": "greenlint.findings",
-        "contents": "No findings yet.\n[Scan Workspace](command:greenlint.scanProject)\nOr open a file and start typing \u2014 greenlint scans the buffer as you go.",
+        "contents": "No findings yet.\n[Scan Workspace](command:greenlint.scanProject)\nOr open a file and start typing — greenlint scans the buffer as you go.",
         "when": "!greenlint.hasFindings"
       }
     ],

@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.2.0](https://github.com/fabiocicerchia/greenlint/compare/v0.1.5...v0.2.0) (2026-08-18)
+
+
+### Features
+
+* expose the scan API editors need ([#46](https://github.com/fabiocicerchia/greenlint/issues/46)) ([b20e6fa](https://github.com/fabiocicerchia/greenlint/commit/b20e6fad42b231ba337020ba40d2795e9bbdaaca))
+
 ## [0.1.5](https://github.com/fabiocicerchia/greenlint/compare/v0.1.4...v0.1.5) (2026-08-15)
 
 
