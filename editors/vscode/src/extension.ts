@@ -10,6 +10,7 @@ import {
   toDiagnostic,
 } from './diagnostics';
 import { ScanServer } from './engine';
+import { editorExcludeGlobs } from './excludes';
 import { FindingsProvider, type Grouping, type Scope, workspaceRelative } from './findingsView';
 import { renderReport } from './report';
 import { FindingStore } from './store';
@@ -60,6 +61,7 @@ class Controller implements vscode.Disposable {
   private lastSummary?: ScanSummary;
   private lastErrorShown?: string;
   private readonly warnedAboutWalkSize = new Set<string>();
+  private appliedExcludes = '';
   private projectScanRunning = false;
 
   constructor(private readonly context: vscode.ExtensionContext) {
@@ -91,6 +93,7 @@ class Controller implements vscode.Disposable {
     if (!this.settings.enable) {
       return;
     }
+    await this.applyExcludes();
     if (this.settings.scanProjectOnStartup) {
       await this.scanProject();
     }
@@ -164,7 +167,12 @@ class Controller implements vscode.Disposable {
       this.store.onDidChange((change) => this.render(change)),
 
       vscode.workspace.onDidChangeConfiguration((event) => {
-        if (event.affectsConfiguration('greenlint')) {
+        if (
+          event.affectsConfiguration('greenlint') ||
+          // Not greenlint's own settings, but they decide what it walks.
+          event.affectsConfiguration('files.exclude') ||
+          event.affectsConfiguration('search.exclude')
+        ) {
           void this.reconfigure();
         }
       }),
@@ -339,6 +347,7 @@ class Controller implements vscode.Disposable {
     this.projectScanRunning = true;
     const run = async (report?: (message: string) => void) => {
       await this.loadRuleLanguages();
+      await this.applyExcludes();
       // Unsaved buffers are what the developer is actually looking at; a scan
       // of their last-saved bytes would overwrite the truth with history.
       const dirty = new Set(
@@ -399,6 +408,46 @@ class Controller implements vscode.Disposable {
       this.refreshReport(true);
       this.updateStatus();
     }
+  }
+
+  /**
+   * Hand the scan server what the editor already excludes.
+   *
+   * Sent rather than asked for: the server has no way to read VS Code's
+   * settings, and these have to be in place before the first walk or it spends
+   * that walk in exactly the directories nobody wanted looked at. Cheap enough
+   * to re-check before every project scan, and a no-op when nothing moved.
+   */
+  private async applyExcludes(): Promise<void> {
+    const globs = this.excludeGlobs();
+    const fingerprint = globs.join('\n');
+    if (fingerprint === this.appliedExcludes) {
+      return;
+    }
+    try {
+      await this.server.configure(globs);
+      this.appliedExcludes = fingerprint;
+      this.log.appendLine(
+        globs.length === 0
+          ? '[greenlint] no editor excludes applied'
+          : `[greenlint] excluding ${globs.length} glob(s) from the editor's settings: ` +
+              `${globs.slice(0, 8).join(', ')}${globs.length > 8 ? ', …' : ''}`,
+      );
+    } catch (error) {
+      this.reportError(error);
+    }
+  }
+
+  private excludeGlobs(): string[] {
+    const globs = new Set<string>(this.settings.exclude);
+    if (this.settings.respectEditorExcludes) {
+      for (const folder of vscode.workspace.workspaceFolders ?? []) {
+        for (const glob of editorExcludeGlobs(folder)) {
+          globs.add(glob);
+        }
+      }
+    }
+    return [...globs].sort();
   }
 
   /**

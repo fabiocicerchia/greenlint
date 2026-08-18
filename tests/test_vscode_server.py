@@ -9,6 +9,7 @@ a file rewritten with identical contents must not run a rule.
 import importlib.util
 import io
 import json
+import os
 import subprocess
 import sys
 import types
@@ -351,3 +352,58 @@ def test_a_non_streaming_scan_still_returns_everything(server, tmp_path):
     assert response["streamed"] is False
     assert [f["rule"] for f in response["findings"]] == ["GL005"]
     assert response["summary"]["total"] == 1
+
+
+def test_configure_adds_ignore_globs_on_top_of_the_config(server, tmp_path):
+    """The editor's own exclude list, which greenlint has no way to read."""
+    write(tmp_path, "src/q.sql", "SELECT * FROM t;\n")
+    write(tmp_path, "dist/q.sql", "SELECT * FROM t;\n")
+    args = {"op": "scanProject", "root": str(tmp_path), "paths": [str(tmp_path)]}
+    assert len(ask(server, **args)["findings"]) == 2
+    assert ask(server, op="configure", ignore=["*/dist/*"])["ignore"] == ["*/dist/*"]
+    findings = ask(server, **args)["findings"]
+    assert [f["file"] for f in findings] == [str(tmp_path / "src" / "q.sql")]
+
+
+def test_configure_invalidates_what_was_cached_under_the_old_excludes(server, tmp_path):
+    """A cached finding is only valid for the excludes that produced it — the
+    same reason editing .greenlint.toml drops the cache."""
+    write(tmp_path, "dist/q.sql", "SELECT * FROM t;\n")
+    args = {"op": "scanProject", "root": str(tmp_path), "paths": [str(tmp_path)]}
+    assert ask(server, **args)["findings"]
+    ask(server, op="configure", ignore=["*/dist/*"])
+    assert ask(server, **args)["findings"] == []
+    # And back again, without a restart.
+    ask(server, op="configure", ignore=[])
+    assert ask(server, **args)["findings"]
+
+
+def test_configure_applies_to_a_single_buffer_too(server, tmp_path):
+    """An excluded file that happens to be open should not sprout squiggles;
+    the editor said it was not interesting."""
+    path = write(tmp_path, "dist/q.sql", "SELECT * FROM t;\n")
+    ask(server, op="configure", ignore=["*/dist/*"])
+    root = str(tmp_path)
+    assert ask(server, op="scanFile", path=str(path), root=root)["findings"] == []
+    text = ask(server, op="scanText", path=str(path), root=root, text="SELECT * FROM t;\n")
+    assert text["findings"] == []
+
+
+def test_configure_lets_the_walk_skip_the_directory_entirely(server, tmp_path, monkeypatch):
+    """The point of the exercise: an excluded directory is never opened, not
+    opened and then filtered."""
+    write(tmp_path, "src/q.sql", "SELECT * FROM t;\n")
+    for index in range(20):
+        write(tmp_path, f"dist/f{index}.sql", "SELECT * FROM t;\n")
+    ask(server, op="configure", ignore=["*/dist/*"])
+    opened = []
+    real_scandir = os.scandir
+
+    def watched(path):
+        opened.append(str(path))
+        return real_scandir(path)
+
+    monkeypatch.setattr(os, "scandir", watched)
+    stats = ask(server, op="scanProject", root=str(tmp_path), paths=[str(tmp_path)])["stats"]
+    assert stats["files"] == 1
+    assert not any("dist" in path for path in opened)

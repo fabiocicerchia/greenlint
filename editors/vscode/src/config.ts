@@ -13,6 +13,8 @@ export interface Settings {
   scanProjectOnStartup: boolean;
   projectScanIntervalMinutes: number;
   maxFileBytes: number;
+  respectEditorExcludes: boolean;
+  exclude: string[];
   cacheEntries: number;
   severityLevels: Record<Severity, vscode.DiagnosticSeverity>;
   showCo2eEstimate: boolean;
@@ -51,6 +53,8 @@ export function readSettings(scope?: vscode.Uri): Settings {
     scanProjectOnStartup: config.get<boolean>('scanProjectOnStartup', true),
     projectScanIntervalMinutes: config.get<number>('projectScanIntervalMinutes', 0),
     maxFileBytes: config.get<number>('maxFileBytes', 1_000_000),
+    respectEditorExcludes: config.get<boolean>('respectEditorExcludes', true),
+    exclude: config.get<string[]>('exclude', []),
     cacheEntries: config.get<number>('cacheEntries', 4096),
     severityLevels,
     showCo2eEstimate: config.get<boolean>('showCo2eEstimate', true),

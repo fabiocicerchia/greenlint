@@ -29,6 +29,8 @@ Ops:
   scanProject{root, paths, stream}        -> findings for the whole tree, in
                                              progress-event batches when
                                              streaming, plus an end summary
+  configure  {ignore:[glob,...]}          -> extra ignore globs, on top of
+                                             .greenlint.toml
   invalidate {paths}|{}                   -> drop cache entries (or all)
   cancel     {cancel: id}                 -> stop an in-flight project scan
 """
@@ -204,6 +206,10 @@ class Server:
         self.config_fingerprint = None
         self.cancelled = set()
         self.deferred = []
+        # Ignore globs the client adds on top of `.greenlint.toml` — the
+        # editor's own exclude list, which greenlint has no way to know about.
+        self.extra_ignore = []
+        self.ignore_generation = 0
 
     # --- transport -------------------------------------------------------
 
@@ -233,7 +239,9 @@ class Server:
         Stat-gated rather than cached outright: one stat per request is free
         next to a scan, and "my config edit did nothing" is a bug that costs an
         afternoon. A changed config invalidates every cached finding, since
-        `disable` changes what a scan would have produced.
+        `disable` changes what a scan would have produced — and so does a
+        changed client exclude list, which is why the generation counter is
+        part of the cache key.
         """
         cfg_path = Path(root) / self.gl.CONFIG_FILENAME if root else None
         try:
@@ -241,12 +249,20 @@ class Server:
         except OSError:
             stamp = None
         cached = self.configs.get(root)
-        if cached is not None and cached[0] == stamp:
+        if cached is not None and cached[0] == (stamp, self.ignore_generation):
             return cached[1]
         if cfg_path is not None and stamp is not None:
             config = self.gl.load_config(str(cfg_path))
         else:
             config = {"disable": set(), "ignore": []}
+        # The client's excludes are merged in rather than applied separately,
+        # so every path that consults `ignore` — the walk's directory pruning,
+        # a single buffer scan — honours them without knowing they came from
+        # somewhere else.
+        config = {
+            "disable": config["disable"],
+            "ignore": [*config["ignore"], *self.extra_ignore],
+        }
         fingerprint = digest(
             json.dumps(
                 {"disable": sorted(config["disable"]), "ignore": list(config["ignore"])},
@@ -256,7 +272,7 @@ class Server:
         if fingerprint != self.config_fingerprint:
             self.cache.clear()
             self.config_fingerprint = fingerprint
-        self.configs[root] = (stamp, config)
+        self.configs[root] = ((stamp, self.ignore_generation), config)
         return config
 
     # --- scanning --------------------------------------------------------
@@ -451,6 +467,14 @@ class Server:
             return {"findings": found, "source": how}
         if op == "scanProject":
             return self.scan_project(request)
+        if op == "configure":
+            ignore = [str(pattern) for pattern in request.get("ignore") or []]
+            if ignore != self.extra_ignore:
+                self.extra_ignore = ignore
+                self.ignore_generation += 1
+                self.configs.clear()
+                self.cache.clear()
+            return {"ignore": self.extra_ignore}
         if op == "invalidate":
             paths = request.get("paths")
             if paths:

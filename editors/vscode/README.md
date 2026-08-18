@@ -80,6 +80,8 @@ anyone maintaining a floor.
 | `greenlint.scanProjectOnStartup` | `true` | Populate the panel before you open a file. |
 | `greenlint.projectScanIntervalMinutes` | `0` (off) | Periodic full rescan. See below — you probably do not want this. |
 | `greenlint.maxFileBytes` | `1000000` | Skip files bigger than this. |
+| `greenlint.respectEditorExcludes` | `true` | Skip whatever `files.exclude` and `search.exclude` already hide. |
+| `greenlint.exclude` | `[]` | Extra ignore globs for the editor only. |
 | `greenlint.cacheEntries` | `4096` | Files the scan server keeps results for. |
 | `greenlint.severityLevels` | high→Warning, medium→Information, low→Hint | How severities become squiggles. |
 | `greenlint.showCo2eEstimate` | `true` | Include the CO2e hint in hovers and the report. |
@@ -132,6 +134,22 @@ rule table itself, so it is exactly right and stays right as rules are added. In
 a normal repository this drops most of the tree — images, lockfiles, binaries —
 before any I/O. `greenlint.maxFileBytes` drops the vendored megabytes on top of
 that, and `.greenlint.toml`'s `ignore` globs drop whatever you say they do.
+
+**And nor are the directories you already told VS Code to ignore.** Whatever
+`files.exclude` and `search.exclude` hide — `dist`, `.venv`, `node_modules`,
+`__pycache__`, whatever you have added — is handed to the scanner as ignore
+globs, and a directory covered by one is *skipped without being opened* rather
+than listed and then discarded. `.git` and `node_modules` are always skipped
+this way. Turn it off with `greenlint.respectEditorExcludes`, and add editor-only
+globs with `greenlint.exclude`.
+
+Worth knowing which knob to reach for. `.greenlint.toml`'s `ignore` is the
+shared one: CI reads the same file, so a path excluded there is excluded
+everywhere and stays that way. The editor excludes only narrow what *this*
+window walks — useful for local build output, and deliberately not something
+that can quietly stop CI from checking a directory. Excluded files get no
+diagnostics even when you open one directly, so the panel and the squiggles
+agree about what is in scope.
 
 **Bursts collapse.** A `git checkout` fires hundreds of file events. They are
 batched for 1.5 s, and past 50 files the extension stops scanning them

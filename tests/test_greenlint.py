@@ -1,3 +1,4 @@
+import os
 from pathlib import Path
 
 import pytest
@@ -1243,3 +1244,99 @@ def test_blank_comments_preserves_length_and_newlines():
 def test_blank_spans_returns_the_original_when_there_is_nothing_to_blank():
     text = "unchanged\n"
     assert greenlint._blank_spans(text, []) is text
+
+
+# --- excludes and the pruning walk ---------------------------------------
+
+
+def test_cli_exclude_flag_skips_matching_paths(tmp_path, capsys):
+    write(tmp_path, "src/q.sql", "SELECT * FROM t;\n")
+    write(tmp_path, "vendor/q.sql", "SELECT * FROM t;\n")
+    main([str(tmp_path), "--config", str(tmp_path / "none.toml"), "--exclude", "*/vendor/*"])
+    out = capsys.readouterr().out
+    assert "1 finding(s)" in out
+    assert "vendor" not in out
+
+
+def test_cli_exclude_is_repeatable_and_adds_to_the_config(tmp_path, capsys):
+    for name in ("src/q.sql", "vendor/q.sql", "dist/q.sql", "build/q.sql"):
+        write(tmp_path, name, "SELECT * FROM t;\n")
+    cfg = write(tmp_path, ".greenlint.toml", 'ignore = ["*/build/*"]\n')
+    main(
+        [
+            str(tmp_path),
+            "--config",
+            str(cfg),
+            "--exclude",
+            "*/vendor/*",
+            "--exclude",
+            "*/dist/*",
+        ]
+    )
+    out = capsys.readouterr().out
+    assert "1 finding(s)" in out  # only src/ survives config + both flags
+
+
+def test_prunable_bases_only_takes_patterns_that_cover_a_whole_directory():
+    """Pruning on a pattern that does not cover everything below it would stop
+    scanning files that are not ignored — silently."""
+    assert greenlint.prunable_bases(["*/vendor/*"]) == ["*/vendor"]
+    assert greenlint.prunable_bases(["*/vendor/**"]) == ["*/vendor"]
+    # Covers only some of the directory.
+    assert greenlint.prunable_bases(["*/vendor/*.py"]) == []
+    # Covers the directory entry itself, but nothing inside it.
+    assert greenlint.prunable_bases(["*/vendor"]) == []
+    assert greenlint.prunable_bases(["*"]) == []
+
+
+def test_walk_files_never_descends_into_pruned_directories(tmp_path, monkeypatch):
+    write(tmp_path, "src/app.py", "x = 1\n")
+    write(tmp_path, "node_modules/pkg/index.js", "x\n")
+    write(tmp_path, ".git/objects/ab/cdef", "x\n")
+    write(tmp_path, "vendor/lib/thing.js", "x\n")
+
+    opened = []
+    real_scandir = os.scandir
+
+    def watched(path):
+        opened.append(str(path))
+        return real_scandir(path)
+
+    monkeypatch.setattr(os, "scandir", watched)
+    config = {"disable": set(), "ignore": ["*/vendor/*"]}
+    files = [f.name for f in greenlint.iter_files([str(tmp_path)], config)]
+    assert files == ["app.py"]
+    # Not merely filtered afterwards — never opened.
+    assert not any("node_modules" in p or ".git" in p or "vendor" in p for p in opened)
+
+
+def test_walk_files_matches_what_rglob_selected(tmp_path):
+    """The pruning walk replaced `Path.rglob`; it must still pick the same
+    files, symlinks and all."""
+    write(tmp_path, "a.py", "x = 1\n")
+    write(tmp_path, "sub/b.py", "x = 1\n")
+    (tmp_path / "link.py").symlink_to(tmp_path / "a.py")
+    (tmp_path / "linkdir").symlink_to(tmp_path / "sub")
+    (tmp_path / "broken.py").symlink_to(tmp_path / "nope.py")
+    walked = {f.relative_to(tmp_path).as_posix() for f in greenlint.walk_files(tmp_path)}
+    rglobbed = {
+        f.relative_to(tmp_path).as_posix()
+        for f in tmp_path.rglob("*")
+        if f.is_file() and ".git" not in f.parts and "node_modules" not in f.parts
+    }
+    assert walked == rglobbed
+    # Symlinked file yielded; symlinked directory not followed; broken one skipped.
+    assert walked == {"a.py", "sub/b.py", "link.py"}
+
+
+def test_walk_files_survives_an_unreadable_directory(tmp_path):
+    write(tmp_path, "ok/a.py", "x = 1\n")
+    locked = tmp_path / "locked"
+    locked.mkdir()
+    (locked / "b.py").write_text("x = 1\n")
+    locked.chmod(0o000)
+    try:
+        names = {f.name for f in greenlint.walk_files(tmp_path)}
+        assert "a.py" in names
+    finally:
+        locked.chmod(0o755)

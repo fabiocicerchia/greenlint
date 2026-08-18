@@ -439,6 +439,13 @@ export class ScanServer implements vscode.Disposable {
     return response.rules;
   }
 
+  /** Ignore globs on top of `.greenlint.toml`, for what the editor already
+   * knows is not your code. Applied to every scan until changed. */
+  async configure(ignore: string[]): Promise<string[]> {
+    const response = await this.call<{ ignore: string[] }>('configure', { ignore });
+    return response.ignore;
+  }
+
   async invalidate(paths?: string[]): Promise<void> {
     if (!this.running) {
       return;

@@ -8,6 +8,7 @@ and what to do instead.
   greenlint src/
   greenlint --list-rules
   greenlint src/ --format json --fail-on-findings
+  greenlint . --exclude '*/vendor/*' --exclude '*/dist/*'
 """
 
 import argparse
@@ -15,6 +16,7 @@ import ast
 import fnmatch
 import functools
 import json
+import os
 import re
 import sys
 import tomllib
@@ -1591,14 +1593,20 @@ def scan_file(path, disabled=frozenset(), text=None):
             yield _finding(rule, path, line)
 
 
+def _matches_any(rel, ignore):
+    """Match a posix path string against ignore globs.
+
+    Tried both as given and with a leading `/`. `greenlint .` produces
+    `tests/x.py`, which `*/tests/*` cannot match — so the obvious way to write
+    an ignore glob silently did nothing, including in greenlint's own
+    .greenlint.toml. Trying both keeps bare patterns like `tests/*` working too.
+    """
+    forms = (rel, rel if rel.startswith("/") else "/" + rel)
+    return any(fnmatch.fnmatch(s, pat) for pat in ignore for s in forms)
+
+
 def is_ignored(path, config=None):
     """True if an `ignore` glob covers this path.
-
-    Matched against the path both as given and with a leading `/`.
-    `greenlint .` produces `tests/x.py`, which `*/tests/*` cannot match — so the
-    obvious way to write an ignore glob silently did nothing, including in
-    greenlint's own .greenlint.toml. Trying both keeps bare patterns like
-    `tests/*` working too.
 
     Its own function because a walk is not the only caller: the editor
     extension scans one open buffer at a time, and a file the CLI ignores must
@@ -1608,9 +1616,62 @@ def is_ignored(path, config=None):
     ignore = (config or {}).get("ignore") or []
     if not ignore:
         return False
-    rel = Path(path).as_posix()
-    forms = (rel, rel if rel.startswith("/") else "/" + rel)
-    return any(fnmatch.fnmatch(s, pat) for pat in ignore for s in forms)
+    return _matches_any(Path(path).as_posix(), ignore)
+
+
+def prunable_bases(ignore):
+    """The `<base>` of every ignore glob shaped `<base>/*`, which are the only
+    ones a walk can act on before descending.
+
+    `<base>/*` covers everything below `<base>`, because fnmatch's `*` crosses
+    `/` — so a directory matching `<base>` can be skipped whole. Nothing else
+    can: `*/vendor/*.py` covers only part of the directory, and `*/vendor`
+    covers the directory entry itself but nothing inside it. Getting this wrong
+    in the permissive direction would silently stop scanning files that are not
+    ignored, so the test is on the shape of the pattern rather than on a guess
+    about what it might match.
+    """
+    bases = []
+    for pattern in ignore:
+        stripped = pattern.rstrip("*")
+        if stripped != pattern and stripped.endswith("/") and len(stripped) > 1:
+            bases.append(stripped[:-1])
+    return bases
+
+
+# Directories that are never worth walking into: version-control internals and
+# installed dependencies, neither of which is code anyone here is writing.
+PRUNED_DIR_NAMES = frozenset({".git", "node_modules"})
+
+
+def walk_files(root, prune_bases=()):
+    """Yield every file under `root`, never descending into a pruned directory.
+
+    `Path.rglob("*")` walks the whole tree and leaves the caller to filter, so
+    `.git` and `node_modules` were listed in full and then thrown away — the two
+    directories most likely to contain more files than the project does. This
+    skips them at the directory, so they are never read.
+
+    Symlinked directories are not followed and symlinked files are yielded,
+    which is what `rglob` did.
+    """
+    stack = [Path(root)]
+    while stack:
+        current = stack.pop()
+        try:
+            with os.scandir(current) as entries:
+                for entry in entries:
+                    child = current / entry.name
+                    if entry.is_dir(follow_symlinks=False):
+                        if entry.name in PRUNED_DIR_NAMES:
+                            continue
+                        if prune_bases and _matches_any(child.as_posix(), prune_bases):
+                            continue
+                        stack.append(child)
+                    elif entry.is_file():
+                        yield child
+        except OSError:
+            continue  # unreadable directory: nothing to scan and nothing to say
 
 
 def iter_files(paths, config=None):
@@ -1623,20 +1684,10 @@ def iter_files(paths, config=None):
     disagreement nobody debugs, they just stop trusting the tool.
     """
     config = config or {"disable": set(), "ignore": []}
+    prune_bases = prunable_bases(config["ignore"])
     for root in paths:
         p = Path(root)
-        # Lazily: this used to build the whole recursive listing before yielding
-        # anything, so pointing it at a large tree bought a long silence and a
-        # list of every path in it before the first file was even looked at.
-        files = (
-            iter([p])
-            if p.is_file()
-            else (
-                f
-                for f in p.rglob("*")
-                if f.is_file() and ".git" not in f.parts and "node_modules" not in f.parts
-            )
-        )
+        files = iter([p]) if p.is_file() else walk_files(p, prune_bases)
         for f in files:
             if is_ignored(f, config):
                 continue
@@ -1665,6 +1716,16 @@ def main(argv=None):
     p.add_argument("--format", choices=["text", "json", "github"], default="text")
     p.add_argument("--fail-on-findings", action="store_true")
     p.add_argument("--config", help=f"path to config (default: ./{CONFIG_FILENAME} if present)")
+    p.add_argument(
+        "--exclude",
+        action="append",
+        metavar="GLOB",
+        # Same globs and same matching as `ignore` in the config, which is the
+        # point: a caller that knows what to skip — an editor with its own
+        # exclude list, a CI job scanning one subtree — should say so in the
+        # vocabulary the project already uses, not a second one.
+        help="skip paths matching this glob; repeatable, added to `ignore` from the config",
+    )
     args = p.parse_args(argv)
 
     if args.list_rules:
@@ -1674,7 +1735,10 @@ def main(argv=None):
             )
         return 0
 
-    findings = scan(args.paths or ["."], load_config(args.config))
+    config = load_config(args.config)
+    if args.exclude:
+        config["ignore"] = [*config["ignore"], *args.exclude]
+    findings = scan(args.paths or ["."], config)
     if args.format == "json":
         json.dump(findings, sys.stdout, indent=2)
     elif args.format == "github":

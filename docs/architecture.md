@@ -128,5 +128,26 @@ counts per severity, per rule and per file, and deliberately not a single
 score: the CO2e hints describe different physical quantities, so summing them
 would produce a number with no unit.
 
+The walk prunes rather than filters. `Path.rglob("*")` lists a whole tree and
+leaves the caller to discard what it does not want, so `.git` and
+`node_modules` — the two directories most likely to hold more files than the
+project does — were read in full and then thrown away. `walk_files()` uses
+`os.scandir` and skips them at the directory. Ignore globs prune too, but only
+those shaped `<base>/*`: that form covers everything below `<base>` because
+fnmatch's `*` crosses `/`, whereas `*/vendor/*.py` covers only part of a
+directory and `*/vendor` covers the entry but nothing inside it. `prunable_bases()`
+decides on the shape of the pattern rather than on a guess about what it might
+match, because being wrong in the permissive direction would silently stop
+scanning files that are not ignored.
+
+`--exclude GLOB` (repeatable) adds ignore globs from the command line, in the
+same vocabulary and with the same matching as `ignore` in the config. It exists
+because a caller can know things the config cannot: the editor extension passes
+VS Code's `files.exclude` and `search.exclude` through it (as a `configure`
+request to the scan server), so the editor stops walking the directories it is
+already hiding from you. That is deliberately a narrowing of what one window
+looks at and not a change to what CI checks — `.greenlint.toml` remains the
+setting both read.
+
 Record further significant choices here (or in a `docs/adr/` folder if they
 pile up).

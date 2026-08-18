@@ -49,6 +49,7 @@ greenlint .                     # scan the current repo
 greenlint --list-rules          # show every rule it knows
 greenlint . --fail-on-findings  # exit non-zero if anything is found (CI gate)
 greenlint . --format json       # machine-readable output
+greenlint . --exclude '*/dist/*'  # skip paths, on top of .greenlint.toml
 ```
 
 More in [`docs/getting-started.md`](docs/getting-started.md).

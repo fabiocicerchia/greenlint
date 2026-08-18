@@ -2,7 +2,7 @@
   "name": "greenlint",
   "displayName": "greenlint",
   "description": "Flags energy-wasteful code and config patterns as you type, with the reason each one wastes energy.",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "publisher": "fabiocicerchia",
   "license": "Apache-2.0",
   "icon": "media/icon.png",
@@ -113,6 +113,19 @@
           "default": 1000000,
           "minimum": 1024,
           "description": "Skip files larger than this. A generated or vendored megabyte costs real time to scan and is rarely yours to fix."
+        },
+        "greenlint.respectEditorExcludes": {
+          "type": "boolean",
+          "default": true,
+          "description": "Skip what VS Code already excludes (files.exclude and search.exclude). The editor knows which folders are not your code; without this greenlint walks them anyway."
+        },
+        "greenlint.exclude": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": [],
+          "markdownDescription": "Extra ignore globs for the editor only, on top of `.greenlint.toml`. Same glob syntax as `ignore` there: a pattern shaped `*/dist/*` lets the walk skip the directory outright rather than filtering its files one by one. Prefer `.greenlint.toml` for anything CI should skip too."
         },
         "greenlint.cacheEntries": {
           "type": "integer",
@@ -262,7 +275,7 @@
     "viewsWelcome": [
       {
         "view": "greenlint.findings",
-        "contents": "No findings yet.\n[Scan Workspace](command:greenlint.scanProject)\nOr open a file and start typing — greenlint scans the buffer as you go.",
+        "contents": "No findings yet.\n[Scan Workspace](command:greenlint.scanProject)\nOr open a file and start typing \u2014 greenlint scans the buffer as you go.",
         "when": "!greenlint.hasFindings"
       }
     ],

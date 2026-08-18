@@ -56,7 +56,12 @@ not wasting energy, so it does not:
   deletions and config edits all arrive as events, so a timer could only
   re-examine files nothing has touched;
 - **files no rule targets are never opened**, with the extension set derived
-  from the rule table itself.
+  from the rule table itself;
+- **the editor's own excludes are honoured** — whatever `files.exclude` and
+  `search.exclude` hide is skipped, and a directory they cover is never opened
+  rather than opened and discarded. `.greenlint.toml`'s `ignore` stays the
+  shared setting that CI reads too; the editor excludes only narrow this
+  window.
 
 Set `greenlint.trace` and the output channel prints the mix behind every scan
 (`312 files in 74 ms (8 scanned, 304 reused from cache, 41 skipped)`), so this
