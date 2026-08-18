@@ -2,7 +2,7 @@
 
 ## VS Code
 
-The extension in [`editors/vscode/`](https://github.com/fabiocicerchia/greenlint/tree/main/editors/vscode)
+The extension in [`extensions/vscode/`](https://github.com/fabiocicerchia/greenlint/tree/main/extensions/vscode)
 runs the same rule set as the CLI, while you type.
 
 - squiggles on the offending line, with a hover explaining what was found, what
@@ -66,5 +66,5 @@ Set `greenlint.trace` and the output channel prints the mix behind every scan
 is checkable rather than a claim.
 
 The extension's own
-[README](https://github.com/fabiocicerchia/greenlint/blob/main/editors/vscode/README.md)
+[README](https://github.com/fabiocicerchia/greenlint/blob/main/extensions/vscode/README.md)
 documents every setting and what to change on a very large repository.

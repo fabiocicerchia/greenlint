@@ -57,7 +57,7 @@ More in [`docs/getting-started.md`](docs/getting-started.md).
 
 ## In your editor
 
-[`editors/vscode/`](editors/vscode/) is a VS Code extension running the same
+[`extensions/vscode/`](extensions/vscode/) is a VS Code extension running the same
 rule set as you type: squiggles with a hover explaining what to do instead, a
 Findings panel scoped to the file or the whole project, and an HTML report. It
 drives `greenlint.py` itself through a warm scan server with a stat+hash cache,

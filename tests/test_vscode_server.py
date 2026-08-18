@@ -19,7 +19,9 @@ import pytest
 
 import greenlint
 
-SERVER_PATH = Path(__file__).resolve().parent.parent / "editors/vscode/server/greenlint_server.py"
+SERVER_PATH = (
+    Path(__file__).resolve().parent.parent / "extensions/vscode/server/greenlint_server.py"
+)
 
 
 def load_server_module():

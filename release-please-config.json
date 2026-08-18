@@ -8,17 +8,17 @@
       "extra-files": [
         {
           "type": "json",
-          "path": "editors/vscode/package.json",
+          "path": "extensions/vscode/package.json",
           "jsonpath": "$.version"
         },
         {
           "type": "json",
-          "path": "editors/vscode/package-lock.json",
+          "path": "extensions/vscode/package-lock.json",
           "jsonpath": "$.version"
         },
         {
           "type": "json",
-          "path": "editors/vscode/package-lock.json",
+          "path": "extensions/vscode/package-lock.json",
           "jsonpath": "$.packages[''].version"
         }
       ]

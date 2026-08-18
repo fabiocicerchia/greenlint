@@ -9,7 +9,7 @@
   "repository": {
     "type": "git",
     "url": "https://github.com/fabiocicerchia/greenlint.git",
-    "directory": "editors/vscode"
+    "directory": "extensions/vscode"
   },
   "homepage": "https://github.com/fabiocicerchia/greenlint",
   "bugs": {

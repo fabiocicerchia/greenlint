@@ -42,7 +42,7 @@ jobs:
     permissions:
       contents: write  # attach the VSIX to the release
     env:
-      EXT: editors/vscode
+      EXT: extensions/vscode
       VSIX_NAME: greenlint
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
@@ -51,7 +51,7 @@ jobs:
         with:
           node-version: "22"
           cache: npm
-          cache-dependency-path: editors/vscode/package-lock.json
+          cache-dependency-path: extensions/vscode/package-lock.json
 
       - name: Resolve the version
         id: version

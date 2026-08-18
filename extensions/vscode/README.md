@@ -213,7 +213,7 @@ produce a number with no unit and a false air of precision.
 ## Development
 
 ```sh
-cd editors/vscode
+cd extensions/vscode
 npm install
 npm run build       # or: npm run watch
 ```

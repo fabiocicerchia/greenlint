@@ -1737,7 +1737,7 @@ def iter_files(paths, config=None):
     """Yield every file under `paths` that the config does not ignore.
 
     Split out of `scan()` so that other front ends — the editor extension in
-    `editors/vscode/`, which walks the tree itself to cache per file — select
+    `extensions/vscode/`, which walks the tree itself to cache per file — select
     exactly the same files the CLI does. Two copies of this logic would drift,
     and a file the CLI ignores still being flagged in the editor is the kind of
     disagreement nobody debugs, they just stop trusting the tool.

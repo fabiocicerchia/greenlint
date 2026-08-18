@@ -87,7 +87,7 @@ literal, whose text looks the same regardless of the host language.
 
 ## Editor integration
 
-`editors/vscode/` holds a VS Code extension. It runs the same `RULES` table
+`extensions/vscode/` holds a VS Code extension. It runs the same `RULES` table
 rather than reimplementing anything: there is one rule set, and a rule added to
 `greenlint.py` appears in the editor with no change on the other side.
 
@@ -110,7 +110,7 @@ Three small pieces of the module exist for it, and only for it:
   reading a PNG and matching nothing is wasted I/O, but changing what the CLI
   touches is a bigger decision than making a background scan cheap.
 
-`editors/vscode/server/greenlint_server.py` is a long-lived process speaking
+`extensions/vscode/server/greenlint_server.py` is a long-lived process speaking
 newline-delimited JSON over stdio. It exists because a CLI run spends ~100 ms on
 interpreter startup and regex compilation before reading a byte — per save that
 is tolerable, per keystroke it is the whole cost — and because a cache is only
