@@ -48,6 +48,8 @@ jobs:
         run: npm ci
       - name: Typecheck and compile
         run: npm run compile
+      - name: Test
+        run: npm test
 
   build:
     runs-on: ubuntu-latest

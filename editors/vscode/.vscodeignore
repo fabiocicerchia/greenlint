@@ -2,6 +2,7 @@
 .gitignore
 node_modules/**
 src/**
+esbuild.mjs
 tsconfig.json
-out/**/*.map
+out-tsc/**
 **/__pycache__/**

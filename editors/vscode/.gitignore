@@ -1,5 +1,6 @@
 node_modules/
 out/
+out-tsc/
 *.vsix
 # Copied from the repo root by `npm run package`; the root LICENSE is the one
 # under version control.

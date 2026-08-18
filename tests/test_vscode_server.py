@@ -408,3 +408,50 @@ def test_configure_lets_the_walk_skip_the_directory_entirely(server, tmp_path, m
     stats = ask(server, op="scanProject", root=str(tmp_path), paths=[str(tmp_path)])["stats"]
     assert stats["files"] == 1
     assert not any("dist" in path for path in opened)
+
+
+def test_write_baseline_quietens_the_findings_it_recorded(server, tmp_path):
+    write(tmp_path, "src/q.sql", "SELECT * FROM t;\n")
+    args = {"op": "scanProject", "root": str(tmp_path), "paths": [str(tmp_path)]}
+    assert len(ask(server, **args)["findings"]) == 1
+    written = ask(server, op="writeBaseline", root=str(tmp_path))
+    assert written["accepted"] == 1
+    assert ask(server, **args)["findings"] == []
+    # And a file the baseline never saw is still reported.
+    write(tmp_path, "src/new.sql", "SELECT * FROM u;\n")
+    assert len(ask(server, **args)["findings"]) == 1
+
+
+def test_a_baselined_finding_is_quiet_in_an_open_buffer_too(server, tmp_path):
+    """Otherwise the panel and the squiggles disagree about the same line."""
+    path = write(tmp_path, "q.sql", "SELECT * FROM t;\n")
+    root = str(tmp_path)
+    ask(server, op="writeBaseline", root=root)
+    assert ask(server, op="scanFile", path=str(path), root=root)["findings"] == []
+    text = ask(server, op="scanText", path=str(path), root=root, text="SELECT * FROM t;\n")
+    assert text["findings"] == []
+
+
+def test_the_cache_survives_a_baseline_change(server, tmp_path):
+    """Findings are cached unfiltered and the baseline is applied on the way
+    out, so accepting one costs a repaint rather than a rescan of the tree."""
+    write(tmp_path, "q.sql", "SELECT * FROM t;\n")
+    args = {"op": "scanProject", "root": str(tmp_path), "paths": [str(tmp_path)]}
+    ask(server, **args)
+    ask(server, op="writeBaseline", root=str(tmp_path))
+    stats = ask(server, **args)["stats"]
+    # Nothing re-read: the baseline file itself is new in the tree, but no rule
+    # targets .json so it is skipped rather than scanned.
+    assert stats["scanned"] == 0
+    assert stats["reusedFromStat"] >= 1
+
+
+def test_cancelling_a_project_scan_stops_the_walk(server, tmp_path):
+    for index in range(200):
+        write(tmp_path, f"f{index}.sql", "SELECT * FROM t;\n")
+    # Queued ahead of the scan, so the pump between batches picks it up.
+    server.inbox.put(json.dumps({"id": 2, "op": "cancel", "cancel": 1}))
+    server.dispatch({"id": 1, "op": "scanProject", "root": str(tmp_path), "paths": [str(tmp_path)]})
+    scan = next(line for line in responses(server) if line.get("id") == 1 and "ok" in line)
+    assert scan["cancelled"] is True
+    assert scan["findings"] == []

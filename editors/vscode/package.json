@@ -2,7 +2,7 @@
   "name": "greenlint",
   "displayName": "greenlint",
   "description": "Flags energy-wasteful code and config patterns as you type, with the reason each one wastes energy.",
-  "version": "0.4.2",
+  "version": "0.5.0",
   "publisher": "fabiocicerchia",
   "license": "Apache-2.0",
   "icon": "media/icon.png",
@@ -185,6 +185,17 @@
         "title": "Collapse All Findings",
         "category": "greenlint",
         "icon": "$(collapse-all)"
+      },
+      {
+        "command": "greenlint.cancelScan",
+        "title": "Cancel Running Scan",
+        "category": "greenlint",
+        "icon": "$(stop-circle)"
+      },
+      {
+        "command": "greenlint.writeBaseline",
+        "title": "Write Baseline (accept current findings)",
+        "category": "greenlint"
       }
     ],
     "viewsContainers": {
@@ -260,14 +271,18 @@
     }
   },
   "scripts": {
-    "compile": "tsc -p ./",
-    "watch": "tsc -watch -p ./",
+    "build": "node esbuild.mjs",
+    "watch": "node esbuild.mjs --watch",
+    "typecheck": "tsc -p ./ --noEmit",
+    "test": "tsc -p ./ && node --test --require ./out-tsc/test/hook.js \"out-tsc/test/*.test.js\"",
+    "compile": "npm run typecheck && npm run build",
     "vscode:prepublish": "npm run compile",
     "package": "node -e \"require('fs').copyFileSync('../../LICENSE','LICENSE')\" && npx --yes @vscode/vsce package"
   },
   "devDependencies": {
     "@types/node": "^20.11.30",
     "@types/vscode": "^1.85.0",
-    "typescript": "^5.4.5"
+    "typescript": "^5.4.5",
+    "esbuild": "^0.24.0"
   }
 }

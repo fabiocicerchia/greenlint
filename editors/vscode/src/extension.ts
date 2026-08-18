@@ -129,6 +129,8 @@ class Controller implements vscode.Disposable {
       command('greenlint.showScopeFile', () => this.setScope('file')),
       command('greenlint.showScopeProject', () => this.setScope('project')),
       command('greenlint.setGrouping', () => this.pickGrouping()),
+      command('greenlint.cancelScan', () => this.server.cancelProjectScan()),
+      command('greenlint.writeBaseline', () => this.writeBaseline()),
       command('greenlint.expandAll', () => this.setExpanded(true)),
       command('greenlint.collapseAll', () => this.setExpanded(false)),
       command('greenlint.showOutput', () => this.log.show(true)),
@@ -283,8 +285,13 @@ class Controller implements vscode.Disposable {
     this.scanning = true;
     try {
       await vscode.window.withProgress(
-        { location: vscode.ProgressLocation.Window, title: 'greenlint: scanning workspace' },
-        async (progress) => {
+        {
+          location: vscode.ProgressLocation.Window,
+          title: 'greenlint: scanning workspace',
+          cancellable: true,
+        },
+        async (progress, token) => {
+          token.onCancellationRequested(() => void this.server.cancelProjectScan());
           this.scannableExtensions ??= new Set(await this.server.languages());
           await this.applyExcludes();
           // Unsaved buffers are what the developer is actually looking at; a
@@ -307,7 +314,10 @@ class Controller implements vscode.Disposable {
               this.store.mergeBatch(batch.batch, dirty);
             });
             if (response.cancelled) {
-              continue;
+              // Nothing is pruned: the walk stopped partway, so the files it
+              // never reached are not files without findings.
+              this.log.appendLine('[greenlint] scan cancelled');
+              return;
             }
             this.lastStats = response.stats;
             this.lastSummary = response.summary;
@@ -420,6 +430,37 @@ class Controller implements vscode.Disposable {
     // gets one when the scan finishes.
     if (this.reportPanel && !this.scanning) {
       this.reportPanel.webview.html = this.reportHtml();
+    }
+  }
+
+  /**
+   * Accept everything currently found, so an existing codebase starts green.
+   *
+   * Confirmed first: it writes a file into the repository and quietens real
+   * findings, which is not something to do because a menu item was near the
+   * pointer.
+   */
+  private async writeBaseline(): Promise<void> {
+    const folder = vscode.workspace.workspaceFolders?.[0];
+    if (!folder) {
+      return;
+    }
+    const total = this.store.size;
+    const confirmed = await vscode.window.showWarningMessage(
+      `Accept the ${total} current finding(s) as the baseline? ` +
+        'They stop being reported here and in CI; new ones still are.',
+      { modal: true },
+      'Write Baseline',
+    );
+    if (confirmed !== 'Write Baseline') {
+      return;
+    }
+    try {
+      const { path: written, accepted } = await this.server.writeBaseline(folder);
+      this.log.appendLine(`[greenlint] ${accepted} finding(s) accepted in ${written}`);
+      await this.scanProject();
+    } catch (error) {
+      this.reportError(error);
     }
   }
 

@@ -50,6 +50,7 @@ greenlint --list-rules          # show every rule it knows
 greenlint . --fail-on-findings  # exit non-zero if anything is found (CI gate)
 greenlint . --format json       # machine-readable output
 greenlint . --exclude '*/dist/*'  # skip paths, on top of .greenlint.toml
+greenlint . --write-baseline    # accept today's findings; only new ones nag
 ```
 
 More in [`docs/getting-started.md`](docs/getting-started.md).

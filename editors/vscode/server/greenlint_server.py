@@ -31,6 +31,7 @@ Ops:
                                              streaming, plus an end summary
   configure  {ignore:[glob,...]}          -> extra ignore globs, on top of
                                              .greenlint.toml
+  writeBaseline {root}                    -> record current findings as accepted
   invalidate {paths}|{}                   -> drop cache entries (or all)
   cancel     {cancel: id}                 -> stop an in-flight project scan
 """
@@ -90,15 +91,19 @@ def load_greenlint(module_path=None):
 # capabilities rather than a version number means this stays correct without
 # anyone remembering to bump a floor.
 REQUIRED_API = (
+    "BASELINE_FILENAME",
     "CONFIG_FILENAME",
     "CO2E_HINTS",
     "RULES",
     "finding_sort_key",
     "is_ignored",
     "iter_files",
+    "apply_baseline",
+    "load_baseline",
     "load_config",
     "scan_file",
     "scannable",
+    "write_baseline",
 )
 
 
@@ -244,12 +249,17 @@ class Server:
         part of the cache key.
         """
         cfg_path = Path(root) / self.gl.CONFIG_FILENAME if root else None
+        base_path = Path(root) / self.gl.BASELINE_FILENAME if root else None
         try:
             stamp = cfg_path.stat().st_mtime_ns if cfg_path else None
         except OSError:
             stamp = None
+        try:
+            base_stamp = base_path.stat().st_mtime_ns if base_path else None
+        except OSError:
+            base_stamp = None
         cached = self.configs.get(root)
-        if cached is not None and cached[0] == (stamp, self.ignore_generation):
+        if cached is not None and cached[0] == (stamp, base_stamp, self.ignore_generation):
             return cached[1]
         if cfg_path is not None and stamp is not None:
             config = self.gl.load_config(str(cfg_path))
@@ -262,6 +272,11 @@ class Server:
         config = {
             "disable": config["disable"],
             "ignore": [*config["ignore"], *self.extra_ignore],
+            # Not part of the cache fingerprint below: findings are cached
+            # unfiltered and the baseline is applied on the way out, so
+            # accepting a finding costs a repaint rather than a rescan.
+            "baseline": self.gl.load_baseline(base_path) if base_path else set(),
+            "baseline_root": base_path.parent if base_path else None,
         }
         fingerprint = digest(
             json.dumps(
@@ -272,10 +287,14 @@ class Server:
         if fingerprint != self.config_fingerprint:
             self.cache.clear()
             self.config_fingerprint = fingerprint
-        self.configs[root] = ((stamp, self.ignore_generation), config)
+        self.configs[root] = ((stamp, base_stamp, self.ignore_generation), config)
         return config
 
     # --- scanning --------------------------------------------------------
+
+    def accepted(self, findings, config):
+        """Findings the baseline has not already accepted."""
+        return self.gl.apply_baseline(findings, config["baseline"], config["baseline_root"])
 
     def scan_text(self, path, text, config):
         if self.gl.is_ignored(path, config):
@@ -383,6 +402,7 @@ class Server:
                     report()
             found, how = self.scan_path(path, config, max_bytes)
             counts[how] += 1
+            found = self.accepted(found, config)
             if found:
                 findings.extend(found)
                 batch.extend(found)
@@ -451,12 +471,13 @@ class Server:
         if op == "scanText":
             config = self.config_for(request.get("root"))
             path = Path(request["path"])
-            return {"findings": self.scan_text(path, request.get("text", ""), config)}
+            findings = self.scan_text(path, request.get("text", ""), config)
+            return {"findings": self.accepted(findings, config)}
         if op == "scanFile":
             config = self.config_for(request.get("root"))
             max_bytes = request.get("maxFileBytes", DEFAULT_MAX_FILE_BYTES)
             found, how = self.scan_path(Path(request["path"]), config, max_bytes)
-            return {"findings": found, "source": how}
+            return {"findings": self.accepted(found, config), "source": how}
         if op == "scanProject":
             return self.scan_project(request)
         if op == "configure":
@@ -467,6 +488,20 @@ class Server:
                 self.configs.clear()
                 self.cache.clear()
             return {"ignore": self.extra_ignore}
+        if op == "writeBaseline":
+            root = request.get("root")
+            config = self.config_for(root)
+            # Scanned rather than taken from the client: the baseline has to
+            # describe the tree, not whatever the panel happens to be showing,
+            # and the cache makes this nearly free straight after a scan.
+            findings = []
+            for path in self.gl.iter_files([root], config):
+                found, _ = self.scan_path(path, config, DEFAULT_MAX_FILE_BYTES)
+                findings.extend(found)
+            target = Path(root) / self.gl.BASELINE_FILENAME
+            count = self.gl.write_baseline(target, findings, target.parent)
+            self.configs.clear()
+            return {"path": str(target), "accepted": count}
         if op == "invalidate":
             paths = request.get("paths")
             if paths:

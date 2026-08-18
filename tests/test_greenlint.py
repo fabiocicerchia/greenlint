@@ -1340,3 +1340,69 @@ def test_walk_files_survives_an_unreadable_directory(tmp_path):
         assert "a.py" in names
     finally:
         locked.chmod(0o755)
+
+
+# --- baseline -------------------------------------------------------------
+
+
+def test_baseline_accepts_current_findings_and_still_reports_new_ones(tmp_path, capsys):
+    write(tmp_path, "src/q.sql", "SELECT * FROM t;\n")
+    baseline = tmp_path / greenlint.BASELINE_FILENAME
+    findings = scan([str(tmp_path)])
+    assert greenlint.write_baseline(baseline, findings, tmp_path) == 1
+    accepted = greenlint.load_baseline(baseline)
+    assert greenlint.apply_baseline(findings, accepted, tmp_path) == []
+    # A finding in a file the baseline never saw is still reported.
+    write(tmp_path, "src/other.sql", "SELECT * FROM u;\n")
+    fresh = scan([str(tmp_path)])
+    assert len(greenlint.apply_baseline(fresh, accepted, tmp_path)) == 1
+
+
+def test_fingerprint_is_the_same_for_absolute_and_relative_paths(tmp_path, monkeypatch):
+    """The editor reports absolute paths and `greenlint .` reports relative
+    ones. A baseline only earns its keep if both honour the same file."""
+    write(tmp_path, "src/q.sql", "SELECT * FROM t;\n")
+    absolute = scan([str(tmp_path)])[0]
+    monkeypatch.chdir(tmp_path)
+    relative = scan(["."])[0]
+    assert relative["file"] != absolute["file"]
+    assert greenlint.fingerprint(relative, ".") == greenlint.fingerprint(absolute, tmp_path)
+
+
+def test_fingerprint_survives_edits_above_the_finding(tmp_path):
+    """Line-insensitive on purpose: a baseline keyed on line numbers is stale
+    by the next commit."""
+    path = write(tmp_path, "q.sql", "SELECT * FROM t;\n")
+    before = greenlint.fingerprint(scan([str(tmp_path)])[0], tmp_path)
+    path.write_text("-- a new comment line\n-- and another\nSELECT * FROM t;\n")
+    after = scan([str(tmp_path)])[0]
+    assert after["line"] == 3
+    assert greenlint.fingerprint(after, tmp_path) == before
+
+
+def test_a_missing_or_broken_baseline_reports_everything(tmp_path):
+    """Failing open: a linter that goes quiet because a file it was not asked
+    about is malformed is worse than one that reports too much."""
+    assert greenlint.load_baseline(tmp_path / "nope.json") == set()
+    broken = write(tmp_path, "b.json", "{not json")
+    assert greenlint.load_baseline(broken) == set()
+
+
+def test_cli_writes_and_then_honours_a_baseline(tmp_path, capsys, monkeypatch):
+    write(tmp_path, "q.sql", "SELECT * FROM t;\n")
+    monkeypatch.chdir(tmp_path)
+    main([".", "--config", "nope.toml", "--write-baseline"])
+    assert "1 finding(s) accepted" in capsys.readouterr().out
+    assert (tmp_path / greenlint.BASELINE_FILENAME).is_file()
+    main([".", "--config", "nope.toml"])
+    out = capsys.readouterr().out
+    assert "0 finding(s)" in out
+    assert "1 accepted" in out
+
+
+def test_cli_rejects_a_baseline_path_that_is_not_there(tmp_path, monkeypatch):
+    """An explicit flag that silently does nothing is worse than an error; the
+    default file is optional, a named one is not."""
+    monkeypatch.chdir(tmp_path)
+    with pytest.raises(SystemExit, match="no such baseline"):
+        main([".", "--baseline", "missing.json"])

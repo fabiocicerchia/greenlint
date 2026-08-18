@@ -44,6 +44,7 @@ export class ScanServer implements vscode.Disposable {
   private info?: ServerInfo;
   private buffer = '';
   private nextId = 1;
+  private projectScanId?: number;
   private readonly pending = new Map<number, Pending>();
   private onReady?: () => void;
   private onFailed?: (error: Error) => void;
@@ -360,6 +361,7 @@ export class ScanServer implements vscode.Disposable {
     op: string,
     payload: Record<string, unknown>,
     onProgress?: (progress: ScanProgress) => void,
+    onSent?: (id: number) => void,
   ): Promise<T> {
     const proc = this.proc;
     if (!proc?.stdin) {
@@ -379,6 +381,7 @@ export class ScanServer implements vscode.Disposable {
       this.rearm(id, pending);
     });
     proc.stdin.write(`${JSON.stringify({ id, op, ...payload })}\n`);
+    onSent?.(id);
     return promise;
   }
 
@@ -387,9 +390,10 @@ export class ScanServer implements vscode.Disposable {
     op: string,
     payload: Record<string, unknown> = {},
     onProgress?: (progress: ScanProgress) => void,
+    onSent?: (id: number) => void,
   ): Promise<T> {
     await this.start();
-    return this.request<T>(op, payload, onProgress);
+    return this.request<T>(op, payload, onProgress, onSent);
   }
 
   // --- operations -------------------------------------------------------
@@ -431,7 +435,23 @@ export class ScanServer implements vscode.Disposable {
         stream: true,
       },
       onProgress,
+      (id) => {
+        this.projectScanId = id;
+      },
     );
+  }
+
+  /**
+   * Ask the server to stop the project scan in flight.
+   *
+   * The walk checks for this between batches of files, so it stops at the next
+   * batch rather than mid-file — which is why the scan can be abandoned without
+   * leaving the cache half-written.
+   */
+  async cancelProjectScan(): Promise<void> {
+    if (this.projectScanId !== undefined && this.running) {
+      await this.call('cancel', { cancel: this.projectScanId });
+    }
   }
 
   /** File extensions any rule targets, so the client can skip asking about a
@@ -446,6 +466,12 @@ export class ScanServer implements vscode.Disposable {
   async configure(ignore: string[]): Promise<string[]> {
     const response = await this.call<{ ignore: string[] }>('configure', { ignore });
     return response.ignore;
+  }
+
+  /** Record everything currently found as accepted, so only new findings
+   * nag from here on. Returns where it was written and how many it took. */
+  async writeBaseline(folder: vscode.WorkspaceFolder): Promise<{ path: string; accepted: number }> {
+    return this.call('writeBaseline', { root: folder.uri.fsPath });
   }
 
   async invalidate(paths?: string[]): Promise<void> {

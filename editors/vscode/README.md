@@ -23,6 +23,12 @@ a rule added to the linter shows up in the editor with no change on this side.
 - **An HTML report** in a webview, drawn from VS Code's own theme variables so
   it follows your theme, contrast setting and font size. The rest of the UI is
   native VS Code throughout: diagnostics, the tree view, the Problems panel.
+- **A baseline**: *Write Baseline* accepts everything currently found, so an
+  existing codebase starts green and only new findings nag. It writes
+  `.greenlint-baseline.json`, which the CLI reads too — `greenlint .` in CI
+  honours the same file, so the two never disagree.
+- **Cancellable scans** — the progress notification has a cancel button, and
+  the walk stops at the next batch of files.
 - **`.greenlint.toml` is honoured** exactly as the CLI honours it: same walker,
   same ignore globs, same disable list. What CI blocks on is what you see.
 
@@ -216,10 +222,15 @@ than assumed.
 `npm run package` (what `make ext-build` calls) produces the `.vsix`. It copies
 the repository's `LICENSE` in first, which is why that file is gitignored here.
 
+`npm test` runs the unit tests: `node --test` against a small `vscode` shim, so
+the pure parts — glob translation, the finding store, ordering, the report —
+are covered without downloading an editor. CI runs it.
+
 The extension is about 1,400 lines of TypeScript over seven files, plus a
-380-line Python scan server. There is no framework and no state container: a
-`FindingStore` holds findings per file, a `ScanServer` owns the subprocess and
-the protocol, and one `Controller` wires VS Code's events to them.
+400-line Python scan server, bundled by esbuild into one ~29 KB file. There is
+no framework and no state container: a `FindingStore` holds findings per file,
+a `ScanServer` owns the subprocess and the protocol, and one `Controller` wires
+VS Code's events to them.
 
 ## Licence
 

@@ -149,5 +149,18 @@ already hiding from you. That is deliberately a narrowing of what one window
 looks at and not a change to what CI checks — `.greenlint.toml` remains the
 setting both read.
 
+A baseline (`.greenlint-baseline.json`) records the findings a project has
+decided to live with, so adopting greenlint on an existing codebase does not
+start with a wall of red. Findings are identified by
+`sha1(path|rule|message)` — the same shape the sibling gandalf tool uses, and
+line-insensitive for the same reason: an id keyed on line numbers is stale by
+the next commit. The path is stored relative to the baseline file, because
+`greenlint .` in CI reports `src/db.py` and the editor reports
+`/home/you/proj/src/db.py`, and a baseline is only worth having if both honour
+it. greenlint's messages are fixed per rule, so in practice this is one id per
+(file, rule): accepting `SELECT *` in a file accepts every occurrence in it.
+That is the cost of not keying on lines, and it is the right way round — a
+baseline exists to stop old findings nagging, not to be a precise inventory.
+
 Record further significant choices here (or in a `docs/adr/` folder if they
 pile up).

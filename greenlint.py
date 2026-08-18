@@ -15,6 +15,7 @@ import argparse
 import ast
 import fnmatch
 import functools
+import hashlib
 import json
 import os
 import re
@@ -24,6 +25,7 @@ from collections import deque
 from pathlib import Path
 
 CONFIG_FILENAME = ".greenlint.toml"
+BASELINE_FILENAME = ".greenlint-baseline.json"
 
 # Order-of-magnitude steers for which findings are worth fixing first — not
 # measurements. Two anchors make them checkable rather than plausible-sounding:
@@ -1501,6 +1503,63 @@ def applicable(rule, path):
     return path.suffix in rule["langs"]
 
 
+def fingerprint(finding, root):
+    """Stable id for a finding, for the baseline to name it by.
+
+    Line-insensitive, so it survives every edit above it — the same shape the
+    sibling gandalf tool uses, for the same reason: a baseline keyed on line
+    numbers is stale by the next commit.
+
+    The path is stored relative to the baseline file, because the two callers
+    disagree about paths otherwise: `greenlint .` in CI reports `src/db.py`
+    and the editor reports `/home/you/proj/src/db.py`, and a baseline only
+    earns its keep if both honour it.
+
+    greenlint's messages are fixed per rule, so this is in practice one id per
+    (file, rule): accepting `SELECT *` in `src/db.py` accepts every occurrence
+    in that file, and a later one is accepted too. That is the cost of not
+    keying on lines, and it is the right way round — a baseline exists to stop
+    old findings nagging, not to be a precise inventory.
+    """
+    try:
+        relative = Path(finding["file"]).resolve().relative_to(Path(root).resolve()).as_posix()
+    except ValueError:
+        relative = Path(finding["file"]).as_posix()
+    key = f"{relative}|{finding['rule']}|{finding['message']}"
+    return hashlib.sha1(key.encode("utf-8", "replace"), usedforsecurity=False).hexdigest()
+
+
+def load_baseline(path):
+    """Accepted fingerprints from a baseline file. Missing or unreadable is an
+    empty baseline: a linter that stops reporting because a file it was not
+    asked about is malformed would be worse than one that reports too much.
+    """
+    p = Path(path)
+    if not p.is_file():
+        return set()
+    try:
+        with p.open("rb") as fh:
+            data = json.load(fh)
+    except (OSError, ValueError):
+        return set()
+    return set(data.get("fingerprints") or [])
+
+
+def apply_baseline(findings, baseline, root):
+    """Findings that the baseline does not already accept."""
+    if not baseline:
+        return findings
+    return [f for f in findings if fingerprint(f, root) not in baseline]
+
+
+def write_baseline(path, findings, root):
+    """Snapshot every current finding so later runs stay quiet about them.
+    Returns how many distinct ones were recorded."""
+    fingerprints = sorted({fingerprint(f, root) for f in findings})
+    Path(path).write_text(json.dumps({"version": 1, "fingerprints": fingerprints}, indent=2) + "\n")
+    return len(fingerprints)
+
+
 def scannable(path):
     """True if any rule targets this file's language at all.
 
@@ -1726,6 +1785,18 @@ def main(argv=None):
         # vocabulary the project already uses, not a second one.
         help="skip paths matching this glob; repeatable, added to `ignore` from the config",
     )
+    p.add_argument(
+        "--baseline",
+        metavar="FILE",
+        help=f"accept the findings recorded in FILE (default: ./{BASELINE_FILENAME} if present)",
+    )
+    p.add_argument(
+        "--write-baseline",
+        nargs="?",
+        const=BASELINE_FILENAME,
+        metavar="FILE",
+        help="record every current finding as accepted and exit",
+    )
     args = p.parse_args(argv)
 
     if args.list_rules:
@@ -1739,6 +1810,21 @@ def main(argv=None):
     if args.exclude:
         config["ignore"] = [*config["ignore"], *args.exclude]
     findings = scan(args.paths or ["."], config)
+
+    if args.write_baseline:
+        path = Path(args.write_baseline)
+        count = write_baseline(path, findings, path.parent)
+        print(f"greenlint: {count} finding(s) accepted in {path}")
+        return 0
+
+    # An explicit --baseline must exist; the default one is used when it happens
+    # to be there. A typo in a flag should be an error, not a silent no-op.
+    baseline_path = Path(args.baseline) if args.baseline else Path(BASELINE_FILENAME)
+    if args.baseline and not baseline_path.is_file():
+        raise SystemExit(f"greenlint: no such baseline: {baseline_path}")
+    before = len(findings)
+    findings = apply_baseline(findings, load_baseline(baseline_path), baseline_path.parent)
+    accepted = before - len(findings)
     if args.format == "json":
         json.dump(findings, sys.stdout, indent=2)
     elif args.format == "github":
@@ -1755,7 +1841,8 @@ def main(argv=None):
             print(f"    ↳ {f['suggestion']}")
             if f["co2e_estimate"]:
                 print(f"    ~ {f['co2e_estimate']}")
-        print(f"\ngreenlint: {len(findings)} finding(s)")
+        accepted_note = f" ({accepted} accepted by {baseline_path})" if accepted else ""
+        print(f"\ngreenlint: {len(findings)} finding(s){accepted_note}")
     return 1 if findings and args.fail_on_findings else 0
 
 
