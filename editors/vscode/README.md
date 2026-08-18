@@ -16,7 +16,7 @@ a rule added to the linter shows up in the editor with no change on this side.
 - **Hover tooltips** with the rule id, what was found, *what to do instead*, and
   an order-of-magnitude CO2e figure — the "why" is the point of the tool.
 - **A Findings panel** at the bottom of the window, showing the current file or
-  the whole project, grouped by severity, file or rule. A project scan streams
+  the whole project, grouped by file (or by severity or rule, from the toolbar). A project scan streams
   into it — findings appear as they are made rather than after the walk
   finishes — and the totals land at the end, in the log and in the status bar's
   tooltip.

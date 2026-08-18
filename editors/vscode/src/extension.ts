@@ -70,7 +70,9 @@ class Controller implements vscode.Disposable {
       this.log,
     );
     this.findings.scope = context.workspaceState.get<Scope>('scope', 'project');
-    this.findings.grouping = context.workspaceState.get<Grouping>('grouping', 'severity');
+    // By file, like the sibling extensions: "which of my files is this in" is
+    // the first question, and severity is already the order within each group.
+    this.findings.grouping = context.workspaceState.get<Grouping>('grouping', 'file');
     this.tree = vscode.window.createTreeView('greenlint.findings', {
       treeDataProvider: this.findings,
     });

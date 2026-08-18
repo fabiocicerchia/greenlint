@@ -39,7 +39,7 @@ export class FindingsProvider implements vscode.TreeDataProvider<Node> {
   readonly onDidChangeTreeData = this.emitter.event;
 
   scope: Scope = 'project';
-  grouping: Grouping = 'severity';
+  grouping: Grouping = 'file';
   /** Whether groups start open. VS Code's own collapse-all works on the view's
    * state, which a refresh discards — declaring it here is what survives the
    * repaint a streaming scan causes every half second. */
@@ -72,6 +72,11 @@ export class FindingsProvider implements vscode.TreeDataProvider<Node> {
   getChildren(node?: Node): Node[] {
     if (node) {
       return isGroup(node) ? node.children : [];
+    }
+    // Grouping by file while scoped to one file is a single group named after
+    // the file you are already looking at: indentation and nothing else.
+    if (this.scope === 'file' && this.grouping === 'file') {
+      return this.findings();
     }
     return this.groups();
   }
