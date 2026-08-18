@@ -245,6 +245,11 @@ The extension versions independently of the Python package: release-please owns
 `pyproject.toml` and the root `CHANGELOG.md` and knows nothing about this
 directory. So a release is its own tag.
 
+(The sibling repos do not publish their extensions at all yet — depwatch's
+release-please cuts a GitHub Release and stops there, and neither repo carries
+a marketplace token. This is the first of the three to go further, so the
+convention below is a decision rather than a house style being followed.)
+
 1. Bump `version` in `package.json` and add a section to `CHANGELOG.md`.
 2. `git tag vscode-v<version> && git push origin vscode-v<version>`.
 
