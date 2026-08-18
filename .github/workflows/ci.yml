@@ -52,8 +52,10 @@ jobs:
           cache-dependency-path: editors/vscode/package-lock.json
       - name: Install from the lockfile
         run: npm ci
-      - name: Typecheck and compile
-        run: npm run compile
+      - name: Typecheck
+        run: npm run typecheck
+      - name: Build
+        run: npm run build
       - name: Test
         run: npm test
 

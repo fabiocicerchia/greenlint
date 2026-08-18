@@ -3,8 +3,8 @@ name: release
 # release-please reads Conventional Commit messages on main and keeps an open
 # "release PR" with the next version bump + CHANGELOG. Merging that PR bumps the
 # version in pyproject.toml *and* the VS Code extension's manifest, tags the
-# release (vX.Y.Z), and publishes a GitHub Release. That triggers the build +
-# PyPI publish jobs below, and publish-extension.yml.
+# release (vX.Y.Z), and publishes a GitHub Release. The same run then does the
+# build + PyPI publish jobs below, and calls publish-extension.yml.
 #
 # Publishing to PyPI is opt-in: configure a Trusted Publisher for this
 # repository on pypi.org (workflow: release.yml, environment: pypi) and set the
@@ -81,3 +81,16 @@ jobs:
     uses: ./.github/workflows/publish.yml
     with:
       tag: ${{ needs.release-please.outputs.tag_name }}
+
+  # The release release-please publishes carries GITHUB_TOKEN, and GitHub does
+  # not start workflows from GITHUB_TOKEN events — so the extension publish is
+  # called from here rather than hung off `on: release`.
+  extension:
+    needs: release-please
+    if: needs.release-please.outputs.release_created == 'true'
+    permissions:
+      contents: write
+    uses: ./.github/workflows/publish-extension.yml
+    with:
+      tag: ${{ needs.release-please.outputs.tag_name }}
+    secrets: inherit

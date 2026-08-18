@@ -156,7 +156,7 @@
         "command": "greenlint.showScopeProject",
         "title": "Show Findings for Whole Project",
         "category": "greenlint",
-        "icon": "$(folder-opened)"
+        "icon": "$(files)"
       },
       {
         "command": "greenlint.showOutput",
@@ -259,12 +259,12 @@
         {
           "command": "greenlint.expandAll",
           "when": "view == greenlint.findings && !greenlint.expanded",
-          "group": "navigation@3"
+          "group": "navigation@9"
         },
         {
           "command": "greenlint.collapseAll",
           "when": "view == greenlint.findings && greenlint.expanded",
-          "group": "navigation@3"
+          "group": "navigation@9"
         }
       ],
       "commandPalette": []
@@ -275,9 +275,8 @@
     "watch": "node esbuild.mjs --watch",
     "typecheck": "tsc -p ./ --noEmit",
     "test": "tsc -p ./ && node --test --require ./out-tsc/test/hook.js \"out-tsc/test/*.test.js\"",
-    "compile": "npm run typecheck && npm run build",
-    "copy-legal": "node -e \"const f=require('fs');f.copyFileSync('../../LICENSE','LICENSE');f.copyFileSync('../../CHANGELOG.md','CHANGELOG.md')\"",
-    "vscode:prepublish": "npm run compile && npm run copy-legal",
+    "copy-legal": "node -e \"const f=require('node:fs');for(const n of ['LICENSE','CHANGELOG.md'])f.copyFileSync('../../'+n,n)\"",
+    "vscode:prepublish": "npm run typecheck && npm test && npm run build && npm run copy-legal",
     "package": "npx --yes @vscode/vsce@3.9.2 package --no-dependencies",
     "publish": "npx --yes @vscode/vsce@3.9.2 publish --no-dependencies"
   },

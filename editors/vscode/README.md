@@ -48,7 +48,7 @@ root:
 make ext-install    # builds the .vsix and installs it into VS Code
 ```
 
-`make ext-build` stops at the `.vsix` if you would rather install it from the
+`make ext-package` stops at the `.vsix` if you would rather install it from the
 Extensions view (`...` → *Install from VSIX*). Reload the window afterwards.
 
 ## Requirements
@@ -215,7 +215,7 @@ produce a number with no unit and a false air of precision.
 ```sh
 cd editors/vscode
 npm install
-npm run compile     # or: npm run watch
+npm run build       # or: npm run watch
 ```
 
 Then <kbd>F5</kbd> in VS Code to launch an Extension Development Host, which
@@ -226,7 +226,7 @@ JSON over stdio and is covered by the repository's pytest suite
 (`tests/test_vscode_server.py`), so its caching behaviour is asserted rather
 than assumed.
 
-`npm run package` (what `make ext-build` calls) produces the `.vsix`. It copies
+`npm run package` (what `make ext-package` calls) produces the `.vsix`. It copies
 the repository's `LICENSE` in first, which is why that file is gitignored here.
 
 `npm test` runs the unit tests: `node --test` against a small `vscode` shim, so
@@ -245,8 +245,8 @@ The extension ships at the repository's version, on the repository's release.
 `release-please` keeps the release PR; merging it bumps `pyproject.toml` *and*
 this manifest in the same commit (via `extra-files` in
 `release-please-config.json`), tags `vX.Y.Z`, and publishes a GitHub Release.
-Publishing that release is what fires
-`.github/workflows/publish-extension.yml`.
+The same run then calls `.github/workflows/publish-extension.yml` — a release
+published with GITHUB_TOKEN does not start workflows of its own.
 
 One version for both matters more here than it looks: the extension drives
 `greenlint.py` and needs a greenlint new enough to have the scan API, so

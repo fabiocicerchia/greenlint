@@ -35,7 +35,7 @@ Until it is published to the Marketplace, build it from the checkout:
 make ext-install    # builds the .vsix and installs it into VS Code
 ```
 
-`make ext-build` stops at the `.vsix` if you would rather install it from the
+`make ext-package` stops at the `.vsix` if you would rather install it from the
 Extensions view (`...` → *Install from VSIX*). Reload the window afterwards.
 
 ### Keeping it cheap

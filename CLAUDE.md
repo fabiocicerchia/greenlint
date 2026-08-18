@@ -22,8 +22,10 @@ make help    # Show this help
 make setup   # Install the pre-commit hook
 make install # Install the package
 
-make ext-build   # Build the VS Code extension (editors/vscode) into a .vsix
+make ext-build   # Compile the VS Code extension (editors/vscode)
+make ext-package # ...and package it into a .vsix
 make ext-install # ...and install it into VS Code via the `code` CLI
+make ext-publish # ...and publish it to both marketplaces (normally CI's job)
 ```
 
 ## Tooling

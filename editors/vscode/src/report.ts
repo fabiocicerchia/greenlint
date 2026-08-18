@@ -58,7 +58,8 @@ export function renderReport(findings: Finding[], meta: ReportMeta): string {
   ${[...byFile.entries()].map(([file, items]) => fileSection(file, items, meta)).join('\n')}
   <footer>
     Every finding says why it wastes energy and what to do instead. CO2e figures
-    are order-of-magnitude steers, not measurements.
+    are order-of-magnitude steers, not measurements.<br>
+    <a href="https://github.com/fabiocicerchia/greenlint">github.com/fabiocicerchia/greenlint</a> &middot; &copy; 2026 Fabio Cicerchia
   </footer>
 </div>
 </body>
