@@ -2,7 +2,7 @@
   "name": "greenlint",
   "displayName": "greenlint",
   "description": "Flags energy-wasteful code and config patterns as you type, with the reason each one wastes energy.",
-  "version": "0.5.1",
+  "version": "0.1.0",
   "publisher": "fabiocicerchia",
   "license": "Apache-2.0",
   "icon": "media/icon.png",
@@ -276,8 +276,10 @@
     "typecheck": "tsc -p ./ --noEmit",
     "test": "tsc -p ./ && node --test --require ./out-tsc/test/hook.js \"out-tsc/test/*.test.js\"",
     "compile": "npm run typecheck && npm run build",
-    "vscode:prepublish": "npm run compile",
-    "package": "node -e \"require('fs').copyFileSync('../../LICENSE','LICENSE')\" && npx --yes @vscode/vsce package"
+    "copy-license": "node -e \"require('fs').copyFileSync('../../LICENSE','LICENSE')\"",
+    "vscode:prepublish": "npm run compile && npm run copy-license",
+    "package": "npx --yes @vscode/vsce package",
+    "publish": "npx --yes @vscode/vsce publish"
   },
   "devDependencies": {
     "@types/node": "^20.11.30",

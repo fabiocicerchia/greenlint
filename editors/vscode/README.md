@@ -10,6 +10,13 @@ Every rule the CLI knows, the editor knows: there is no second implementation
 here. The extension drives `greenlint.py` itself through a small scan server, so
 a rule added to the linter shows up in the editor with no change on this side.
 
+> **greenlint itself is a separate install.** This extension runs the linter; it
+> does not bundle it. Install it once — `pipx install
+> git+https://github.com/fabiocicerchia/greenlint`, or `pip`, or an editable
+> checkout — and the extension finds it. Without it, greenlint says so on
+> startup and names what it tried. Python 3.11+ is the only other requirement;
+> see [Requirements](#requirements).
+
 ## What you get
 
 - **Squiggles** on the offending line, severity-mapped and configurable.
@@ -231,6 +238,28 @@ The extension is about 1,400 lines of TypeScript over seven files, plus a
 no framework and no state container: a `FindingStore` holds findings per file,
 a `ScanServer` owns the subprocess and the protocol, and one `Controller` wires
 VS Code's events to them.
+
+## Releasing
+
+The extension versions independently of the Python package: release-please owns
+`pyproject.toml` and the root `CHANGELOG.md` and knows nothing about this
+directory. So a release is its own tag.
+
+1. Bump `version` in `package.json` and add a section to `CHANGELOG.md`.
+2. `git tag vscode-v<version> && git push origin vscode-v<version>`.
+
+`.github/workflows/publish-extension.yml` then tests, packages, checks the tag
+against `package.json` — a mismatch fails the job rather than publishing a
+version nobody asked for — and publishes. It needs a `VSCE_PAT` secret: an
+Azure DevOps Personal Access Token for an account owning the `fabiocicerchia`
+publisher, scoped to **All accessible organizations** and **Marketplace >
+Manage**. A token scoped to one organisation is rejected, which is the usual
+first failure. Set `OPEN_VSX_TOKEN` as well and the same build also goes to
+Open VSX, where VSCodium, Cursor and Gitpod install from; without it that step
+is skipped.
+
+Run the workflow manually first with **dry run** left on: it builds, tests and
+uploads the `.vsix` as an artefact without touching either registry.
 
 ## Licence
 

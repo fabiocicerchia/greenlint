@@ -1,0 +1,97 @@
+name: Publish Extension
+
+# The VS Code extension versions independently of the Python package:
+# release-please owns pyproject.toml and CHANGELOG.md, and knows nothing about
+# editors/vscode. So this runs off its own tag rather than off a release.
+#
+#   git tag vscode-v0.1.0 && git push origin vscode-v0.1.0
+#
+# Requires a VSCE_PAT secret: an Azure DevOps Personal Access Token for an
+# account that owns the `fabiocicerchia` publisher, scoped to "All accessible
+# organizations" and Marketplace > Manage. A token scoped to a single
+# organisation is rejected at publish time, which is the usual first failure.
+#
+# OPEN_VSX_TOKEN is optional. Set it and the same build also goes to Open VSX,
+# which is where VSCodium, Cursor and Gitpod install from.
+
+on:
+  push:
+    tags: ['vscode-v*']
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: Build and validate without publishing.
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: editors/vscode
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+
+      # No setup-node: the runner image ships a Node new enough for esbuild and
+      # tsc, and this way the job adds no third-party action to pin.
+      - name: Install from the lockfile
+        run: npm ci
+
+      # The tag is the release's claim about what is being published; if
+      # package.json disagrees, the marketplace gets a version nobody asked for
+      # and the tag points at something else forever.
+      - name: Check the tag matches package.json
+        if: startsWith(github.ref, 'refs/tags/')
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          tagged="${TAG#vscode-v}"
+          declared=$(node -p "require('./package.json').version")
+          if [ "$tagged" != "$declared" ]; then
+            echo "::error::tag $TAG says $tagged, package.json says $declared"
+            exit 1
+          fi
+          echo "publishing $declared"
+
+      - name: Test
+        run: npm test
+
+      # Packaging runs `vscode:prepublish`, so this is the same artefact the
+      # publish step would upload — built once and validated before any token
+      # is used.
+      - name: Package
+        run: npm run package
+
+      - name: Upload the .vsix
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
+        with:
+          name: vsix
+          path: editors/vscode/*.vsix
+
+      - name: Publish to the Visual Studio Marketplace
+        if: startsWith(github.ref, 'refs/tags/') && !inputs.dry_run
+        env:
+          VSCE_PAT: ${{ secrets.VSCE_PAT }}
+        run: |
+          if [ -z "$VSCE_PAT" ]; then
+            echo "::error::VSCE_PAT is not set; see the comment at the top of this workflow"
+            exit 1
+          fi
+          npx --yes @vscode/vsce publish --packagePath ./*.vsix --skip-duplicate
+
+      - name: Publish to Open VSX
+        # Optional: skipped entirely when the token is absent, so the
+        # marketplace release is not held up by a registry nobody configured.
+        if: startsWith(github.ref, 'refs/tags/') && !inputs.dry_run
+        env:
+          OPEN_VSX_TOKEN: ${{ secrets.OPEN_VSX_TOKEN }}
+        run: |
+          if [ -z "$OPEN_VSX_TOKEN" ]; then
+            echo "OPEN_VSX_TOKEN not set; skipping Open VSX"
+            exit 0
+          fi
+          npx --yes ovsx publish ./*.vsix -p "$OPEN_VSX_TOKEN"
