@@ -27,7 +27,7 @@ build: ## Build sdist and wheel
 # The extension drives the installed greenlint rather than bundling it, so
 # `make install` (or a pipx install) is the other half of this.
 ext-build: ## Build the VS Code extension (.vsix)
-	cd $(EXT_DIR) && rm -f ./*.vsix && npm ci && npm run package
+	cd $(EXT_DIR) && rm -f ./*.vsix && npm ci && npm test && npm run package
 
 ext-install: ext-build ## Build and install the VS Code extension
 	@command -v code >/dev/null 2>&1 || { \

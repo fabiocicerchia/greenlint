@@ -241,30 +241,33 @@ VS Code's events to them.
 
 ## Releasing
 
-The extension versions independently of the Python package: release-please owns
-`pyproject.toml` and the root `CHANGELOG.md` and knows nothing about this
-directory. So a release is its own tag.
+The extension ships at the repository's version, on the repository's release.
+`release-please` keeps the release PR; merging it bumps `pyproject.toml` *and*
+this manifest in the same commit (via `extra-files` in
+`release-please-config.json`), tags `vX.Y.Z`, and publishes a GitHub Release.
+Publishing that release is what fires
+`.github/workflows/publish-extension.yml`.
 
-(The sibling repos do not publish their extensions at all yet — depwatch's
-release-please cuts a GitHub Release and stops there, and neither repo carries
-a marketplace token. This is the first of the three to go further, so the
-convention below is a decision rather than a house style being followed.)
+One version for both matters more here than it looks: the extension drives
+`greenlint.py` and needs a greenlint new enough to have the scan API, so
+"the extension and the CLI are the same version" is a claim worth being true by
+construction rather than by remembering.
 
-1. Bump `version` in `package.json` and add a section to `CHANGELOG.md`.
-2. `git tag vscode-v<version> && git push origin vscode-v<version>`.
+The workflow is inert until the tokens exist. Each publish step is skipped when
+its secret is missing and the job summary says which and why, so a release
+without them packages the VSIX and attaches it to the release rather than
+failing.
 
-`.github/workflows/publish-extension.yml` then tests, packages, checks the tag
-against `package.json` — a mismatch fails the job rather than publishing a
-version nobody asked for — and publishes. It needs a `VSCE_PAT` secret: an
-Azure DevOps Personal Access Token for an account owning the `fabiocicerchia`
-publisher, scoped to **All accessible organizations** and **Marketplace >
-Manage**. A token scoped to one organisation is rejected, which is the usual
-first failure. Set `OPEN_VSX_TOKEN` as well and the same build also goes to
-Open VSX, where VSCodium, Cursor and Gitpod install from; without it that step
-is skipped.
+- `VSCE_PAT` — an Azure DevOps Personal Access Token for an account owning the
+  `fabiocicerchia` publisher, scoped to **All accessible organizations** and
+  **Marketplace > Manage**. A token scoped to one organisation is rejected,
+  which is the usual first failure.
+- `OVSX_PAT` — an Open VSX token, where VSCodium and Cursor look. A separate
+  registry with its own namespace, not a mirror.
 
-Run the workflow manually first with **dry run** left on: it builds, tests and
-uploads the `.vsix` as an artefact without touching either registry.
+Marketplace versions are immutable: a version published once can never be
+replaced, only superseded. That is why the workflow validates the version
+before it does anything else.
 
 ## Licence
 

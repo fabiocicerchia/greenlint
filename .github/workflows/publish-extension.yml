@@ -1,28 +1,28 @@
-name: Publish Extension
+name: publish-extension
 
-# The VS Code extension versions independently of the Python package:
-# release-please owns pyproject.toml and CHANGELOG.md, and knows nothing about
-# editors/vscode. So this runs off its own tag rather than off a release.
+# Publishes the VS Code extension when a GitHub Release is published — which is
+# what merging release-please's PR does. The version comes from the tag, so the
+# extension and the linter ship as one version and there is no second number to
+# keep in step. That matters more here than it looks: the extension drives
+# `greenlint.py` and needs a greenlint new enough to have the scan API, so "the
+# extension and the CLI are the same version" is a claim worth being true by
+# construction.
 #
-#   git tag vscode-v0.1.0 && git push origin vscode-v0.1.0
-#
-# Requires a VSCE_PAT secret: an Azure DevOps Personal Access Token for an
-# account that owns the `fabiocicerchia` publisher, scoped to "All accessible
-# organizations" and Marketplace > Manage. A token scoped to a single
-# organisation is rejected at publish time, which is the usual first failure.
-#
-# OPEN_VSX_TOKEN is optional. Set it and the same build also goes to Open VSX,
-# which is where VSCodium, Cursor and Gitpod install from.
+# Nothing happens without the tokens: each publish step is skipped when its
+# secret is missing, so this file is inert until VSCE_PAT (VS Marketplace) and
+# OVSX_PAT (Open VSX) are set in the repository's secrets. Marketplace versions
+# are immutable — a version published once can never be replaced, only
+# superseded — so the version check below is deliberately strict.
 
 on:
-  push:
-    tags: ['vscode-v*']
+  release:
+    types: [published]
   workflow_dispatch:
     inputs:
-      dry_run:
-        description: Build and validate without publishing.
-        type: boolean
-        default: true
+      version:
+        description: "Version to publish, without the leading v (e.g. 0.1.6)"
+        required: true
+        type: string
 
 permissions:
   contents: read
@@ -30,9 +30,8 @@ permissions:
 jobs:
   publish:
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: editors/vscode
+    permissions:
+      contents: write  # attach the VSIX to the release
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
 
@@ -42,60 +41,95 @@ jobs:
           cache: npm
           cache-dependency-path: editors/vscode/package-lock.json
 
-      - name: Install from the lockfile
-        run: npm ci
-
-      # The tag is the release's claim about what is being published; if
-      # package.json disagrees, the marketplace gets a version nobody asked for
-      # and the tag points at something else forever.
-      - name: Check the tag matches package.json
-        if: startsWith(github.ref, 'refs/tags/')
+      - name: Resolve the version
+        id: version
         env:
-          TAG: ${{ github.ref_name }}
+          TAG: ${{ github.event.release.tag_name }}
+          INPUT: ${{ inputs.version }}
         run: |
-          tagged="${TAG#vscode-v}"
-          declared=$(node -p "require('./package.json').version")
-          if [ "$tagged" != "$declared" ]; then
-            echo "::error::tag $TAG says $tagged, package.json says $declared"
+          set -euo pipefail
+          VERSION="${INPUT:-${TAG#v}}"
+          # The Marketplace takes x.y.z and nothing else, and refuses a version
+          # it has seen before — better to fail here than half way through.
+          if ! printf '%s' "$VERSION" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+$'; then
+            echo "::error::'$VERSION' is not a publishable version (want x.y.z)"
             exit 1
           fi
-          echo "publishing $declared"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          # release-please already writes this version into the manifest (see
+          # release-please-config.json), so this is normally a no-op. It stays
+          # for workflow_dispatch, and so that a mismatch can never ship.
+          node -e '
+            const fs = require("node:fs")
+            const path = "editors/vscode/package.json"
+            const pkg = JSON.parse(fs.readFileSync(path, "utf8"))
+            pkg.version = process.argv[1]
+            fs.writeFileSync(path, `${JSON.stringify(pkg, null, 2)}\n`)
+          ' "$VERSION"
+          echo "publishing greenlint $VERSION"
+
+      - name: Install
+        run: npm --prefix editors/vscode ci
 
       - name: Test
-        run: npm test
+        run: npm --prefix editors/vscode test
 
-      # Packaging runs `vscode:prepublish`, so this is the same artefact the
-      # publish step would upload — built once and validated before any token
-      # is used.
+      # `vscode:prepublish` typechecks, bundles and copies the licence and the
+      # changelog in, so the VSIX built here is the one the publish steps upload.
       - name: Package
-        run: npm run package
+        working-directory: editors/vscode
+        run: npx --yes @vscode/vsce@3.9.2 package --no-dependencies
 
-      - name: Upload the .vsix
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
-        with:
-          name: vsix
-          path: editors/vscode/*.vsix
-
-      - name: Publish to the Visual Studio Marketplace
-        if: startsWith(github.ref, 'refs/tags/') && !inputs.dry_run
+      # `secrets` cannot be read from a job-level `if`, so which registries are
+      # reachable is decided here and read back as step outputs.
+      - name: Which registries are configured
+        id: tokens
         env:
           VSCE_PAT: ${{ secrets.VSCE_PAT }}
+          OVSX_PAT: ${{ secrets.OVSX_PAT }}
         run: |
-          if [ -z "$VSCE_PAT" ]; then
-            echo "::error::VSCE_PAT is not set; see the comment at the top of this workflow"
-            exit 1
-          fi
-          npx --yes @vscode/vsce publish --packagePath ./*.vsix --skip-duplicate
+          {
+            echo "marketplace=$([ -n "$VSCE_PAT" ] && echo true || echo false)"
+            echo "openvsx=$([ -n "$OVSX_PAT" ] && echo true || echo false)"
+          } >> "$GITHUB_OUTPUT"
 
-      - name: Publish to Open VSX
-        # Optional: skipped entirely when the token is absent, so the
-        # marketplace release is not held up by a registry nobody configured.
-        if: startsWith(github.ref, 'refs/tags/') && !inputs.dry_run
+      - name: Publish to the VS Marketplace
+        if: steps.tokens.outputs.marketplace == 'true'
+        working-directory: editors/vscode
         env:
-          OPEN_VSX_TOKEN: ${{ secrets.OPEN_VSX_TOKEN }}
+          VSCE_PAT: ${{ secrets.VSCE_PAT }}
+          VSIX: greenlint-${{ steps.version.outputs.version }}.vsix
+        run: npx --yes @vscode/vsce@3.9.2 publish --no-dependencies --packagePath "$VSIX"
+
+      # Where VSCodium and Cursor look. A separate registry with its own
+      # namespace and token, not a mirror of the Marketplace.
+      - name: Publish to Open VSX
+        if: steps.tokens.outputs.openvsx == 'true'
+        working-directory: editors/vscode
+        env:
+          OVSX_PAT: ${{ secrets.OVSX_PAT }}
+          VSIX: greenlint-${{ steps.version.outputs.version }}.vsix
+        run: npx --yes ovsx@1.1.1 publish "$VSIX" -p "$OVSX_PAT"
+
+      - name: Attach the VSIX to the release
+        if: github.event_name == 'release'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.event.release.tag_name }}
+          VSIX: editors/vscode/greenlint-${{ steps.version.outputs.version }}.vsix
+        run: gh release upload "$TAG" "$VSIX" --clobber
+
+      # A run that publishes nowhere still has to say so, or "green" and
+      # "published" become the same colour.
+      - name: Say what happened
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+          MARKETPLACE: ${{ steps.tokens.outputs.marketplace }}
+          OPENVSX: ${{ steps.tokens.outputs.openvsx }}
         run: |
-          if [ -z "$OPEN_VSX_TOKEN" ]; then
-            echo "OPEN_VSX_TOKEN not set; skipping Open VSX"
-            exit 0
-          fi
-          npx --yes ovsx publish ./*.vsix -p "$OPEN_VSX_TOKEN"
+          say() { [ "$1" = true ] && echo published || echo "skipped (no $2)"; }
+          {
+            echo "### greenlint $VERSION"
+            echo "- VS Marketplace: $(say "$MARKETPLACE" VSCE_PAT)"
+            echo "- Open VSX: $(say "$OPENVSX" OVSX_PAT)"
+          } >> "$GITHUB_STEP_SUMMARY"
