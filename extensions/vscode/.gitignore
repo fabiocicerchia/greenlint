@@ -1,0 +1,9 @@
+node_modules/
+out/
+out-tsc/
+*.vsix
+# Copied from the repo root at package time. There is one licence and one
+# changelog, both under version control at the root; a second copy here would
+# only be a second thing to forget.
+LICENSE
+CHANGELOG.md

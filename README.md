@@ -49,9 +49,25 @@ greenlint .                     # scan the current repo
 greenlint --list-rules          # show every rule it knows
 greenlint . --fail-on-findings  # exit non-zero if anything is found (CI gate)
 greenlint . --format json       # machine-readable output
+greenlint . --exclude '*/dist/*'  # skip paths, on top of .greenlint.toml
+greenlint . --write-baseline    # accept today's findings; only new ones nag
 ```
 
 More in [`docs/getting-started.md`](docs/getting-started.md).
+
+## In your editor
+
+[`extensions/vscode/`](extensions/vscode/) is a VS Code extension running the same
+rule set as you type: squiggles with a hover explaining what to do instead, a
+Findings panel scoped to the file or the whole project, and an HTML report. It
+drives `greenlint.py` itself through a warm scan server with a stat+hash cache,
+so an unchanged file is never opened and an unchanged tree is never read.
+
+```sh
+make ext-install   # build the .vsix and install it into VS Code
+```
+
+More in [`docs/editors.md`](docs/editors.md).
 
 ## Documentation
 
