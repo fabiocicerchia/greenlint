@@ -40,6 +40,10 @@ export class FindingsProvider implements vscode.TreeDataProvider<Node> {
 
   scope: Scope = 'project';
   grouping: Grouping = 'severity';
+  /** Whether groups start open. VS Code's own collapse-all works on the view's
+   * state, which a refresh discards — declaring it here is what survives the
+   * repaint a streaming scan causes every half second. */
+  expanded = true;
   private currentFile?: string;
 
   constructor(private readonly store: FindingStore) {}
@@ -107,7 +111,12 @@ export class FindingsProvider implements vscode.TreeDataProvider<Node> {
 
   getTreeItem(node: Node): vscode.TreeItem {
     if (isGroup(node)) {
-      const item = new vscode.TreeItem(node.label, vscode.TreeItemCollapsibleState.Expanded);
+      const item = new vscode.TreeItem(
+        node.label,
+        this.expanded
+          ? vscode.TreeItemCollapsibleState.Expanded
+          : vscode.TreeItemCollapsibleState.Collapsed,
+      );
       item.description = node.description;
       item.iconPath = node.icon;
       item.resourceUri = node.resource;

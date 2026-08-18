@@ -2,7 +2,7 @@
   "name": "greenlint",
   "displayName": "greenlint",
   "description": "Flags energy-wasteful code and config patterns as you type, with the reason each one wastes energy.",
-  "version": "0.4.1",
+  "version": "0.4.2",
   "publisher": "fabiocicerchia",
   "license": "Apache-2.0",
   "icon": "media/icon.png",
@@ -148,13 +148,13 @@
       },
       {
         "command": "greenlint.showScopeFile",
-        "title": "Showing: Current File",
+        "title": "Show Findings for Current File",
         "category": "greenlint",
         "icon": "$(file)"
       },
       {
         "command": "greenlint.showScopeProject",
-        "title": "Showing: Whole Project",
+        "title": "Show Findings for Whole Project",
         "category": "greenlint",
         "icon": "$(folder-opened)"
       },
@@ -173,6 +173,18 @@
         "title": "Group Findings By...",
         "category": "greenlint",
         "icon": "$(list-tree)"
+      },
+      {
+        "command": "greenlint.expandAll",
+        "title": "Expand All Findings",
+        "category": "greenlint",
+        "icon": "$(expand-all)"
+      },
+      {
+        "command": "greenlint.collapseAll",
+        "title": "Collapse All Findings",
+        "category": "greenlint",
+        "icon": "$(collapse-all)"
       }
     ],
     "viewsContainers": {
@@ -232,18 +244,19 @@
           "command": "greenlint.showOutput",
           "when": "view == greenlint.findings",
           "group": "9_admin"
-        }
-      ],
-      "commandPalette": [
-        {
-          "command": "greenlint.showScopeFile",
-          "when": "false"
         },
         {
-          "command": "greenlint.showScopeProject",
-          "when": "false"
+          "command": "greenlint.expandAll",
+          "when": "view == greenlint.findings && !greenlint.expanded",
+          "group": "navigation@3"
+        },
+        {
+          "command": "greenlint.collapseAll",
+          "when": "view == greenlint.findings && greenlint.expanded",
+          "group": "navigation@3"
         }
-      ]
+      ],
+      "commandPalette": []
     }
   },
   "scripts": {

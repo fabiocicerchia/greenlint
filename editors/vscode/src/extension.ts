@@ -73,7 +73,6 @@ class Controller implements vscode.Disposable {
     this.findings.grouping = context.workspaceState.get<Grouping>('grouping', 'severity');
     this.tree = vscode.window.createTreeView('greenlint.findings', {
       treeDataProvider: this.findings,
-      showCollapseAll: true,
     });
     this.status.command = 'greenlint.findings.focus';
     this.status.name = 'greenlint';
@@ -82,6 +81,7 @@ class Controller implements vscode.Disposable {
   async start(): Promise<void> {
     this.register();
     void vscode.commands.executeCommand('setContext', 'greenlint.scope', this.findings.scope);
+    void vscode.commands.executeCommand('setContext', 'greenlint.expanded', this.findings.expanded);
     this.findings.setCurrentFile(vscode.window.activeTextEditor?.document.uri.fsPath);
     this.repaint();
     if (!this.settings.enable) {
@@ -129,6 +129,8 @@ class Controller implements vscode.Disposable {
       command('greenlint.showScopeFile', () => this.setScope('file')),
       command('greenlint.showScopeProject', () => this.setScope('project')),
       command('greenlint.setGrouping', () => this.pickGrouping()),
+      command('greenlint.expandAll', () => this.setExpanded(true)),
+      command('greenlint.collapseAll', () => this.setExpanded(false)),
       command('greenlint.showOutput', () => this.log.show(true)),
       command('greenlint.restartServer', async () => {
         await this.server.restart();
@@ -469,6 +471,12 @@ class Controller implements vscode.Disposable {
     }
     this.status.tooltip = tooltip;
     this.status.show();
+  }
+
+  private setExpanded(expanded: boolean): void {
+    this.findings.expanded = expanded;
+    void vscode.commands.executeCommand('setContext', 'greenlint.expanded', expanded);
+    this.repaint();
   }
 
   private setScope(scope: Scope): void {
