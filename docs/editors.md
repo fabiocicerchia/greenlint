@@ -8,13 +8,11 @@ runs the same rule set as the CLI, while you type.
 - squiggles on the offending line, with a hover explaining what was found, what
   to do instead, and roughly what it costs;
 - a **Findings** panel at the bottom of the window, scoped to the current file
-  or the whole project, groupable by severity, file or rule, filled by a
-  project scan as it walks rather than after it finishes;
-- an HTML report, in a webview or exported as a standalone file, drawn from
-  VS Code's own theme variables — as is the rest of the UI, which is native
-  throughout: diagnostics, tree view, quick picks, status bar;
-- quick fixes to open the rule reference or disable the rule in
-  `.greenlint.toml`;
+  or the whole project, filled by a project scan as it walks rather than after
+  it finishes;
+- an HTML report in a webview, drawn from VS Code's own theme variables — as is
+  the rest of the UI, which is native throughout: diagnostics, tree view,
+  Problems panel;
 - the same `.greenlint.toml` the CLI reads — same walker, same ignore globs,
   same disable list, so what CI blocks on is what you see.
 
@@ -52,7 +50,7 @@ not wasting energy, so it does not:
 - **a two-layer cache** — an unchanged `(mtime, size)` is answered without
   opening the file, and a file rewritten with identical bytes is answered
   without running a rule, which is the common case after a branch switch;
-- **no periodic scanning by default** — saves, external writes, creations,
+- **no periodic scanning at all** — saves, external writes, creations,
   deletions and config edits all arrive as events, so a timer could only
   re-examine files nothing has touched;
 - **files no rule targets are never opened**, with the extension set derived

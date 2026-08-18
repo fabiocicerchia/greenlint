@@ -2,14 +2,7 @@ import * as path from 'path';
 
 import * as vscode from 'vscode';
 
-import { compareFindings, type Finding, type Severity } from './types';
-
-export interface StoreChange {
-  /** Files whose findings changed. Empty when `replaced` is set. */
-  files: string[];
-  /** True when a project scan swapped out everything under a root. */
-  replaced: boolean;
-}
+import { compareFindings, type Finding } from './types';
 
 /**
  * Every finding the window currently knows about, keyed by file.
@@ -20,33 +13,23 @@ export interface StoreChange {
  */
 export class FindingStore {
   private readonly byFile = new Map<string, Finding[]>();
-  private readonly emitter = new vscode.EventEmitter<StoreChange>();
+  /** The files whose findings changed, or undefined for "everything". */
+  private readonly emitter = new vscode.EventEmitter<string[] | undefined>();
   readonly onDidChange = this.emitter.event;
-  lastProjectScan?: Date;
 
-  /** Running totals. Maintained rather than recomputed: a streaming scan
-   * updates the badge and the panel title on every batch, and walking every
-   * finding each time would make the display cost grow with the results. */
-  private readonly totalsBySeverity: Record<Severity, number> = { high: 0, medium: 0, low: 0 };
+  /** Running total. Maintained rather than recomputed: a streaming scan
+   * updates the badge on every batch, and counting every finding each time
+   * would make the display cost grow with the results. */
   private total = 0;
-
-  private track(findings: Finding[], sign: 1 | -1): void {
-    for (const finding of findings) {
-      this.totalsBySeverity[finding.severity] += sign;
-      this.total += sign;
-    }
-  }
 
   private put(fsPath: string, findings: Finding[]): boolean {
     const previous = this.byFile.get(fsPath);
-    if (previous) {
-      this.track(previous, -1);
-    }
+    this.total -= previous?.length ?? 0;
     if (findings.length === 0) {
       return this.byFile.delete(fsPath);
     }
     this.byFile.set(fsPath, [...findings].sort(compareFindings));
-    this.track(findings, 1);
+    this.total += findings.length;
     return true;
   }
 
@@ -56,7 +39,7 @@ export class FindingStore {
       // scanned on every keystroke does not repaint the panel each time.
       return;
     }
-    this.emitter.fire({ files: [fsPath], replaced: false });
+    this.emitter.fire([fsPath]);
   }
 
   /**
@@ -86,7 +69,7 @@ export class FindingStore {
       // and this replaces rather than accumulates.
       this.put(file, bucket);
     }
-    this.emitter.fire({ files: [...byFile.keys()], replaced: false });
+    this.emitter.fire([...byFile.keys()]);
   }
 
   /**
@@ -106,34 +89,23 @@ export class FindingStore {
         removed.push(file);
       }
     }
-    this.lastProjectScan = new Date();
     if (removed.length > 0) {
-      this.emitter.fire({ files: removed, replaced: false });
-    }
-  }
-
-  forget(fsPath: string): void {
-    if (this.put(fsPath, [])) {
-      this.emitter.fire({ files: [fsPath], replaced: false });
+      this.emitter.fire(removed);
     }
   }
 
   clear(): void {
     this.byFile.clear();
     this.total = 0;
-    this.totalsBySeverity.high = 0;
-    this.totalsBySeverity.medium = 0;
-    this.totalsBySeverity.low = 0;
-    this.lastProjectScan = undefined;
-    this.emitter.fire({ files: [], replaced: true });
+    this.emitter.fire(undefined);
   }
 
   forFile(fsPath: string): Finding[] {
     return this.byFile.get(fsPath) ?? [];
   }
 
-  files(): string[] {
-    return [...this.byFile.keys()];
+  entries(): Iterable<[string, Finding[]]> {
+    return this.byFile.entries();
   }
 
   all(): Finding[] {
@@ -142,21 +114,6 @@ export class FindingStore {
 
   get size(): number {
     return this.total;
-  }
-
-  /** The running totals, free to read. */
-  totals(): Record<Severity, number> {
-    return { ...this.totalsBySeverity };
-  }
-
-  /** Totals over an arbitrary list — a filtered view, say — which has to be
-   * counted because it is not what the store is keeping track of. */
-  countsBySeverity(findings: Finding[]): Record<Severity, number> {
-    const counts: Record<Severity, number> = { high: 0, medium: 0, low: 0 };
-    for (const finding of findings) {
-      counts[finding.severity] += 1;
-    }
-    return counts;
   }
 
   dispose(): void {

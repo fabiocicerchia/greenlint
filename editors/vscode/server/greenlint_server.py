@@ -23,7 +23,7 @@ a size cap are skipped, and files no rule targets are never opened at all.
 
 Ops:
   ping                                    -> {version, rules, python}
-  rules                                   -> the full rule table
+  languages                               -> file extensions any rule targets
   scanText   {path, text, root}           -> findings for an unsaved buffer
   scanFile   {path, root}                 -> findings for a file on disk
   scanProject{root, paths, stream}        -> findings for the whole tree, in
@@ -442,19 +442,11 @@ class Server:
                 "python": sys.version.split()[0],
                 "module": getattr(self.gl, "__file__", None),
             }
-        if op == "rules":
+        if op == "languages":
+            # Just the extensions, not the rule table: the client uses this to
+            # avoid sending a buffer no rule would look at, and nothing else.
             return {
-                "rules": [
-                    {
-                        "id": rule["id"],
-                        "severity": rule["severity"],
-                        "langs": sorted(rule["langs"]),
-                        "message": rule["message"],
-                        "suggestion": rule["suggestion"],
-                        "co2e_estimate": self.gl.CO2E_HINTS.get(rule["id"], ""),
-                    }
-                    for rule in self.gl.RULES
-                ]
+                "extensions": sorted({lang for rule in self.gl.RULES for lang in rule["langs"]})
             }
         if op == "scanText":
             config = self.config_for(request.get("root"))
@@ -548,7 +540,6 @@ class Server:
 def main(argv=None):
     parser = argparse.ArgumentParser(prog="greenlint_server")
     parser.add_argument("--greenlint", help="path to greenlint.py or its directory")
-    parser.add_argument("--cache-entries", type=int, default=DEFAULT_CACHE_ENTRIES)
     args = parser.parse_args(argv)
 
     # Nothing but protocol on stdout. Anything that prints — a warning from an
@@ -573,7 +564,7 @@ def main(argv=None):
         out.flush()
         return 1
 
-    Server(gl, out, cache_entries=args.cache_entries).serve()
+    Server(gl, out).serve()
     return 0
 
 

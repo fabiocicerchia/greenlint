@@ -60,11 +60,12 @@ def test_ping_reports_the_loaded_rule_set(server):
     assert response["protocol"] == server_module.PROTOCOL_VERSION
 
 
-def test_rules_op_carries_the_energy_rationale(server):
-    rules = ask(server, op="rules")["rules"]
-    assert len(rules) == len(greenlint.RULES)
-    assert all(rule["suggestion"] for rule in rules)
-    assert next(r for r in rules if r["id"] == "GL003")["co2e_estimate"]
+def test_languages_op_reports_what_the_rules_target(server):
+    """The client skips files no rule would look at; the list has to come from
+    the rule table rather than a copy of it."""
+    extensions = ask(server, op="languages")["extensions"]
+    assert set(extensions) == {lang for rule in greenlint.RULES for lang in rule["langs"]}
+    assert ".py" in extensions and "Dockerfile" in extensions
 
 
 def test_scan_text_finds_issues_in_an_unsaved_buffer(server, tmp_path):

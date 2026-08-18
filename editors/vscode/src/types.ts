@@ -13,15 +13,6 @@ export interface Finding {
   co2e_estimate: string;
 }
 
-export interface RuleInfo {
-  id: string;
-  severity: Severity;
-  langs: string[];
-  message: string;
-  suggestion: string;
-  co2e_estimate: string;
-}
-
 /** What a project scan cost, so the caching is observable rather than claimed. */
 export interface ScanStats {
   files: number;

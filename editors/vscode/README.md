@@ -15,17 +15,13 @@ a rule added to the linter shows up in the editor with no change on this side.
 - **Squiggles** on the offending line, severity-mapped and configurable.
 - **Hover tooltips** with the rule id, what was found, *what to do instead*, and
   an order-of-magnitude CO2e figure — the "why" is the point of the tool.
-- **A Findings panel** at the bottom of the window, filtered to the current file
-  or showing the whole project, groupable by severity, file or rule. A project
-  scan streams into it — findings appear as they are made rather than after the
-  walk finishes — and the totals are computed once at the end.
-- **An HTML report**, in a webview or exported as a standalone file. Everything
-  in the UI is native VS Code — diagnostics, the tree view, quick picks, the
-  status bar — and the report is drawn from VS Code's own theme variables, so it
-  follows your theme, contrast setting and font size. Exported, it falls back to
-  a plain light/dark stylesheet so it still reads in a browser.
-- **Quick fixes**: open the rule's reference, or disable the rule for the
-  workspace by writing it into `.greenlint.toml`.
+- **A Findings panel** at the bottom of the window, showing the current file or
+  the whole project. A project scan streams into it — findings appear as they
+  are made rather than after the walk finishes — and the totals are logged once
+  at the end.
+- **An HTML report** in a webview, drawn from VS Code's own theme variables so
+  it follows your theme, contrast setting and font size. The rest of the UI is
+  native VS Code throughout: diagnostics, the tree view, the Problems panel.
 - **`.greenlint.toml` is honoured** exactly as the CLI honours it: same walker,
   same ignore globs, same disable list. What CI blocks on is what you see.
 
@@ -78,21 +74,16 @@ anyone maintaining a floor.
 | `greenlint.run` | `onType` | `onType`, `onSave` or `manual`. |
 | `greenlint.debounceMs` | `400` | Idle time before an `onType` scan runs. |
 | `greenlint.scanProjectOnStartup` | `true` | Populate the panel before you open a file. |
-| `greenlint.projectScanIntervalMinutes` | `0` (off) | Periodic full rescan. See below — you probably do not want this. |
 | `greenlint.maxFileBytes` | `1000000` | Skip files bigger than this. |
 | `greenlint.respectEditorExcludes` | `true` | Skip whatever `files.exclude` and `search.exclude` already hide. |
 | `greenlint.exclude` | `[]` | Extra ignore globs for the editor only. |
-| `greenlint.cacheEntries` | `4096` | Files the scan server keeps results for. |
-| `greenlint.severityLevels` | high→Warning, medium→Information, low→Hint | How severities become squiggles. |
-| `greenlint.showCo2eEstimate` | `true` | Include the CO2e hint in hovers and the report. |
 | `greenlint.trace` | `false` | Log every request, its timing and its cache outcome. |
 | `greenlint.pythonPath`, `greenlint.greenlintPath` | auto | Override discovery. |
 
 ## How it stays cheap
 
 A linter that re-reads your repository on every keystroke is a strange thing to
-ship with a tool about not wasting energy. Five things keep it honest, and each
-one is worth knowing about because each has a knob.
+ship with a tool about not wasting energy. Six things keep it honest.
 
 **One warm process, not one per scan.** A `greenlint` CLI run spends ~100 ms
 starting Python, importing the module and compiling ~40 regexes before it reads
@@ -103,9 +94,8 @@ Server** if you change interpreters.
 
 **Debounce, never poll.** Typing resets a timer; it does not queue a scan. A
 burst of thirty keystrokes costs one scan, and the cost of each keystroke is a
-`clearTimeout`. Raise `greenlint.debounceMs` on a slow machine or a large file —
-800–1000 ms still feels immediate and roughly halves the scans in a fast typing
-run. `onSave` is the cheapest setting that still keeps up with your work.
+`clearTimeout`. Raise `greenlint.debounceMs` on a slow machine or a large file;
+`onSave` is the cheapest setting that still keeps up with your work.
 
 **A two-layer cache, so a rescan usually reads nothing.** Every file's findings
 are stored against both its `(mtime, size)` and a hash of its contents:
@@ -158,26 +148,20 @@ and reads only what actually changed.
 
 ### On periodic scanning
 
-`greenlint.projectScanIntervalMinutes` exists and defaults to **0, off**, which
-is the recommendation. A timer's job would be to notice changes, and the
+There is none, deliberately. A timer's job would be to notice changes, and the
 extension is already told about every one of them: saves, external writes,
-creations, deletions and `.greenlint.toml` edits all arrive as events. A periodic
-scan on top of that can only re-examine files nothing has touched — it wakes the
-CPU, it defeats the disk's idle states, and its expected yield is zero findings.
-
-Two cases where it earns its place, both about events that do not arrive:
-a workspace on a network mount or a container bind-mount where file watching is
-unreliable, and a tree written by something outside the editor (a code
-generator, a sync client). If you are in one of those, 15–30 minutes is the
-right order of magnitude. Anything under 5 minutes is a busy loop with extra
-steps — which is, after all, `GL001`.
+creations, deletions and `.greenlint.toml` edits all arrive as events. A
+periodic scan on top of that can only re-examine files nothing has touched — it
+wakes the CPU, defeats the disk's idle states, and its expected yield is zero
+findings. If you are on a mount where file watching is unreliable, **greenlint:
+Scan Workspace** is a keystroke away.
 
 ### Memory
 
-The cache is a bounded LRU: `cacheEntries` files at roughly a kilobyte each, so
-the 4096 default is a few megabytes and a repository ten times that size costs
-nothing extra — the oldest entries fall out. Diagnostics for the whole project
-live in VS Code, and those are proportional to findings, not files.
+The cache is a bounded LRU of about 4,000 files at roughly a kilobyte each, so
+a few megabytes, and a repository ten times that size costs nothing extra — the
+oldest entries fall out. Diagnostics for the whole project live in VS Code, and
+those are proportional to findings, not files.
 
 ### If your repository is very large
 
@@ -230,6 +214,11 @@ than assumed.
 
 `npm run package` (what `make ext-build` calls) produces the `.vsix`. It copies
 the repository's `LICENSE` in first, which is why that file is gitignored here.
+
+The extension is about 1,400 lines of TypeScript over seven files, plus a
+380-line Python scan server. There is no framework and no state container: a
+`FindingStore` holds findings per file, a `ScanServer` owns the subprocess and
+the protocol, and one `Controller` wires VS Code's events to them.
 
 ## Licence
 

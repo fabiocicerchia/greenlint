@@ -2,7 +2,7 @@
   "name": "greenlint",
   "displayName": "greenlint",
   "description": "Flags energy-wasteful code and config patterns as you type, with the reason each one wastes energy.",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "publisher": "fabiocicerchia",
   "license": "Apache-2.0",
   "icon": "media/icon.png",
@@ -101,13 +101,6 @@
           "default": true,
           "description": "Scan the whole workspace once when the extension starts, so the Findings panel is populated before you open a file."
         },
-        "greenlint.projectScanIntervalMinutes": {
-          "type": "integer",
-          "default": 0,
-          "minimum": 0,
-          "maximum": 1440,
-          "description": "Rescan the workspace on this interval. 0 (the default) disables it: saves, creates and deletes already keep the results current, so a timer only re-reads files nothing has touched."
-        },
         "greenlint.maxFileBytes": {
           "type": "integer",
           "default": 1000000,
@@ -126,56 +119,6 @@
           },
           "default": [],
           "markdownDescription": "Extra ignore globs for the editor only, on top of `.greenlint.toml`. Same glob syntax as `ignore` there: a pattern shaped `*/dist/*` lets the walk skip the directory outright rather than filtering its files one by one. Prefer `.greenlint.toml` for anything CI should skip too."
-        },
-        "greenlint.cacheEntries": {
-          "type": "integer",
-          "default": 4096,
-          "minimum": 128,
-          "description": "How many files the scan server keeps findings for. Roughly a kilobyte each; the oldest are dropped first."
-        },
-        "greenlint.severityLevels": {
-          "type": "object",
-          "default": {
-            "high": "Warning",
-            "medium": "Information",
-            "low": "Hint"
-          },
-          "properties": {
-            "high": {
-              "type": "string",
-              "enum": [
-                "Error",
-                "Warning",
-                "Information",
-                "Hint"
-              ]
-            },
-            "medium": {
-              "type": "string",
-              "enum": [
-                "Error",
-                "Warning",
-                "Information",
-                "Hint"
-              ]
-            },
-            "low": {
-              "type": "string",
-              "enum": [
-                "Error",
-                "Warning",
-                "Information",
-                "Hint"
-              ]
-            }
-          },
-          "additionalProperties": false,
-          "description": "How greenlint severities map to editor squiggles."
-        },
-        "greenlint.showCo2eEstimate": {
-          "type": "boolean",
-          "default": true,
-          "description": "Include the order-of-magnitude CO2e hint in hovers and the report."
         },
         "greenlint.trace": {
           "type": "boolean",
@@ -204,11 +147,6 @@
         "icon": "$(graph)"
       },
       {
-        "command": "greenlint.exportReport",
-        "title": "Export HTML Report",
-        "category": "greenlint"
-      },
-      {
         "command": "greenlint.showScopeFile",
         "title": "Showing: Current File",
         "category": "greenlint",
@@ -219,28 +157,6 @@
         "title": "Showing: Whole Project",
         "category": "greenlint",
         "icon": "$(folder-opened)"
-      },
-      {
-        "command": "greenlint.setGrouping",
-        "title": "Group Findings By...",
-        "category": "greenlint",
-        "icon": "$(list-tree)"
-      },
-      {
-        "command": "greenlint.setSeverityFilter",
-        "title": "Filter by Severity...",
-        "category": "greenlint",
-        "icon": "$(filter)"
-      },
-      {
-        "command": "greenlint.disableRule",
-        "title": "Disable Rule in .greenlint.toml",
-        "category": "greenlint"
-      },
-      {
-        "command": "greenlint.clearCache",
-        "title": "Clear Cache and Rescan",
-        "category": "greenlint"
       },
       {
         "command": "greenlint.showOutput",
@@ -292,16 +208,6 @@
           "group": "navigation@1"
         },
         {
-          "command": "greenlint.setSeverityFilter",
-          "when": "view == greenlint.findings",
-          "group": "navigation@2"
-        },
-        {
-          "command": "greenlint.setGrouping",
-          "when": "view == greenlint.findings",
-          "group": "navigation@3"
-        },
-        {
           "command": "greenlint.scanProject",
           "when": "view == greenlint.findings",
           "group": "navigation@4"
@@ -310,16 +216,6 @@
           "command": "greenlint.showReport",
           "when": "view == greenlint.findings",
           "group": "navigation@5"
-        },
-        {
-          "command": "greenlint.exportReport",
-          "when": "view == greenlint.findings",
-          "group": "1_report"
-        },
-        {
-          "command": "greenlint.clearCache",
-          "when": "view == greenlint.findings",
-          "group": "9_admin"
         },
         {
           "command": "greenlint.showOutput",
@@ -334,10 +230,6 @@
         },
         {
           "command": "greenlint.showScopeProject",
-          "when": "false"
-        },
-        {
-          "command": "greenlint.disableRule",
           "when": "false"
         }
       ]

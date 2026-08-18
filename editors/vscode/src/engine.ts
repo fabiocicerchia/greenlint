@@ -5,7 +5,7 @@ import * as path from 'path';
 import * as vscode from 'vscode';
 
 import type { Settings } from './config';
-import type { Finding, RuleInfo, ScanStats, ScanSummary, ServerInfo } from './types';
+import type { Finding, ScanStats, ScanSummary, ServerInfo } from './types';
 
 const START_TIMEOUT_MS = 20_000;
 const REQUEST_TIMEOUT_MS = 120_000;
@@ -195,7 +195,7 @@ export class ScanServer implements vscode.Disposable {
   }
 
   private spawn(python: string, module?: string): Promise<ServerInfo> {
-    const args = [this.serverScript, '--cache-entries', String(this.settings.cacheEntries)];
+    const args = [this.serverScript];
     if (module) {
       args.push('--greenlint', module);
     }
@@ -434,9 +434,11 @@ export class ScanServer implements vscode.Disposable {
     );
   }
 
-  async rules(): Promise<RuleInfo[]> {
-    const response = await this.call<{ rules: RuleInfo[] }>('rules');
-    return response.rules;
+  /** File extensions any rule targets, so the client can skip asking about a
+   * file no rule would look at. Derived from the rule table, not hardcoded. */
+  async languages(): Promise<string[]> {
+    const response = await this.call<{ extensions: string[] }>('languages');
+    return response.extensions;
   }
 
   /** Ignore globs on top of `.greenlint.toml`, for what the editor already
