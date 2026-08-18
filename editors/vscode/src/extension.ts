@@ -6,7 +6,13 @@ import { readSettings, requiresRestart } from './config';
 import { GreenlintHoverProvider, SOURCE, toDiagnostic } from './diagnostics';
 import { ScanServer } from './engine';
 import { editorExcludeGlobs } from './excludes';
-import { FindingsProvider, type Scope, workspaceRelative } from './findingsView';
+import {
+  countBySeverity,
+  FindingsProvider,
+  type Grouping,
+  type Scope,
+  workspaceRelative,
+} from './findingsView';
 import { renderReport } from './report';
 import { FindingStore } from './store';
 import type { ScanStats, ScanSummary } from './types';
@@ -40,6 +46,10 @@ class Controller implements vscode.Disposable {
   private readonly server: ScanServer;
   private readonly findings = new FindingsProvider(this.store);
   private readonly tree: vscode.TreeView<unknown>;
+  private readonly status = vscode.window.createStatusBarItem(
+    vscode.StatusBarAlignment.Right,
+    50,
+  );
   private readonly disposables: vscode.Disposable[] = [];
 
   private readonly debouncers = new Map<string, NodeJS.Timeout>();
@@ -48,6 +58,7 @@ class Controller implements vscode.Disposable {
   private reportPanel?: vscode.WebviewPanel;
   private scannableExtensions?: Set<string>;
   private lastStats?: ScanStats;
+  private lastSummary?: ScanSummary;
   private lastErrorShown?: string;
   private appliedExcludes = '';
   private scanning = false;
@@ -59,9 +70,13 @@ class Controller implements vscode.Disposable {
       this.log,
     );
     this.findings.scope = context.workspaceState.get<Scope>('scope', 'project');
+    this.findings.grouping = context.workspaceState.get<Grouping>('grouping', 'severity');
     this.tree = vscode.window.createTreeView('greenlint.findings', {
       treeDataProvider: this.findings,
+      showCollapseAll: true,
     });
+    this.status.command = 'greenlint.findings.focus';
+    this.status.name = 'greenlint';
   }
 
   async start(): Promise<void> {
@@ -88,6 +103,7 @@ class Controller implements vscode.Disposable {
     this.reportPanel?.dispose();
     vscode.Disposable.from(...this.disposables).dispose();
     this.tree.dispose();
+    this.status.dispose();
     this.diagnostics.dispose();
     this.findings.dispose();
     this.store.dispose();
@@ -112,6 +128,7 @@ class Controller implements vscode.Disposable {
       command('greenlint.showReport', () => this.showReport()),
       command('greenlint.showScopeFile', () => this.setScope('file')),
       command('greenlint.showScopeProject', () => this.setScope('project')),
+      command('greenlint.setGrouping', () => this.pickGrouping()),
       command('greenlint.showOutput', () => this.log.show(true)),
       command('greenlint.restartServer', async () => {
         await this.server.restart();
@@ -291,6 +308,7 @@ class Controller implements vscode.Disposable {
               continue;
             }
             this.lastStats = response.stats;
+            this.lastSummary = response.summary;
             this.store.pruneUnder(folder.uri.fsPath, reported, dirty);
             this.logScan(folder, response.stats, response.summary);
           }
@@ -395,11 +413,62 @@ class Controller implements vscode.Disposable {
     void vscode.commands.executeCommand('setContext', 'greenlint.hasFindings', total > 0);
     this.tree.description = this.findings.describeScope();
     this.tree.badge = total > 0 ? { value: total, tooltip: `${total} findings` } : undefined;
+    this.updateStatus(total);
     // A full re-render per batch would undo the point of streaming; the report
     // gets one when the scan finishes.
     if (this.reportPanel && !this.scanning) {
       this.reportPanel.webview.html = this.reportHtml();
     }
+  }
+
+  private async pickGrouping(): Promise<void> {
+    const pick = await vscode.window.showQuickPick(
+      [
+        { label: 'severity', description: 'high, then medium, then low' },
+        { label: 'file', description: 'one group per file' },
+        { label: 'rule', description: 'one group per rule' },
+      ],
+      { title: 'Group findings by' },
+    );
+    if (pick) {
+      this.findings.grouping = pick.label as Grouping;
+      void this.context.workspaceState.update('grouping', pick.label);
+      this.repaint();
+    }
+  }
+
+  /**
+   * The status bar line, and behind it the end-of-scan aggregate.
+   *
+   * The counts in the bar follow the panel's scope; the tooltip reports the
+   * whole project as the last scan computed it, so "3 findings in this file"
+   * and "412 across the project" are both one glance away.
+   */
+  private updateStatus(total: number): void {
+    const counts = countBySeverity(this.findings.findings());
+    this.status.text =
+      total === 0
+        ? '$(circle-large-outline) greenlint'
+        : `$(flame) ${counts.high} $(warning) ${counts.medium} $(info) ${counts.low}`;
+    const tooltip = new vscode.MarkdownString(undefined, true);
+    tooltip.appendMarkdown(`**greenlint** — ${this.findings.describeScope()}`);
+    if (this.lastSummary) {
+      const { bySeverity: by, total: all, files } = this.lastSummary;
+      tooltip.appendMarkdown(
+        `\n\nWhole project: ${all} finding${all === 1 ? '' : 's'} in ${files} file${
+          files === 1 ? '' : 's'
+        } — $(flame) ${by.high} · $(warning) ${by.medium} · $(info) ${by.low}`,
+      );
+    }
+    if (this.lastStats) {
+      tooltip.appendMarkdown(
+        `\n\nLast scan: ${this.lastStats.files} files in ${this.lastStats.ms} ms ` +
+          `(${this.lastStats.scanned} scanned, ` +
+          `${this.lastStats.reusedFromStat + this.lastStats.reusedFromHash} cached)`,
+      );
+    }
+    this.status.tooltip = tooltip;
+    this.status.show();
   }
 
   private setScope(scope: Scope): void {
@@ -431,7 +500,7 @@ class Controller implements vscode.Disposable {
   }
 
   private reportHtml(): string {
-    return renderReport(this.findings.getChildren(), {
+    return renderReport(this.findings.findings(), {
       scopeLabel: this.findings.scope === 'project' ? 'whole project' : this.findings.describeScope(),
       generatedAt: new Date(),
       version: this.server.serverInfo?.version,

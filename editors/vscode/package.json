@@ -2,7 +2,7 @@
   "name": "greenlint",
   "displayName": "greenlint",
   "description": "Flags energy-wasteful code and config patterns as you type, with the reason each one wastes energy.",
-  "version": "0.4.0",
+  "version": "0.4.1",
   "publisher": "fabiocicerchia",
   "license": "Apache-2.0",
   "icon": "media/icon.png",
@@ -167,6 +167,12 @@
         "command": "greenlint.restartServer",
         "title": "Restart Scan Server",
         "category": "greenlint"
+      },
+      {
+        "command": "greenlint.setGrouping",
+        "title": "Group Findings By...",
+        "category": "greenlint",
+        "icon": "$(list-tree)"
       }
     ],
     "viewsContainers": {
@@ -201,6 +207,11 @@
           "command": "greenlint.showScopeProject",
           "when": "view == greenlint.findings && greenlint.scope == file",
           "group": "navigation@1"
+        },
+        {
+          "command": "greenlint.setGrouping",
+          "when": "view == greenlint.findings",
+          "group": "navigation@2"
         },
         {
           "command": "greenlint.showScopeFile",
