@@ -5,6 +5,7 @@
       "release-type": "python",
       "package-name": "greenlint",
       "include-component-in-tag": false,
+      "draft": true,
       "extra-files": [
         {
           "type": "json",

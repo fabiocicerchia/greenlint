@@ -244,9 +244,12 @@ VS Code's events to them.
 The extension ships at the repository's version, on the repository's release.
 `release-please` keeps the release PR; merging it bumps `pyproject.toml` *and*
 this manifest in the same commit (via `extra-files` in
-`release-please-config.json`), tags `vX.Y.Z`, and publishes a GitHub Release.
-The same run then calls `.github/workflows/publish-extension.yml` — a release
-published with GITHUB_TOKEN does not start workflows of its own.
+`release-please-config.json`) and cuts a **draft** release for `vX.Y.Z`. The
+same run then calls `.github/workflows/publish-extension.yml` — a release
+created with GITHUB_TOKEN does not start workflows of its own — and a final job
+publishes the draft, which is what creates the tag. Draft first because this
+repository has immutable releases: once published, a release's assets are
+frozen, so the `.vsix` has to be attached before that.
 
 One version for both matters more here than it looks: the extension drives
 `greenlint.py` and needs a greenlint new enough to have the scan API, so

@@ -22,6 +22,13 @@ on:
         description: "Release tag to publish, e.g. v0.1.6"
         required: true
         type: string
+    secrets:
+      VSCE_PAT:
+        description: "VS Marketplace token. Absent means the publish is skipped."
+        required: false
+      OVSX_PAT:
+        description: "Open VSX token. Absent means the publish is skipped."
+        required: false
   workflow_dispatch:
     inputs:
       version:
@@ -72,13 +79,15 @@ jobs:
           # release-please already writes this version into the manifest (see
           # release-please-config.json), so this is normally a no-op. It stays
           # for workflow_dispatch, and so that a mismatch can never ship.
+          # No shell-lookalike ${...} inside the single quotes: the linter
+          # would read JS template syntax as an unexpanded shell variable.
           node -e '
             const fs = require("node:fs")
-            const path = `${process.env.EXT}/package.json`
+            const path = process.argv[1] + "/package.json"
             const pkg = JSON.parse(fs.readFileSync(path, "utf8"))
-            pkg.version = process.argv[1]
-            fs.writeFileSync(path, `${JSON.stringify(pkg, null, 2)}\n`)
-          ' "$VERSION"
+            pkg.version = process.argv[2]
+            fs.writeFileSync(path, JSON.stringify(pkg, null, 2) + "\n")
+          ' "$EXT" "$VERSION"
           echo "publishing $VSIX_NAME $VERSION"
 
       - name: Install
