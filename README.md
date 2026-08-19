@@ -64,8 +64,12 @@ drives `greenlint.py` itself through a warm scan server with a stat+hash cache,
 so an unchanged file is never opened and an unchanged tree is never read.
 
 ```sh
-make ext-install   # build the .vsix and install it into VS Code
+code --install-extension fabiocicerchia.greenlint   # or search "greenlint" in the Extensions view
 ```
+
+Also on [Open VSX](https://open-vsx.org/extension/fabiocicerchia/greenlint) for
+VSCodium and Cursor. From a checkout instead, `make ext-install` builds the
+`.vsix` and installs it.
 
 More in [`docs/editors.md`](docs/editors.md).
 

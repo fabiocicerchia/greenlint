@@ -41,15 +41,24 @@ a rule added to the linter shows up in the editor with no change on this side.
 
 ## Install
 
-Not on the Marketplace yet, so build it from the checkout — from the repository
-root:
+From the [VS Code
+Marketplace](https://marketplace.visualstudio.com/items?itemName=fabiocicerchia.greenlint):
+open the Extensions view (<kbd>Ctrl</kbd>/<kbd>Cmd</kbd>+<kbd>Shift</kbd>+<kbd>X</kbd>),
+search for **greenlint**, and press *Install*. Or from a terminal:
 
 ```sh
-make ext-install    # builds the .vsix and installs it into VS Code
+code --install-extension fabiocicerchia.greenlint
 ```
 
-`make ext-package` stops at the `.vsix` if you would rather install it from the
-Extensions view (`...` → *Install from VSIX*). Reload the window afterwards.
+VSCodium, Cursor and the other editors that use [Open
+VSX](https://open-vsx.org/extension/fabiocicerchia/greenlint) get the same
+extension from there — same id, same version:
+
+```sh
+codium --install-extension fabiocicerchia.greenlint
+```
+
+From a checkout instead, `make ext-install` builds the `.vsix` and installs it.
 
 ## Requirements
 
