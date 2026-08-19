@@ -27,6 +27,8 @@ from pathlib import Path
 CONFIG_FILENAME = ".greenlint.toml"
 BASELINE_FILENAME = ".greenlint-baseline.json"
 
+# ----------------------------------------------------- carbon arithmetic ---
+
 # Order-of-magnitude steers for which findings are worth fixing first — not
 # measurements. Two anchors make them checkable rather than plausible-sounding:
 #
@@ -177,6 +179,8 @@ CO2E_HINTS = {
     "GL037": f"two passes over the collection instead of one; {_HOT_PATH}",
     "GL038": f"extra allocation and a defeated memoisation per render; {_HOT_PATH}",
 }
+
+# ----------------------------------------------------------------- rules ---
 
 RULES = [
     # id, languages, regex, message, suggestion, severity
@@ -564,6 +568,9 @@ RULES = [
 RULES_BY_ID = {r["id"]: r for r in RULES}
 
 
+# --------------------------------------------------------- configuration ---
+
+
 def _as_list(value, key):
     """Coerce a config value to a list of strings, refusing a bare string.
 
@@ -603,6 +610,8 @@ def load_config(path=None):
         "ignore": _as_list(data.get("ignore"), "ignore"),
     }
 
+
+# ----------------------------------------------------- comment stripping ---
 
 # Line- and block-comment syntax per extension. Dockerfile/unknown default to `#`.
 _SLASH = ("//", ("/*", "*/"))
@@ -817,6 +826,8 @@ def _is_go_template(text):
     return "{{" in text and "}}" in text
 
 
+# -------------------------------------------------------------- findings ---
+
 # `foo_test.go`, `test_foo.py`, `foo.test.ts`, `foo.spec.ts`.
 TEST_FILENAME = re.compile(r"(^test_|_test\.|\.test\.|\.spec\.|_spec\.)", re.IGNORECASE)
 
@@ -836,6 +847,13 @@ def _is_test_file(path):
 
 
 def _finding(rule, path, line):
+    """Build one finding from the rule that fired.
+
+    Every field a consumer sees is assembled here — the JSON output, the
+    editor extension and the baseline fingerprint all read this shape, so a
+    rule can never emit a finding that is missing its *why* or its
+    suggestion.
+    """
     return {
         "rule": rule["id"],
         "severity": rule["severity"],
@@ -845,6 +863,9 @@ def _finding(rule, path, line):
         "suggestion": rule["suggestion"],
         "co2e_estimate": CO2E_HINTS.get(rule["id"], ""),
     }
+
+
+# ------------------------------------------------------ python AST index ---
 
 
 def _parse_python(path, text):
@@ -1009,6 +1030,9 @@ def _nearest_loop(root, target):
             nxt = child if isinstance(child, (ast.For, ast.While)) else owner
             stack.append((child, nxt))
     return found
+
+
+# ------------------------------------------------------ python AST rules ---
 
 
 def _ast_busy_loop_findings(path, index):
@@ -1305,6 +1329,9 @@ def _ast_try_in_loop_findings(path, index):
             yield _finding(rule, path, stmt.lineno)
 
 
+# -------------------------------------------------- infrastructure rules ---
+
+
 def _tf_resource_blocks(text, resource_type):
     """Yield (match, block_text, lineno) for every `resource "<resource_type>"
     "..." { ... }` in `text`. Block end is approximated as the next line that
@@ -1484,6 +1511,8 @@ def _compose_resources_findings(path, text):
         yield _finding(rule, path, text.count("\n", 0, m.start()) + 1)
 
 
+# ------------------------------------------------ ordering and baselines ---
+
 SEVERITY_ORDER = {"high": 0, "medium": 1, "low": 2}
 
 
@@ -1558,6 +1587,9 @@ def write_baseline(path, findings, root):
     fingerprints = sorted({fingerprint(f, root) for f in findings})
     Path(path).write_text(json.dumps({"version": 1, "fingerprints": fingerprints}, indent=2) + "\n")
     return len(fingerprints)
+
+
+# -------------------------------------------------------------- scanning ---
 
 
 def scannable(path):
@@ -1650,6 +1682,9 @@ def scan_file(path, disabled=frozenset(), text=None):
         for m in rule["pattern"].finditer(code):
             line = code.count("\n", 0, m.start()) + 1
             yield _finding(rule, path, line)
+
+
+# -------------------------------------------------------- file discovery ---
 
 
 def _matches_any(rel, ignore):
@@ -1761,6 +1796,9 @@ def scan(paths, config=None):
         findings.extend(scan_file(f, config["disable"]))
     findings.sort(key=finding_sort_key)
     return findings
+
+
+# ------------------------------------------------------------------- cli ---
 
 
 def main(argv=None):
