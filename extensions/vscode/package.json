@@ -284,6 +284,6 @@
     "@types/node": "^20.11.30",
     "@types/vscode": "^1.85.0",
     "typescript": "^5.4.5",
-    "esbuild": "^0.24.0"
+    "esbuild": "^0.28.1"
   }
 }
