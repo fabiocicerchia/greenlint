@@ -22,7 +22,8 @@ Everything is bounded: the cache is an LRU with a fixed entry count, files over
 a size cap are skipped, and files no rule targets are never opened at all.
 
 Ops:
-  ping                                    -> {version, rules, python}
+  ping                                    -> {version, rules, python,
+                                             severityOrder}
   languages                               -> file extensions any rule targets
   scanText   {path, text, root}           -> findings for an unsaved buffer
   scanFile   {path, root}                 -> findings for a file on disk
@@ -98,6 +99,7 @@ REQUIRED_API = (
     "finding_sort_key",
     "is_ignored",
     "iter_files",
+    "SEVERITY_ORDER",
     "apply_baseline",
     "load_baseline",
     "load_config",
@@ -461,6 +463,11 @@ class Server:
                 "rules": len(self.gl.RULES),
                 "python": sys.version.split()[0],
                 "module": getattr(self.gl, "__file__", None),
+                # The client merges findings from several scans and has to sort
+                # the merged list itself. The *order* is greenlint's to decide,
+                # so it is published rather than reinvented over there — and a
+                # severity added here needs no change in the extension.
+                "severityOrder": dict(self.gl.SEVERITY_ORDER),
             }
         if op == "languages":
             # Just the extensions, not the rule table: the client uses this to

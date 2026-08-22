@@ -44,16 +44,34 @@ export interface ServerInfo {
   rules: number;
   python: string;
   module: string | null;
+  /** greenlint's severity ordering. Absent from a server older than this field. */
+  severityOrder?: Record<string, number>;
 }
 
-export const SEVERITY_ORDER: Record<Severity, number> = { high: 0, medium: 1, low: 2 };
+/**
+ * greenlint's own ordering, as the scan server reports it.
+ *
+ * The panel merges findings from several scans — a freshly typed buffer on top
+ * of a cached project walk — so it has to sort the merged list here. *Which*
+ * order that is remains greenlint's decision (`finding_sort_key`), so it is
+ * read from the server rather than restated: a severity added over there needs
+ * no change here, and cannot end up sorted differently in the two places.
+ *
+ * The fallback is only in play before the first ping answers.
+ */
+let severityRank: Record<string, number> = { high: 0, medium: 1, low: 2 };
+
+export function useSeverityOrder(order: Record<string, number> | undefined): void {
+  if (order && Object.keys(order).length > 0) {
+    severityRank = { ...order };
+  }
+}
+
+/** An unknown severity sorts last rather than sorting randomly. */
+const rankOf = (severity: string): number => severityRank[severity] ?? Number.MAX_SAFE_INTEGER;
 
 export function compareFindings(a: Finding, b: Finding): number {
-  return (
-    SEVERITY_ORDER[a.severity] - SEVERITY_ORDER[b.severity] ||
-    a.file.localeCompare(b.file) ||
-    a.line - b.line
-  );
+  return rankOf(a.severity) - rankOf(b.severity) || a.file.localeCompare(b.file) || a.line - b.line;
 }
 
 /**

@@ -5,7 +5,7 @@ import * as path from 'path';
 import * as vscode from 'vscode';
 
 import type { Settings } from './config';
-import type { Finding, ScanStats, ScanSummary, ServerInfo } from './types';
+import { type Finding, type ScanStats, type ScanSummary, type ServerInfo, useSeverityOrder } from './types';
 
 const START_TIMEOUT_MS = 20_000;
 const REQUEST_TIMEOUT_MS = 120_000;
@@ -172,6 +172,8 @@ export class ScanServer implements vscode.Disposable {
             `(${info.rules} rules) from ${info.module ?? 'installed package'}`,
         );
         this.info = info;
+        // Sorting happens here, but the order is greenlint's.
+        useSeverityOrder(info.severityOrder);
         return info;
       } catch (error) {
         const reason = error instanceof Error ? error.message : String(error);

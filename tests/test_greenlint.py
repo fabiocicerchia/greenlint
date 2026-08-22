@@ -1,4 +1,5 @@
 import os
+import re
 from pathlib import Path
 
 import pytest
@@ -1406,3 +1407,33 @@ def test_cli_rejects_a_baseline_path_that_is_not_there(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
     with pytest.raises(SystemExit, match="no such baseline"):
         main([".", "--baseline", "missing.json"])
+
+
+def _docs_anchor(rule):
+    """The GitHub heading anchor a front end derives for a rule.
+
+    Mirrors `ruleDocsUrl` in the VS Code extension: GitHub lowercases the
+    heading, drops punctuation it does not keep, and turns spaces into hyphens
+    — so the em dash leaves the doubled hyphen you see in the result.
+    """
+    slug = f"{rule['id']} — {rule['message']}".lower()
+    slug = re.sub(r"[^a-z0-9 _-]", "", slug)
+    return slug.replace(" ", "-")
+
+
+def test_every_rule_has_a_matching_heading_in_the_docs():
+    """The rules reference is addressable per rule, and the address is derived
+    from the rule's own message.
+
+    Editors link a finding straight to its section, so a heading that no longer
+    matches its rule is a link that silently goes nowhere. That is a
+    documentation drift no reader would notice and no other test would catch.
+    """
+    doc = (Path(__file__).resolve().parent.parent / "docs" / "rules.md").read_text()
+    missing = [r["id"] for r in greenlint.RULES if f"## {r['id']} — {r['message']}" not in doc]
+    assert not missing, f"docs/rules.md heading does not match the rule message: {missing}"
+
+
+def test_rule_anchors_are_unique():
+    anchors = [_docs_anchor(r) for r in greenlint.RULES]
+    assert len(set(anchors)) == len(anchors)
