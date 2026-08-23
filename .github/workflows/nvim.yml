@@ -1,0 +1,66 @@
+name: nvim
+
+on:
+  push:
+    branches: [main, master]
+    paths: ["extensions/nvim/**", "greenlint.py", ".github/workflows/nvim.yml"]
+  pull_request:
+    paths: ["extensions/nvim/**", "greenlint.py", ".github/workflows/nvim.yml"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: nvim-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # stable is what people run; nightly is where a deprecation shows up first,
+  # and this plugin is deliberately on the 0.11 API surface (vim.system,
+  # vim.fs.relpath, vim.validate's callable form).
+  #
+  # Python is here for severity_order_spec, which reads greenlint.py and fails
+  # if the plugin's copy of SEVERITY_ORDER stops matching it.
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        neovim: [stable, nightly]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065  # v5.6.0
+        with:
+          python-version: "3.12"
+
+      - uses: rhysd/action-setup-vim@6ba49e35ceb7ba2426d1f4849e0d9723c4f21d3f  # v1.4.2
+        with:
+          neovim: true
+          version: ${{ matrix.neovim }}
+
+      - name: Version
+        run: nvim --version
+
+      - name: Test
+        working-directory: extensions/nvim
+        run: make test
+
+  smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065  # v5.6.0
+        with:
+          python-version: "3.12"
+
+      - uses: rhysd/action-setup-vim@6ba49e35ceb7ba2426d1f4849e0d9723c4f21d3f  # v1.4.2
+        with:
+          neovim: true
+          version: stable
+
+      - name: Drive it against real files
+        working-directory: extensions/nvim
+        run: nvim --headless --clean -u tests/smoke.lua
