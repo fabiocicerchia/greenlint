@@ -4,7 +4,7 @@ import * as vscode from 'vscode';
 
 import { readSettings, requiresRestart } from './config';
 import { GreenlintHoverProvider, SOURCE, toDiagnostic } from './diagnostics';
-import { ScanServer } from './engine';
+import { ScanServer, ScanServerError } from './engine';
 import { editorExcludeGlobs } from './excludes';
 import {
   countBySeverity,
@@ -427,6 +427,14 @@ class Controller implements vscode.Disposable {
     void vscode.commands.executeCommand('setContext', 'greenlint.hasFindings', total > 0);
     this.tree.description = this.findings.describeScope();
     this.tree.badge = total > 0 ? { value: total, tooltip: `${total} findings` } : undefined;
+    // "Scanned, and clean" and "never scanned" are both an empty tree, and
+    // until this line they looked identical — the walk's only evidence was a
+    // line in the output channel nobody has open. A clean workspace is the
+    // result, not the absence of one.
+    this.tree.message =
+      total === 0 && this.lastStats
+        ? `No findings — ${this.lastStats.files} file(s) scanned in ${this.lastStats.ms} ms.`
+        : undefined;
     this.updateStatus(total);
     // A full re-render per batch would undo the point of streaming; the report
     // gets one when the scan finishes.
@@ -493,7 +501,9 @@ class Controller implements vscode.Disposable {
     const counts = countBySeverity(this.findings.findings());
     this.status.text =
       total === 0
-        ? '$(circle-large-outline) greenlint'
+        ? this.lastStats
+          ? '$(check) greenlint'
+          : '$(circle-large-outline) greenlint'
         : `$(flame) ${counts.high} $(warning) ${counts.medium} $(info) ${counts.low}`;
     const tooltip = new vscode.MarkdownString(undefined, true);
     tooltip.appendMarkdown(`**greenlint** — ${this.findings.describeScope()}`);
@@ -567,8 +577,51 @@ class Controller implements vscode.Disposable {
       return;
     }
     this.lastErrorShown = message;
+    // greenlint missing is the one failure with a one-line fix, so the toast
+    // carries the command itself — a link to the README is one click and one
+    // page of reading away from the same sentence.
+    const install = error instanceof ScanServerError ? error.install : undefined;
+    const headline = message.split('\n')[0];
+    const text = install ? `greenlint: ${headline}\n\nInstall it with: ${install}` : `greenlint: ${headline}`;
+    const actions = install ? ['Install greenlint', 'Copy Command', 'Show Log'] : ['Show Log'];
+    void vscode.window.showErrorMessage(text, ...actions).then((choice) => {
+      if (choice === 'Show Log') {
+        this.log.show(true);
+      } else if (choice === 'Install greenlint' && install) {
+        this.runInstall(install);
+      } else if (choice === 'Copy Command' && install) {
+        void vscode.env.clipboard
+          .writeText(install)
+          .then(() => vscode.window.showInformationMessage(`Copied: ${install}`));
+      }
+    });
+  }
+
+  /**
+   * Run the install in a terminal the user can see.
+   *
+   * Deliberately not a hidden `child_process`: this installs software, and it
+   * can fail in ways only the output explains — no pipx on PATH, an externally
+   * managed interpreter, a proxy. The terminal is both the progress bar and the
+   * error message. What it cannot do is tell us when it finished, hence the
+   * button rather than an automatic restart.
+   */
+  private runInstall(command: string): void {
+    const terminal = vscode.window.createTerminal('greenlint install');
+    terminal.show();
+    terminal.sendText(command);
     void vscode.window
-      .showErrorMessage(`greenlint: ${message.split('\n')[0]}`, 'Show Log')
-      .then((choice) => choice === 'Show Log' && this.log.show(true));
+      .showInformationMessage(
+        'Installing greenlint. When the terminal is done, restart the scan server.',
+        'Restart Scan Server',
+      )
+      .then((choice) => {
+        if (choice === 'Restart Scan Server') {
+          // The failure that got us here is fixed or not; either way the next
+          // start reports for itself, so the guard must not swallow it.
+          this.lastErrorShown = undefined;
+          void vscode.commands.executeCommand('greenlint.restartServer');
+        }
+      });
   }
 }

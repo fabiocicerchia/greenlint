@@ -1311,6 +1311,32 @@ def test_walk_files_never_descends_into_pruned_directories(tmp_path, monkeypatch
     assert not any("node_modules" in p or ".git" in p or "vendor" in p for p in opened)
 
 
+def test_walk_files_prunes_virtualenvs_and_caches(tmp_path, monkeypatch):
+    """A virtualenv is thousands of third-party files; walking one is what made
+    an editor scan look like a hang."""
+    write(tmp_path, "app.py", "x = 1\n")
+    write(tmp_path, ".venv/lib/python3.11/site-packages/dep/mod.py", "while True: pass\n")
+    write(tmp_path, "env3/lib/site-packages/other/mod.py", "while True: pass\n")
+    write(tmp_path, ".mypy_cache/3.11/mod.data.json", "{}\n")
+
+    opened = []
+    real_scandir = os.scandir
+
+    def watched(path):
+        opened.append(str(path))
+        return real_scandir(path)
+
+    monkeypatch.setattr(os, "scandir", watched)
+    files = [f.name for f in greenlint.iter_files([str(tmp_path)])]
+    assert files == ["app.py"]
+    assert not any("site-packages" in p or "mypy_cache" in p for p in opened)
+    # And the same file asked about directly — the editor's path — is skipped,
+    # so a buffer opened out of .venv does not sprout squiggles the CLI never
+    # reports.
+    assert greenlint.is_ignored(tmp_path / ".venv" / "lib" / "mod.py")
+    assert not greenlint.is_ignored(tmp_path / "app.py")
+
+
 def test_walk_files_matches_what_rglob_selected(tmp_path):
     """The pruning walk replaced `Path.rglob`; it must still pick the same
     files, symlinks and all."""

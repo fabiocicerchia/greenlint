@@ -28,7 +28,18 @@ interface Pending {
   onProgress?: (progress: ScanProgress) => void;
 }
 
-export class ScanServerError extends Error {}
+/** The one command that fixes "greenlint is not installed". Kept short on
+ * purpose: a toast is read in a second, and the log already lists every path
+ * that was tried. */
+export const INSTALL_COMMAND = 'pipx install git+https://github.com/fabiocicerchia/greenlint';
+
+export class ScanServerError extends Error {
+  /** Set only when no interpreter could run greenlint at all — the failure
+   * `INSTALL_COMMAND` actually fixes. A mid-session crash must not offer it. */
+  constructor(message: string, readonly install?: string) {
+    super(message);
+  }
+}
 
 /**
  * Client for `server/greenlint_server.py`.
@@ -191,10 +202,9 @@ export class ScanServer implements vscode.Disposable {
     const headline =
       reasons.length === 1
         ? reasons[0]
-        : 'could not start the scan server — install or upgrade greenlint ' +
-          '(`pip install -U git+https://github.com/fabiocicerchia/greenlint`, or `pipx` ' +
-          'if you have it), or set `greenlint.pythonPath` / `greenlint.greenlintPath`.';
-    throw new ScanServerError(`${headline}\nTried:\n${failures.join('\n')}`);
+        : 'could not start the scan server — install or upgrade greenlint, ' +
+          'or set `greenlint.pythonPath` / `greenlint.greenlintPath`.';
+    throw new ScanServerError(`${headline}\nTried:\n${failures.join('\n')}`, INSTALL_COMMAND);
   }
 
   private spawn(python: string, module?: string): Promise<ServerInfo> {

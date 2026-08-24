@@ -15,6 +15,11 @@
   "bugs": {
     "url": "https://github.com/fabiocicerchia/greenlint/issues"
   },
+  "qna": "https://github.com/fabiocicerchia/greenlint/issues",
+  "pricing": "Free",
+  "sponsor": {
+    "url": "https://github.com/sponsors/fabiocicerchia"
+  },
   "categories": [
     "Linters",
     "Programming Languages"
