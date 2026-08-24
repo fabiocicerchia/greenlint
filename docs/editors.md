@@ -29,14 +29,16 @@ Then install the extension. It finds Python and greenlint on its own, falling
 back to a `greenlint.py` in the workspace root — so a checkout of this
 repository is linted by its own working copy.
 
-Until it is published to the Marketplace, build it from the checkout:
+It is on the [VS Code
+Marketplace](https://marketplace.visualstudio.com/items?itemName=fabiocicerchia.greenlint)
+and on [Open VSX](https://open-vsx.org/extension/fabiocicerchia/greenlint), for
+VSCodium and Cursor — search for **greenlint** in the Extensions view, or:
 
 ```sh
-make ext-install    # builds the .vsix and installs it into VS Code
+code --install-extension fabiocicerchia.greenlint
 ```
 
-`make ext-package` stops at the `.vsix` if you would rather install it from the
-Extensions view (`...` → *Install from VSIX*). Reload the window afterwards.
+From a checkout instead, `make ext-install` builds the `.vsix` and installs it.
 
 ### Keeping it cheap
 
