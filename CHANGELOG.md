@@ -1,5 +1,23 @@
 # Changelog
 
+## [0.4.0](https://github.com/fabiocicerchia/greenlint/compare/v0.3.0...v0.4.0) (2026-08-24)
+
+
+### Features
+
+* **rules:** three or more rules each for C#, Kotlin, Swift and Ruby ([#47](https://github.com/fabiocicerchia/greenlint/issues/47)) ([43c8ec1](https://github.com/fabiocicerchia/greenlint/commit/43c8ec19b9523c4935817ae328702180130cc342))
+
+
+### Bug Fixes
+
+* let greenlint own the finding order and the rule anchors ([#54](https://github.com/fabiocicerchia/greenlint/issues/54)) ([5c0709f](https://github.com/fabiocicerchia/greenlint/commit/5c0709f6892a0c0f2f8f2c307f43e08d2d114fb0))
+* stop scanning virtualenvs, and make the extension explain itself ([#56](https://github.com/fabiocicerchia/greenlint/issues/56)) ([978680d](https://github.com/fabiocicerchia/greenlint/commit/978680d4aeb3751e1de0f0cada163c4c900011ea))
+
+
+### Documentation
+
+* install the VS Code extension from the marketplaces ([#52](https://github.com/fabiocicerchia/greenlint/issues/52)) ([978b856](https://github.com/fabiocicerchia/greenlint/commit/978b8563d64ca5d45c8a57e5d5096f790eb40117))
+
 ## [0.3.0](https://github.com/fabiocicerchia/greenlint/compare/v0.2.0...v0.3.0) (2026-08-18)
 
 
