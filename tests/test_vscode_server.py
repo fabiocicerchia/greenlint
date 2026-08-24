@@ -62,6 +62,15 @@ def test_ping_reports_the_loaded_rule_set(server):
     assert response["protocol"] == server_module.PROTOCOL_VERSION
 
 
+def test_ping_publishes_greenlints_severity_ordering(server):
+    """The panel merges findings from several scans and sorts the merged list
+    itself, so it needs the order — but the order is greenlint's to decide, and
+    an extension holding its own copy is a second answer waiting to disagree."""
+    order = ask(server, op="ping")["severityOrder"]
+    assert order == greenlint.SEVERITY_ORDER
+    assert sorted(order, key=order.get) == ["high", "medium", "low"]
+
+
 def test_languages_op_reports_what_the_rules_target(server):
     """The client skips files no rule would look at; the list has to come from
     the rule table rather than a copy of it."""

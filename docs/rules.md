@@ -171,7 +171,7 @@ Detection mechanism key:
 - **Fix:** GIF is an obsolete, inefficient animation format; MP4/WebP/AVIF
   (or SVG/CSS animation) give smaller files and less energy per view.
 
-## GL018 — nested loop iterating over the same collection (possible O(n²))
+## GL018 — nested loop iterating over the same collection (possible O(n²) pattern)
 
 - **Languages:** `.py` · **Severity:** low · **Mechanism:** AST
 - **Triggers on:** an inner `for` loop iterating the exact same named

@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
-import { compareFindings, ruleDocsUrl } from '../types';
+import { compareFindings, ruleDocsUrl, useSeverityOrder } from '../types';
 import type { Finding } from '../types';
 
 const finding = (over: Partial<Finding> = {}): Finding => ({
@@ -40,5 +40,36 @@ test('builds the GitHub anchor for a rule, doubled hyphen and all', () => {
   assert.match(
     ruleDocsUrl({ rule: 'GL007', message: 'quadratic rebuild in a loop (whole sequence copied)' }),
     /#gl007--quadratic-rebuild-in-a-loop-whole-sequence-copied$/,
+  );
+});
+
+const at = (severity: string, file = 'a.py', line = 1): Finding =>
+  finding({ severity: severity as Finding['severity'], file, line });
+
+test('sorts by the order the scan server published', () => {
+  // greenlint decides the order; this only applies it. A severity greenlint
+  // added would arrive here without a change to this file.
+  useSeverityOrder({ critical: 0, high: 1, medium: 2, low: 3 });
+  assert.deepEqual(
+    [at('low'), at('critical'), at('medium'), at('high')].sort(compareFindings).map((f) => f.severity),
+    ['critical', 'high', 'medium', 'low'],
+  );
+});
+
+test('sorts a severity the server did not mention last, not at random', () => {
+  useSeverityOrder({ high: 0, medium: 1, low: 2 });
+  assert.deepEqual(
+    [at('nonsense'), at('low'), at('high')].sort(compareFindings).map((f) => f.severity),
+    ['high', 'low', 'nonsense'],
+  );
+});
+
+test('keeps the fallback when the server publishes no order', () => {
+  useSeverityOrder({ high: 0, medium: 1, low: 2 });
+  useSeverityOrder(undefined);
+  useSeverityOrder({});
+  assert.deepEqual(
+    [at('low'), at('high'), at('medium')].sort(compareFindings).map((f) => f.severity),
+    ['high', 'medium', 'low'],
   );
 });
