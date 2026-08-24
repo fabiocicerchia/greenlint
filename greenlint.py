@@ -1665,13 +1665,18 @@ def _matches_any(rel, ignore):
 
 
 def is_ignored(path, config=None):
-    """True if an `ignore` glob covers this path.
+    """True if this path is under a pruned directory, or an `ignore` glob
+    covers it.
 
     Its own function because a walk is not the only caller: the editor
     extension scans one open buffer at a time, and a file the CLI ignores must
     not sprout squiggles just because it was reached by being opened rather
-    than by being walked to.
+    than by being walked to. The pruned-directory check is here for the same
+    reason — the walk skips `.venv` wholesale, so a `.venv` file the editor
+    asks about directly has to be skipped too, or the two disagree.
     """
+    if PRUNED_DIR_NAMES.intersection(Path(path).parts):
+        return True
     ignore = (config or {}).get("ignore") or []
     if not ignore:
         return False
@@ -1698,9 +1703,36 @@ def prunable_bases(ignore):
     return bases
 
 
-# Directories that are never worth walking into: version-control internals and
-# installed dependencies, neither of which is code anyone here is writing.
-PRUNED_DIR_NAMES = frozenset({".git", "node_modules"})
+# Directories that are never worth walking into: version-control internals,
+# installed dependencies and tool caches, none of which is code anyone here is
+# writing. A virtualenv is the expensive one — a few thousand third-party .py
+# files, each read and run past every rule, which is enough to make an editor
+# scan look like a hang.
+#
+# `site-packages` is listed as well as the venv names because a venv can be
+# called anything (`env3`, `.direnv`, a conda prefix); the directory the
+# packages actually land in cannot. Build outputs (`dist`, `build`, `target`)
+# are deliberately absent: those names belong to real source directories often
+# enough that skipping them by default would hide findings. Use `ignore` in
+# .greenlint.toml for those.
+PRUNED_DIR_NAMES = frozenset(
+    {
+        ".git",
+        ".hg",
+        ".svn",
+        "node_modules",
+        ".venv",
+        "venv",
+        "site-packages",
+        ".tox",
+        ".nox",
+        ".direnv",
+        "__pycache__",
+        ".mypy_cache",
+        ".pytest_cache",
+        ".ruff_cache",
+    }
+)
 
 
 def walk_files(root, prune_bases=()):
