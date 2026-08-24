@@ -1,8 +1,12 @@
 .vscode/**
 .gitignore
+.vscodeignore
 node_modules/**
 src/**
 esbuild.mjs
 tsconfig.json
 out-tsc/**
 **/__pycache__/**
+# The production bundle carries no sourcemap, but `out/` is not cleaned between
+# builds: a watch run leaves nine .map files behind and they would ship.
+**/*.map
