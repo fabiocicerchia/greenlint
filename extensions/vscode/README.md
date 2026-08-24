@@ -6,6 +6,8 @@ full-history CI clones, full-fat base images, missing resource limits, N+1
 queries, manual O(n²) sorts. This extension runs the same rule set, unmodified,
 while you type.
 
+![The greenlint Findings panel, grouped by file: seven findings across Kubernetes manifests and Compose files, each with its rule id and line](https://raw.githubusercontent.com/fabiocicerchia/greenlint/main/extensions/vscode/media/screenshots/findings-panel.png)
+
 Every rule the CLI knows, the editor knows: there is no second implementation
 here. The extension drives `greenlint.py` itself through a small scan server, so
 a rule added to the linter shows up in the editor with no change on this side.
@@ -39,6 +41,8 @@ a rule added to the linter shows up in the editor with no change on this side.
   the walk stops at the next batch of files.
 - **`.greenlint.toml` is honoured** exactly as the CLI honours it: same walker,
   same ignore globs, same disable list. What CI blocks on is what you see.
+
+![The greenlint report: whole project, seven findings, a by-rule summary table, then every finding grouped by file with the fix and its CO2e estimate](https://raw.githubusercontent.com/fabiocicerchia/greenlint/main/extensions/vscode/media/screenshots/report.png)
 
 ## Install
 

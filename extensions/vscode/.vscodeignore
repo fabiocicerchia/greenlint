@@ -10,3 +10,8 @@ out-tsc/**
 # The production bundle carries no sourcemap, but `out/` is not cleaned between
 # builds: a watch run leaves nine .map files behind and they would ship.
 **/*.map
+# The README points at these on raw.githubusercontent (the Marketplace only
+# renders absolute HTTPS images), so shipping them in the VSIX too would buy
+# nothing. media/icon.png and media/leaf.svg are contributed by the manifest
+# and must stay.
+media/screenshots/**
