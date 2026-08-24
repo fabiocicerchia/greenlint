@@ -14,7 +14,8 @@ a rule added to the linter shows up in the editor with no change on this side.
 > does not bundle it. Install it once — `pipx install
 > git+https://github.com/fabiocicerchia/greenlint`, or `pip`, or an editable
 > checkout — and the extension finds it. Without it, greenlint says so on
-> startup and names what it tried. Python 3.11+ is the only other requirement;
+> startup, names what it tried, and offers to run the install for you in a
+> terminal. Python 3.11+ is the only other requirement;
 > see [Requirements](#requirements).
 
 ## What you get
