@@ -1,3 +1,9 @@
+import os
+import re
+from pathlib import Path
+
+import pytest
+
 import greenlint
 from greenlint import load_config, main, scan
 
@@ -1080,6 +1086,357 @@ def test_cron_hint_multiplies_out_to_something_sane():
     # its minute scales through the same formula instead of breaking it.
     assert "500 core-seconds" in hint
     assert "~6 gCO2e/day" in hint
+
+
+def test_scan_file_accepts_text_instead_of_reading_the_file(tmp_path):
+    """The editor extension scans unsaved buffers. Without a text override it
+    would have to write a temp file per keystroke to get a finding."""
+    path = tmp_path / "q.sql"  # never created on disk
+    findings = list(greenlint.scan_file(path, text="SELECT * FROM users;\n"))
+    assert rule_ids(findings) == {"GL005"}
+    assert findings[0]["file"] == str(path)
+
+
+def test_scan_file_text_override_still_picks_language_from_the_path(tmp_path):
+    """`SELECT *` in a .md file is prose, not a query: the buffer's contents
+    decide what matches, its name decides which rules are even tried."""
+    assert list(greenlint.scan_file(tmp_path / "notes.md", text="SELECT * FROM users;\n")) == []
+
+
+def test_iter_files_selects_what_scan_scans(tmp_path):
+    """Two walkers would drift, and a file the CLI ignores still being flagged
+    in the editor is the kind of disagreement nobody debugs."""
+    write(tmp_path, "vendor/q.sql", "SELECT * FROM users;\n")
+    write(tmp_path, "src/q.sql", "SELECT * FROM users;\n")
+    cfg = load_config(str(write(tmp_path, ".greenlint.toml", 'ignore = ["*/vendor/*"]\n')))
+    walked = {str(f) for f in greenlint.iter_files([str(tmp_path)], cfg)}
+    assert str(tmp_path / "src" / "q.sql") in walked
+    assert str(tmp_path / "vendor" / "q.sql") not in walked
+    assert {f["file"] for f in scan([str(tmp_path)], cfg)} == {str(tmp_path / "src" / "q.sql")}
+
+
+def test_finding_sort_key_orders_high_severity_first(tmp_path):
+    write(tmp_path, "ci.yml", "cron: '* * * * *'\nfetch-depth: 0\n")
+    findings = scan([str(tmp_path)])
+    assert findings == sorted(findings, key=greenlint.finding_sort_key)
+    assert findings[0]["severity"] == "high"
+
+
+def test_scannable_matches_whether_scan_file_can_find_anything(tmp_path):
+    """The editor's prefilter must never skip a file the CLI would report on."""
+    assert greenlint.scannable(tmp_path / "a.py")
+    assert greenlint.scannable(tmp_path / "Dockerfile")
+    assert not greenlint.scannable(tmp_path / "logo.png")
+    assert not greenlint.scannable(tmp_path / "Dockerfile.prod")  # applicable() is exact-name
+
+
+def test_is_ignored_matches_the_walkers_own_filtering(tmp_path):
+    cfg = {"disable": set(), "ignore": ["*/vendor/*"]}
+    assert greenlint.is_ignored(tmp_path / "vendor" / "q.sql", cfg)
+    assert not greenlint.is_ignored(tmp_path / "src" / "q.sql", cfg)
+    assert not greenlint.is_ignored(tmp_path / "vendor" / "q.sql", {"ignore": []})
+
+
+# --- the shared AST index -------------------------------------------------
+# These lock in what the rules read off it. The rules used to walk the tree
+# themselves, six times over; nothing about their answers may depend on that
+# having become one walk.
+
+
+def test_index_python_collects_loops_functions_and_classes():
+    tree = greenlint._parse_python(Path("a.py"), SAMPLE)
+    index = greenlint.index_python(tree)
+    assert [node.lineno for node, _ in index.fors] == [4, 5, 9]
+    assert [node.lineno for node, _ in index.whiles] == [2]
+    assert [node.lineno for node, _ in index.tries] == [10]
+    assert [node.name for node in index.functions] == ["loops", "clean", "method"]
+    assert [node.name for node in index.classes] == ["K"]
+
+
+def test_index_python_records_the_loops_enclosing_each_node():
+    tree = greenlint._parse_python(Path("a.py"), SAMPLE)
+    index = greenlint.index_python(tree)
+    enclosing = {node.lineno: [loop.lineno for loop in loops] for node, loops in index.fors}
+    assert enclosing == {4: [], 5: [4], 9: []}
+    # The `try` on line 10 is inside the loop on line 9: that is exactly the
+    # question GL031 used to answer by walking every loop's subtree.
+    assert [[loop.lineno for loop in loops] for _, loops in index.tries] == [[9]]
+
+
+def test_index_python_marks_only_scopes_that_own_a_loop():
+    """GL007 skips a scope with no loop in it rather than walking it to find
+    out, and most functions have no loop."""
+    tree = greenlint._parse_python(Path("a.py"), SAMPLE)
+    index = greenlint.index_python(tree)
+    owners = {getattr(scope, "name", "<module>") for scope in index.loop_scopes}
+    assert owners == {"loops", "method"}
+    assert not any(getattr(scope, "name", "") == "clean" for scope in index.loop_scopes)
+
+
+SAMPLE = """\
+def loops(xs):
+    while True:
+        pass
+    for x in xs:
+        for y in xs:
+            pass
+class K:
+    def method(self, xs):
+        for x in xs:
+            try:
+                pass
+            except ValueError:
+                continue
+def clean(a, b):
+    return a + b
+"""
+
+
+# --- comment blanking -----------------------------------------------------
+# Rewritten to jump between interesting characters instead of visiting every
+# one. Verified against the previous implementation over ~158,000 generated
+# (text, language) pairs; these are the shapes worth keeping in the suite.
+
+
+@pytest.mark.parametrize(
+    ("name", "text", "expected"),
+    [
+        ("f.py", "x = 1  # SELECT * FROM t\n", "x = 1                   \n"),
+        # A docstring is prose; an ordinary string literal is a real query.
+        (
+            "f.py",
+            "'''SELECT * FROM t'''\nq = 'SELECT * FROM t'\n",
+            "'''SELECT * FROM t'''\nq = 'SELECT * FROM t'\n",
+        ),
+        # An apostrophe must not open a string that swallows the rest of the file.
+        ("f.sh", "echo don't # SELECT * FROM t\n", "echo don't                  \n"),
+        ("f.sql", "SELECT * FROM t; -- SELECT * FROM u\n", "SELECT * FROM t;                   \n"),
+        (
+            "f.js",
+            "/* SELECT * FROM t */ q('SELECT * FROM u') // SELECT * FROM v\n",
+            "                      q('SELECT * FROM u')                   \n",
+        ),
+        ("f.js", "/* unterminated SELECT * FROM t\n", "                               \n"),
+        # A quote is reset at the newline, so the next line's comment is seen.
+        (
+            "f.sh",
+            "a = 'unterminated\nb # SELECT * FROM t\n",
+            "a = 'unterminated\nb                  \n",
+        ),
+        ("f.py", "no comment token here at all\n", "no comment token here at all\n"),
+        # No comment syntax known for this extension: left alone entirely.
+        ("f.md", "# SELECT * FROM t\n", "# SELECT * FROM t\n"),
+    ],
+)
+def test_blank_comments_shapes(name, text, expected):
+    assert greenlint._blank_comments(text, Path(name)) == expected
+
+
+def test_blank_comments_preserves_length_and_newlines():
+    text = "a = 1  # one\nb = 2  /* two */ c\n# three\n"
+    for name in ("f.py", "f.js", "f.sql", "f.sh"):
+        blanked = greenlint._blank_comments(text, Path(name))
+        assert len(blanked) == len(text)
+        assert [i for i, c in enumerate(blanked) if c == "\n"] == [
+            i for i, c in enumerate(text) if c == "\n"
+        ]
+
+
+def test_blank_spans_returns_the_original_when_there_is_nothing_to_blank():
+    text = "unchanged\n"
+    assert greenlint._blank_spans(text, []) is text
+
+
+# --- excludes and the pruning walk ---------------------------------------
+
+
+def test_cli_exclude_flag_skips_matching_paths(tmp_path, capsys):
+    write(tmp_path, "src/q.sql", "SELECT * FROM t;\n")
+    write(tmp_path, "vendor/q.sql", "SELECT * FROM t;\n")
+    main([str(tmp_path), "--config", str(tmp_path / "none.toml"), "--exclude", "*/vendor/*"])
+    out = capsys.readouterr().out
+    assert "1 finding(s)" in out
+    assert "vendor" not in out
+
+
+def test_cli_exclude_is_repeatable_and_adds_to_the_config(tmp_path, capsys):
+    for name in ("src/q.sql", "vendor/q.sql", "dist/q.sql", "build/q.sql"):
+        write(tmp_path, name, "SELECT * FROM t;\n")
+    cfg = write(tmp_path, ".greenlint.toml", 'ignore = ["*/build/*"]\n')
+    main(
+        [
+            str(tmp_path),
+            "--config",
+            str(cfg),
+            "--exclude",
+            "*/vendor/*",
+            "--exclude",
+            "*/dist/*",
+        ]
+    )
+    out = capsys.readouterr().out
+    assert "1 finding(s)" in out  # only src/ survives config + both flags
+
+
+def test_prunable_bases_only_takes_patterns_that_cover_a_whole_directory():
+    """Pruning on a pattern that does not cover everything below it would stop
+    scanning files that are not ignored — silently."""
+    assert greenlint.prunable_bases(["*/vendor/*"]) == ["*/vendor"]
+    assert greenlint.prunable_bases(["*/vendor/**"]) == ["*/vendor"]
+    # Covers only some of the directory.
+    assert greenlint.prunable_bases(["*/vendor/*.py"]) == []
+    # Covers the directory entry itself, but nothing inside it.
+    assert greenlint.prunable_bases(["*/vendor"]) == []
+    assert greenlint.prunable_bases(["*"]) == []
+
+
+def test_walk_files_never_descends_into_pruned_directories(tmp_path, monkeypatch):
+    write(tmp_path, "src/app.py", "x = 1\n")
+    write(tmp_path, "node_modules/pkg/index.js", "x\n")
+    write(tmp_path, ".git/objects/ab/cdef", "x\n")
+    write(tmp_path, "vendor/lib/thing.js", "x\n")
+
+    opened = []
+    real_scandir = os.scandir
+
+    def watched(path):
+        opened.append(str(path))
+        return real_scandir(path)
+
+    monkeypatch.setattr(os, "scandir", watched)
+    config = {"disable": set(), "ignore": ["*/vendor/*"]}
+    files = [f.name for f in greenlint.iter_files([str(tmp_path)], config)]
+    assert files == ["app.py"]
+    # Not merely filtered afterwards — never opened.
+    assert not any("node_modules" in p or ".git" in p or "vendor" in p for p in opened)
+
+
+def test_walk_files_matches_what_rglob_selected(tmp_path):
+    """The pruning walk replaced `Path.rglob`; it must still pick the same
+    files, symlinks and all."""
+    write(tmp_path, "a.py", "x = 1\n")
+    write(tmp_path, "sub/b.py", "x = 1\n")
+    (tmp_path / "link.py").symlink_to(tmp_path / "a.py")
+    (tmp_path / "linkdir").symlink_to(tmp_path / "sub")
+    (tmp_path / "broken.py").symlink_to(tmp_path / "nope.py")
+    walked = {f.relative_to(tmp_path).as_posix() for f in greenlint.walk_files(tmp_path)}
+    rglobbed = {
+        f.relative_to(tmp_path).as_posix()
+        for f in tmp_path.rglob("*")
+        if f.is_file() and ".git" not in f.parts and "node_modules" not in f.parts
+    }
+    assert walked == rglobbed
+    # Symlinked file yielded; symlinked directory not followed; broken one skipped.
+    assert walked == {"a.py", "sub/b.py", "link.py"}
+
+
+def test_walk_files_survives_an_unreadable_directory(tmp_path):
+    write(tmp_path, "ok/a.py", "x = 1\n")
+    locked = tmp_path / "locked"
+    locked.mkdir()
+    (locked / "b.py").write_text("x = 1\n")
+    locked.chmod(0o000)
+    try:
+        names = {f.name for f in greenlint.walk_files(tmp_path)}
+        assert "a.py" in names
+    finally:
+        locked.chmod(0o755)
+
+
+# --- baseline -------------------------------------------------------------
+
+
+def test_baseline_accepts_current_findings_and_still_reports_new_ones(tmp_path, capsys):
+    write(tmp_path, "src/q.sql", "SELECT * FROM t;\n")
+    baseline = tmp_path / greenlint.BASELINE_FILENAME
+    findings = scan([str(tmp_path)])
+    assert greenlint.write_baseline(baseline, findings, tmp_path) == 1
+    accepted = greenlint.load_baseline(baseline)
+    assert greenlint.apply_baseline(findings, accepted, tmp_path) == []
+    # A finding in a file the baseline never saw is still reported.
+    write(tmp_path, "src/other.sql", "SELECT * FROM u;\n")
+    fresh = scan([str(tmp_path)])
+    assert len(greenlint.apply_baseline(fresh, accepted, tmp_path)) == 1
+
+
+def test_fingerprint_is_the_same_for_absolute_and_relative_paths(tmp_path, monkeypatch):
+    """The editor reports absolute paths and `greenlint .` reports relative
+    ones. A baseline only earns its keep if both honour the same file."""
+    write(tmp_path, "src/q.sql", "SELECT * FROM t;\n")
+    absolute = scan([str(tmp_path)])[0]
+    monkeypatch.chdir(tmp_path)
+    relative = scan(["."])[0]
+    assert relative["file"] != absolute["file"]
+    assert greenlint.fingerprint(relative, ".") == greenlint.fingerprint(absolute, tmp_path)
+
+
+def test_fingerprint_survives_edits_above_the_finding(tmp_path):
+    """Line-insensitive on purpose: a baseline keyed on line numbers is stale
+    by the next commit."""
+    path = write(tmp_path, "q.sql", "SELECT * FROM t;\n")
+    before = greenlint.fingerprint(scan([str(tmp_path)])[0], tmp_path)
+    path.write_text("-- a new comment line\n-- and another\nSELECT * FROM t;\n")
+    after = scan([str(tmp_path)])[0]
+    assert after["line"] == 3
+    assert greenlint.fingerprint(after, tmp_path) == before
+
+
+def test_a_missing_or_broken_baseline_reports_everything(tmp_path):
+    """Failing open: a linter that goes quiet because a file it was not asked
+    about is malformed is worse than one that reports too much."""
+    assert greenlint.load_baseline(tmp_path / "nope.json") == set()
+    broken = write(tmp_path, "b.json", "{not json")
+    assert greenlint.load_baseline(broken) == set()
+
+
+def test_cli_writes_and_then_honours_a_baseline(tmp_path, capsys, monkeypatch):
+    write(tmp_path, "q.sql", "SELECT * FROM t;\n")
+    monkeypatch.chdir(tmp_path)
+    main([".", "--config", "nope.toml", "--write-baseline"])
+    assert "1 finding(s) accepted" in capsys.readouterr().out
+    assert (tmp_path / greenlint.BASELINE_FILENAME).is_file()
+    main([".", "--config", "nope.toml"])
+    out = capsys.readouterr().out
+    assert "0 finding(s)" in out
+    assert "1 accepted" in out
+
+
+def test_cli_rejects_a_baseline_path_that_is_not_there(tmp_path, monkeypatch):
+    """An explicit flag that silently does nothing is worse than an error; the
+    default file is optional, a named one is not."""
+    monkeypatch.chdir(tmp_path)
+    with pytest.raises(SystemExit, match="no such baseline"):
+        main([".", "--baseline", "missing.json"])
+
+
+def _docs_anchor(rule):
+    """The GitHub heading anchor a front end derives for a rule.
+
+    Mirrors `ruleDocsUrl` in the VS Code extension: GitHub lowercases the
+    heading, drops punctuation it does not keep, and turns spaces into hyphens
+    — so the em dash leaves the doubled hyphen you see in the result.
+    """
+    slug = f"{rule['id']} — {rule['message']}".lower()
+    slug = re.sub(r"[^a-z0-9 _-]", "", slug)
+    return slug.replace(" ", "-")
+
+
+def test_every_rule_has_a_matching_heading_in_the_docs():
+    """The rules reference is addressable per rule, and the address is derived
+    from the rule's own message.
+
+    Editors link a finding straight to its section, so a heading that no longer
+    matches its rule is a link that silently goes nowhere. That is a
+    documentation drift no reader would notice and no other test would catch.
+    """
+    doc = (Path(__file__).resolve().parent.parent / "docs" / "rules.md").read_text()
+    missing = [r["id"] for r in greenlint.RULES if f"## {r['id']} — {r['message']}" not in doc]
+    assert not missing, f"docs/rules.md heading does not match the rule message: {missing}"
+
+
+def test_rule_anchors_are_unique():
+    anchors = [_docs_anchor(r) for r in greenlint.RULES]
+    assert len(set(anchors)) == len(anchors)
 
 
 # --- Coverage added for C#, Kotlin, Swift and Ruby (issue #34) ---------------

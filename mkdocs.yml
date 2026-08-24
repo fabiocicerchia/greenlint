@@ -15,6 +15,7 @@ nav:
   - Home: README.md
   - Architecture: architecture.md
   - Getting Started: getting-started.md
+  - Editors: editors.md
   - Rules: rules.md
 
 markdown_extensions:

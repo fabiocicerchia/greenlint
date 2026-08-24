@@ -191,7 +191,7 @@ a new rule has to show.
 - **Fix:** GIF is an obsolete, inefficient animation format; MP4/WebP/AVIF
   (or SVG/CSS animation) give smaller files and less energy per view.
 
-## GL018 — nested loop iterating over the same collection (possible O(n²))
+## GL018 — nested loop iterating over the same collection (possible O(n²) pattern)
 
 - **Languages:** `.py` · **Severity:** low · **Mechanism:** AST
 - **Triggers on:** an inner `for` loop iterating the exact same named
@@ -459,7 +459,7 @@ energy rationale are the most valuable contribution.
 - **Fix:** load the association up front with `includes`/`preload`. One query
   per row is one network round trip and one remote query plan per row.
 
-## GL050 — map().flatten() / map().compact()
+## GL050 — map().flatten() / map().compact() (an intermediate array)
 
 - **Languages:** `.rb` · **Severity:** low · **Mechanism:** regex
 - **Triggers on:** `.map { … }.flatten` or `.map(&:x).compact`.

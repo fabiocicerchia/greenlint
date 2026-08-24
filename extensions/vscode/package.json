@@ -1,0 +1,289 @@
+{
+  "name": "greenlint",
+  "displayName": "greenlint",
+  "description": "Flags energy-wasteful code and config patterns as you type, with the reason each one wastes energy.",
+  "version": "0.3.0",
+  "publisher": "fabiocicerchia",
+  "license": "Apache-2.0",
+  "icon": "media/icon.png",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/fabiocicerchia/greenlint.git",
+    "directory": "extensions/vscode"
+  },
+  "homepage": "https://github.com/fabiocicerchia/greenlint",
+  "bugs": {
+    "url": "https://github.com/fabiocicerchia/greenlint/issues"
+  },
+  "categories": [
+    "Linters",
+    "Programming Languages"
+  ],
+  "keywords": [
+    "green software",
+    "sustainability",
+    "energy",
+    "carbon",
+    "linter"
+  ],
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "main": "./out/extension.js",
+  "activationEvents": [
+    "onLanguage:python",
+    "onLanguage:javascript",
+    "onLanguage:javascriptreact",
+    "onLanguage:typescript",
+    "onLanguage:typescriptreact",
+    "onLanguage:go",
+    "onLanguage:rust",
+    "onLanguage:java",
+    "onLanguage:kotlin",
+    "onLanguage:swift",
+    "onLanguage:csharp",
+    "onLanguage:c",
+    "onLanguage:cpp",
+    "onLanguage:php",
+    "onLanguage:perl",
+    "onLanguage:ruby",
+    "onLanguage:shellscript",
+    "onLanguage:sql",
+    "onLanguage:yaml",
+    "onLanguage:dockerfile",
+    "onLanguage:terraform",
+    "onLanguage:html",
+    "onLanguage:css"
+  ],
+  "contributes": {
+    "configuration": {
+      "title": "greenlint",
+      "properties": {
+        "greenlint.enable": {
+          "type": "boolean",
+          "default": true,
+          "description": "Enable greenlint diagnostics."
+        },
+        "greenlint.run": {
+          "type": "string",
+          "enum": [
+            "onType",
+            "onSave",
+            "manual"
+          ],
+          "enumDescriptions": [
+            "Scan the buffer while you type, debounced.",
+            "Scan when the file is saved.",
+            "Scan only when you run a greenlint command."
+          ],
+          "default": "onType",
+          "description": "When to scan the open file."
+        },
+        "greenlint.debounceMs": {
+          "type": "integer",
+          "default": 400,
+          "minimum": 100,
+          "maximum": 5000,
+          "description": "Idle time before an onType scan runs. Higher means fewer scans; the cost of a keystroke is this timer being reset, not a scan."
+        },
+        "greenlint.pythonPath": {
+          "type": "string",
+          "default": "",
+          "description": "Python interpreter to run the scan server with. Empty means auto-detect (python3, python, then py -3)."
+        },
+        "greenlint.greenlintPath": {
+          "type": "string",
+          "default": "",
+          "description": "Path to greenlint.py or the directory holding it. Empty means a greenlint.py in the workspace root if there is one, then the installed greenlint package."
+        },
+        "greenlint.scanProjectOnStartup": {
+          "type": "boolean",
+          "default": true,
+          "description": "Scan the whole workspace once when the extension starts, so the Findings panel is populated before you open a file."
+        },
+        "greenlint.maxFileBytes": {
+          "type": "integer",
+          "default": 1000000,
+          "minimum": 1024,
+          "description": "Skip files larger than this. A generated or vendored megabyte costs real time to scan and is rarely yours to fix."
+        },
+        "greenlint.respectEditorExcludes": {
+          "type": "boolean",
+          "default": true,
+          "description": "Skip what VS Code already excludes (files.exclude and search.exclude). The editor knows which folders are not your code; without this greenlint walks them anyway."
+        },
+        "greenlint.exclude": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": [],
+          "markdownDescription": "Extra ignore globs for the editor only, on top of `.greenlint.toml`. Same glob syntax as `ignore` there: a pattern shaped `*/dist/*` lets the walk skip the directory outright rather than filtering its files one by one. Prefer `.greenlint.toml` for anything CI should skip too."
+        },
+        "greenlint.trace": {
+          "type": "boolean",
+          "default": false,
+          "description": "Log every request, its timing and its cache outcome to the greenlint output channel."
+        }
+      }
+    },
+    "commands": [
+      {
+        "command": "greenlint.scanFile",
+        "title": "Scan Current File",
+        "category": "greenlint",
+        "icon": "$(file)"
+      },
+      {
+        "command": "greenlint.scanProject",
+        "title": "Scan Workspace",
+        "category": "greenlint",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "greenlint.showReport",
+        "title": "Open Report",
+        "category": "greenlint",
+        "icon": "$(graph)"
+      },
+      {
+        "command": "greenlint.showScopeFile",
+        "title": "Show Findings for Current File",
+        "category": "greenlint",
+        "icon": "$(file)"
+      },
+      {
+        "command": "greenlint.showScopeProject",
+        "title": "Show Findings for Whole Project",
+        "category": "greenlint",
+        "icon": "$(files)"
+      },
+      {
+        "command": "greenlint.showOutput",
+        "title": "Show Log",
+        "category": "greenlint"
+      },
+      {
+        "command": "greenlint.restartServer",
+        "title": "Restart Scan Server",
+        "category": "greenlint"
+      },
+      {
+        "command": "greenlint.setGrouping",
+        "title": "Group Findings By...",
+        "category": "greenlint",
+        "icon": "$(list-tree)"
+      },
+      {
+        "command": "greenlint.expandAll",
+        "title": "Expand All Findings",
+        "category": "greenlint",
+        "icon": "$(expand-all)"
+      },
+      {
+        "command": "greenlint.collapseAll",
+        "title": "Collapse All Findings",
+        "category": "greenlint",
+        "icon": "$(collapse-all)"
+      },
+      {
+        "command": "greenlint.cancelScan",
+        "title": "Cancel Running Scan",
+        "category": "greenlint",
+        "icon": "$(stop-circle)"
+      },
+      {
+        "command": "greenlint.writeBaseline",
+        "title": "Write Baseline (accept current findings)",
+        "category": "greenlint"
+      }
+    ],
+    "viewsContainers": {
+      "panel": [
+        {
+          "id": "greenlint",
+          "title": "greenlint",
+          "icon": "media/leaf.svg"
+        }
+      ]
+    },
+    "views": {
+      "greenlint": [
+        {
+          "id": "greenlint.findings",
+          "name": "Findings",
+          "icon": "media/leaf.svg",
+          "contextualTitle": "greenlint"
+        }
+      ]
+    },
+    "viewsWelcome": [
+      {
+        "view": "greenlint.findings",
+        "contents": "No findings yet.\n[Scan Workspace](command:greenlint.scanProject)\nOr open a file and start typing — greenlint scans the buffer as you go.",
+        "when": "!greenlint.hasFindings"
+      }
+    ],
+    "menus": {
+      "view/title": [
+        {
+          "command": "greenlint.showScopeProject",
+          "when": "view == greenlint.findings && greenlint.scope == file",
+          "group": "navigation@1"
+        },
+        {
+          "command": "greenlint.setGrouping",
+          "when": "view == greenlint.findings",
+          "group": "navigation@2"
+        },
+        {
+          "command": "greenlint.showScopeFile",
+          "when": "view == greenlint.findings && greenlint.scope == project",
+          "group": "navigation@1"
+        },
+        {
+          "command": "greenlint.scanProject",
+          "when": "view == greenlint.findings",
+          "group": "navigation@4"
+        },
+        {
+          "command": "greenlint.showReport",
+          "when": "view == greenlint.findings",
+          "group": "navigation@5"
+        },
+        {
+          "command": "greenlint.showOutput",
+          "when": "view == greenlint.findings",
+          "group": "9_admin"
+        },
+        {
+          "command": "greenlint.expandAll",
+          "when": "view == greenlint.findings && !greenlint.expanded",
+          "group": "navigation@9"
+        },
+        {
+          "command": "greenlint.collapseAll",
+          "when": "view == greenlint.findings && greenlint.expanded",
+          "group": "navigation@9"
+        }
+      ],
+      "commandPalette": []
+    }
+  },
+  "scripts": {
+    "build": "node esbuild.mjs",
+    "watch": "node esbuild.mjs --watch",
+    "typecheck": "tsc -p ./ --noEmit",
+    "test": "tsc -p ./ && node --test --require ./out-tsc/test/hook.js \"out-tsc/test/*.test.js\"",
+    "copy-legal": "node -e \"const f=require('node:fs');for(const n of ['LICENSE','CHANGELOG.md'])f.copyFileSync('../../'+n,n)\"",
+    "vscode:prepublish": "npm run typecheck && npm test && npm run build && npm run copy-legal",
+    "package": "npx --yes @vscode/vsce@3.9.2 package --no-dependencies",
+    "publish": "npx --yes @vscode/vsce@3.9.2 publish --no-dependencies"
+  },
+  "devDependencies": {
+    "@types/node": "^20.11.30",
+    "@types/vscode": "^1.85.0",
+    "typescript": "^5.4.5",
+    "esbuild": "^0.28.1"
+  }
+}

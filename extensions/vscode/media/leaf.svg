@@ -1,0 +1,9 @@
+<!-- Panel icon. Monochrome and drawn with currentColor: VS Code tints view
+     container icons itself, and a coloured icon fights every theme it lands in.
+     Same mark as media/icon.png — a leaf with the bolt taken out of it, because
+     the subject is the energy the code wastes, not the foliage. -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24"
+     fill="currentColor" fill-rule="evenodd" role="img" aria-label="greenlint">
+  <title>greenlint</title>
+  <path d="M4.8 19.2C1.6 13.9 6.6 3.4 19.2 4.8 20.6 17.4 10.1 22.4 4.8 19.2Zm8.6-12.1-4.7 6.2h2.8l-1.2 4.2 4.7-6.4h-2.8l1.2-4Z"/>
+</svg>
