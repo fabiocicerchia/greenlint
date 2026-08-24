@@ -427,6 +427,14 @@ class Controller implements vscode.Disposable {
     void vscode.commands.executeCommand('setContext', 'greenlint.hasFindings', total > 0);
     this.tree.description = this.findings.describeScope();
     this.tree.badge = total > 0 ? { value: total, tooltip: `${total} findings` } : undefined;
+    // "Scanned, and clean" and "never scanned" are both an empty tree, and
+    // until this line they looked identical — the walk's only evidence was a
+    // line in the output channel nobody has open. A clean workspace is the
+    // result, not the absence of one.
+    this.tree.message =
+      total === 0 && this.lastStats
+        ? `No findings — ${this.lastStats.files} file(s) scanned in ${this.lastStats.ms} ms.`
+        : undefined;
     this.updateStatus(total);
     // A full re-render per batch would undo the point of streaming; the report
     // gets one when the scan finishes.
@@ -493,7 +501,9 @@ class Controller implements vscode.Disposable {
     const counts = countBySeverity(this.findings.findings());
     this.status.text =
       total === 0
-        ? '$(circle-large-outline) greenlint'
+        ? this.lastStats
+          ? '$(check) greenlint'
+          : '$(circle-large-outline) greenlint'
         : `$(flame) ${counts.high} $(warning) ${counts.medium} $(info) ${counts.low}`;
     const tooltip = new vscode.MarkdownString(undefined, true);
     tooltip.appendMarkdown(`**greenlint** — ${this.findings.describeScope()}`);
