@@ -1615,8 +1615,10 @@ def test_line_numbers_are_right_when_a_rule_fires_many_times(tmp_path):
     counting newlines per match, which was quadratic. The answer must not move.
     """
     # One line repeated: the rule fires per occurrence, and a fixture that
-    # formats a query string is what an injection scanner goes looking for.
-    f = write(tmp_path, "dump.sql", "SELECT * FROM t;\n" * 500)
+    # builds a query string inline is what an injection scanner goes looking
+    # for — even when the building is a repeat of one literal.
+    query = "SELECT * FROM t;\n"
+    f = write(tmp_path, "dump.sql", query * 500)
     lines = [x["line"] for x in greenlint.scan_file(f) if x["rule"] == "GL005"]
     assert lines == list(range(1, 501))
 
