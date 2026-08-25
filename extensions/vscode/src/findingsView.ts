@@ -134,7 +134,6 @@ export class FindingsProvider implements vscode.TreeDataProvider<Node> {
         ? `line ${node.line}`
         : `${workspaceRelative(node.file)}:${node.line}`;
     item.description = `${node.rule} · ${where}`;
-    item.tooltip = describe(node);
     item.iconPath = severityIcon(node.severity);
     item.resourceUri = vscode.Uri.file(node.file);
     item.command = {
@@ -148,6 +147,18 @@ export class FindingsProvider implements vscode.TreeDataProvider<Node> {
         } satisfies vscode.TextDocumentShowOptions,
       ],
     };
+    return item;
+  }
+
+  /** The hover card, built when it is hovered.
+   *
+   * A tooltip is a `MarkdownString` assembled from four fields, and the panel
+   * renders every visible row on every repaint — which during a streaming scan
+   * is twice a second. VS Code asks for this only when the pointer stops. */
+  resolveTreeItem(item: vscode.TreeItem, node: Node): vscode.TreeItem {
+    if (!isGroup(node)) {
+      item.tooltip = describe(node);
+    }
     return item;
   }
 

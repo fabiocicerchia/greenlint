@@ -3,8 +3,8 @@ import * as path from 'path';
 import * as vscode from 'vscode';
 
 import { readSettings, requiresRestart } from './config';
-import { GreenlintHoverProvider, SOURCE, toDiagnostic } from './diagnostics';
-import { ScanServer } from './engine';
+import { GreenlintHoverProvider, SOURCE, toDiagnostics } from './diagnostics';
+import { ScanServer, ScanServerError } from './engine';
 import { editorExcludeGlobs } from './excludes';
 import {
   countBySeverity,
@@ -24,6 +24,9 @@ const EXTERNAL_CHANGE_DEBOUNCE_MS = 1_500;
 /** Past this many changed files, one project scan is cheaper than the batch —
  * it walks with the stat cache and only reads what actually changed. */
 const BATCH_TO_PROJECT_SCAN = 50;
+/** The report is a document with a section per finding; it is worth building
+ * once the findings stop moving, not on every batch and every keystroke. */
+const REPORT_RENDER_DEBOUNCE_MS = 400;
 
 let controller: Controller | undefined;
 
@@ -53,9 +56,15 @@ class Controller implements vscode.Disposable {
   private readonly disposables: vscode.Disposable[] = [];
 
   private readonly debouncers = new Map<string, NodeJS.Timeout>();
+  /** Document version last handed to the scan server, per open document. A
+   * scan is scheduled on every tab switch and every open, and re-sending an
+   * unchanged buffer means shipping the whole file across the pipe to be told
+   * what we already know. */
+  private readonly scannedVersion = new Map<string, number>();
   private readonly pendingExternal = new Set<string>();
   private externalTimer?: NodeJS.Timeout;
   private reportPanel?: vscode.WebviewPanel;
+  private reportTimer?: NodeJS.Timeout;
   private scannableExtensions?: Set<string>;
   private lastStats?: ScanStats;
   private lastSummary?: ScanSummary;
@@ -102,6 +111,7 @@ class Controller implements vscode.Disposable {
       clearTimeout(timer);
     }
     clearTimeout(this.externalTimer);
+    clearTimeout(this.reportTimer);
     this.reportPanel?.dispose();
     vscode.Disposable.from(...this.disposables).dispose();
     this.tree.dispose();
@@ -124,7 +134,13 @@ class Controller implements vscode.Disposable {
     this.disposables.push(
       command('greenlint.scanFile', () => {
         const editor = vscode.window.activeTextEditor;
-        return editor && this.scanDocument(editor.document);
+        if (!editor) {
+          return;
+        }
+        // Asked for by hand, so it happens: "I already scanned that version" is
+        // the right answer to a tab switch and the wrong one to a command.
+        this.scannedVersion.delete(editor.document.uri.toString());
+        return this.scanDocument(editor.document);
       }),
       command('greenlint.scanProject', () => this.scanProject()),
       command('greenlint.showReport', () => this.showReport()),
@@ -139,6 +155,9 @@ class Controller implements vscode.Disposable {
       command('greenlint.restartServer', async () => {
         await this.server.restart();
         this.appliedExcludes = '';
+        // The restart is how a contributor picks up their own edited rules, so
+        // what was scanned before it says nothing about what a scan says now.
+        this.scannedVersion.clear();
         await this.scanProject();
       }),
 
@@ -147,7 +166,10 @@ class Controller implements vscode.Disposable {
         new GreenlintHoverProvider(this.store),
       ),
 
-      this.store.onDidChange((files) => this.repaint(files)),
+      this.store.onDidChange((files) => {
+        this.publishDiagnostics(files);
+        this.repaint();
+      }),
       vscode.workspace.onDidChangeConfiguration((event) => {
         if (
           event.affectsConfiguration('greenlint') ||
@@ -167,10 +189,25 @@ class Controller implements vscode.Disposable {
       // check rather than a scan — but it is what keeps the project view honest
       // for a file that was never opened.
       vscode.workspace.onDidSaveTextDocument((document) => this.schedule(document, 0)),
-      vscode.workspace.onDidOpenTextDocument((document) => this.schedule(document, 0)),
-      vscode.workspace.onDidCloseTextDocument((document) =>
-        this.debouncers.delete(document.uri.toString()),
-      ),
+      vscode.workspace.onDidOpenTextDocument((document) => {
+        // The squiggle for a file nobody had open covers the whole line,
+        // indentation and all — the text to trace it to was not loaded. Now it
+        // is, so it is worth one file's worth of republishing, and in `manual`
+        // mode nothing else will ever do it.
+        if (document.uri.scheme === 'file') {
+          this.publishDiagnostics([document.uri.fsPath]);
+        }
+        this.schedule(document, 0);
+      }),
+      vscode.workspace.onDidCloseTextDocument((document) => {
+        const key = document.uri.toString();
+        // Cleared, not just forgotten: a pending timer holds the document it
+        // closed over alive until it fires, for a scan of a buffer nobody has
+        // open any more.
+        clearTimeout(this.debouncers.get(key));
+        this.debouncers.delete(key);
+        this.scannedVersion.delete(key);
+      }),
       vscode.window.onDidChangeActiveTextEditor((editor) => {
         this.findings.setCurrentFile(editor?.document.uri.fsPath);
         this.repaint();
@@ -229,6 +266,11 @@ class Controller implements vscode.Disposable {
     if (paths.length === 0 || !this.settings.enable) {
       return;
     }
+    // The bytes moved under us, so what we last scanned for these is no longer
+    // what is there — in the server's cache or in ours.
+    for (const fsPath of paths) {
+      this.scannedVersion.delete(vscode.Uri.file(fsPath).toString());
+    }
     await this.server.invalidate(paths);
     if (paths.length >= BATCH_TO_PROJECT_SCAN) {
       this.log.appendLine(`[greenlint] ${paths.length} files changed on disk; rescanning`);
@@ -265,6 +307,13 @@ class Controller implements vscode.Disposable {
       return;
     }
     const version = document.version;
+    const key = document.uri.toString();
+    // Already scanned at this version: the findings in the store describe
+    // exactly this text. Switching tabs, or reopening a file, is not new
+    // information about it.
+    if (this.scannedVersion.get(key) === version) {
+      return;
+    }
     try {
       const findings = document.isDirty
         ? await this.server.scanText(document)
@@ -272,6 +321,7 @@ class Controller implements vscode.Disposable {
       // A newer edit landed while this was in flight; its scan is already
       // scheduled and this answer describes text nobody is looking at.
       if (!document.isClosed && document.version === version) {
+        this.scannedVersion.set(key, version);
         this.store.setFile(document.uri.fsPath, findings);
       }
     } catch (error) {
@@ -312,6 +362,14 @@ class Controller implements vscode.Disposable {
               progress.report({ message: `${batch.files} files, ${batch.found} findings` });
               for (const finding of batch.batch) {
                 reported.add(finding.file);
+                // The walk read this file from disk, so whatever an open buffer
+                // last reported for it has been replaced — including in the
+                // narrow case where the buffer went dirty after `dirty` was
+                // taken. Dropping the claim is what lets the next look at that
+                // editor put the buffer's own findings back.
+                if (!dirty.has(finding.file)) {
+                  this.scannedVersion.delete(vscode.Uri.file(finding.file).toString());
+                }
               }
               this.store.mergeBatch(batch.batch, dirty);
             });
@@ -400,6 +458,9 @@ class Controller implements vscode.Disposable {
       this.scannableExtensions = undefined;
       await this.server.restart();
     }
+    // The rules, or what they are applied to, may have moved: what was scanned
+    // at a given version no longer describes what a scan would say now.
+    this.scannedVersion.clear();
     // Both the excludes and greenlint's own config can have moved; the cheapest
     // correct answer to "what changed?" is to scan again.
     this.appliedExcludes = '';
@@ -409,30 +470,76 @@ class Controller implements vscode.Disposable {
 
   // --- presentation -----------------------------------------------------
 
-  /** Repaint what the store now says. `files` narrows the diagnostics update to
-   * the files that changed; without it the whole collection is rebuilt. */
-  private repaint(files?: string[]): void {
-    if (files) {
-      for (const file of files) {
-        this.diagnostics.set(vscode.Uri.file(file), this.store.forFile(file).map(toDiagnostic));
-      }
-    } else {
+  /**
+   * Publish the squiggles for the files the store just changed.
+   *
+   * Driven by the store's event and nothing else. It used to hang off every
+   * repaint, which meant switching tabs or regrouping the panel rebuilt every
+   * `Diagnostic` object in the workspace to publish the same squiggles back —
+   * the most expensive thing the extension did, in response to the cheapest.
+   *
+   * `files` undefined means the store was emptied, which is the one case that
+   * has to clear the collection rather than update entries in it.
+   */
+  private publishDiagnostics(files: string[] | undefined): void {
+    if (!files) {
       this.diagnostics.clear();
       for (const [file, findings] of this.store.entries()) {
-        this.diagnostics.set(vscode.Uri.file(file), findings.map(toDiagnostic));
+        this.diagnostics.set(vscode.Uri.file(file), toDiagnostics(file, findings));
+      }
+      return;
+    }
+    for (const file of files) {
+      const findings = this.store.forFile(file);
+      const uri = vscode.Uri.file(file);
+      // Deleted rather than set to an empty list: an entry per clean file is a
+      // `Uri` and an array VS Code keeps for as long as the collection lives.
+      if (findings.length === 0) {
+        this.diagnostics.delete(uri);
+      } else {
+        this.diagnostics.set(uri, toDiagnostics(file, findings));
       }
     }
+  }
+
+  /** Repaint the panel, its title and the status bar from what the store now
+   * says. Cheap by design: it runs once per streaming batch. */
+  private repaint(): void {
     this.findings.refresh();
     const total = this.store.size;
     void vscode.commands.executeCommand('setContext', 'greenlint.hasFindings', total > 0);
     this.tree.description = this.findings.describeScope();
     this.tree.badge = total > 0 ? { value: total, tooltip: `${total} findings` } : undefined;
+    // "Scanned, and clean" and "never scanned" are both an empty tree, and
+    // until this line they looked identical — the walk's only evidence was a
+    // line in the output channel nobody has open. A clean workspace is the
+    // result, not the absence of one.
+    this.tree.message =
+      total === 0 && this.lastStats
+        ? `No findings — ${this.lastStats.files} file(s) scanned in ${this.lastStats.ms} ms.`
+        : undefined;
     this.updateStatus(total);
-    // A full re-render per batch would undo the point of streaming; the report
-    // gets one when the scan finishes.
-    if (this.reportPanel && !this.scanning) {
-      this.reportPanel.webview.html = this.reportHtml();
+    this.refreshReport();
+  }
+
+  /**
+   * Re-render the report, at most once per quiet moment.
+   *
+   * A full re-render per batch would undo the point of streaming, and one per
+   * keystroke — which is what a repaint is, with the panel open — rebuilds a
+   * document with a section per finding for a webview that may not even be the
+   * visible tab. Both are answered by waiting for the typing to stop.
+   */
+  private refreshReport(): void {
+    clearTimeout(this.reportTimer);
+    if (!this.reportPanel?.visible || this.scanning) {
+      return;
     }
+    this.reportTimer = setTimeout(() => {
+      if (this.reportPanel?.visible) {
+        this.reportPanel.webview.html = this.reportHtml();
+      }
+    }, REPORT_RENDER_DEBOUNCE_MS);
   }
 
   /**
@@ -460,6 +567,9 @@ class Controller implements vscode.Disposable {
     try {
       const { path: written, accepted } = await this.server.writeBaseline(folder);
       this.log.appendLine(`[greenlint] ${accepted} finding(s) accepted in ${written}`);
+      // Every finding now means something different, including in the buffers
+      // the rescan below deliberately does not touch.
+      this.scannedVersion.clear();
       await this.scanProject();
     } catch (error) {
       this.reportError(error);
@@ -493,7 +603,9 @@ class Controller implements vscode.Disposable {
     const counts = countBySeverity(this.findings.findings());
     this.status.text =
       total === 0
-        ? '$(circle-large-outline) greenlint'
+        ? this.lastStats
+          ? '$(check) greenlint'
+          : '$(circle-large-outline) greenlint'
         : `$(flame) ${counts.high} $(warning) ${counts.medium} $(info) ${counts.low}`;
     const tooltip = new vscode.MarkdownString(undefined, true);
     tooltip.appendMarkdown(`**greenlint** — ${this.findings.describeScope()}`);
@@ -543,7 +655,15 @@ class Controller implements vscode.Disposable {
         'leaf.svg',
       );
       this.reportPanel.onDidDispose(() => {
+        clearTimeout(this.reportTimer);
         this.reportPanel = undefined;
+      });
+      // Nothing is rendered into a hidden webview, so it is stale by the time
+      // it comes back — this is where it catches up.
+      this.reportPanel.onDidChangeViewState((event) => {
+        if (event.webviewPanel.visible) {
+          event.webviewPanel.webview.html = this.reportHtml();
+        }
       });
     }
     this.reportPanel.webview.html = this.reportHtml();
@@ -567,8 +687,51 @@ class Controller implements vscode.Disposable {
       return;
     }
     this.lastErrorShown = message;
+    // greenlint missing is the one failure with a one-line fix, so the toast
+    // carries the command itself — a link to the README is one click and one
+    // page of reading away from the same sentence.
+    const install = error instanceof ScanServerError ? error.install : undefined;
+    const headline = message.split('\n')[0];
+    const text = install ? `greenlint: ${headline}\n\nInstall it with: ${install}` : `greenlint: ${headline}`;
+    const actions = install ? ['Install greenlint', 'Copy Command', 'Show Log'] : ['Show Log'];
+    void vscode.window.showErrorMessage(text, ...actions).then((choice) => {
+      if (choice === 'Show Log') {
+        this.log.show(true);
+      } else if (choice === 'Install greenlint' && install) {
+        this.runInstall(install);
+      } else if (choice === 'Copy Command' && install) {
+        void vscode.env.clipboard
+          .writeText(install)
+          .then(() => vscode.window.showInformationMessage(`Copied: ${install}`));
+      }
+    });
+  }
+
+  /**
+   * Run the install in a terminal the user can see.
+   *
+   * Deliberately not a hidden `child_process`: this installs software, and it
+   * can fail in ways only the output explains — no pipx on PATH, an externally
+   * managed interpreter, a proxy. The terminal is both the progress bar and the
+   * error message. What it cannot do is tell us when it finished, hence the
+   * button rather than an automatic restart.
+   */
+  private runInstall(command: string): void {
+    const terminal = vscode.window.createTerminal('greenlint install');
+    terminal.show();
+    terminal.sendText(command);
     void vscode.window
-      .showErrorMessage(`greenlint: ${message.split('\n')[0]}`, 'Show Log')
-      .then((choice) => choice === 'Show Log' && this.log.show(true));
+      .showInformationMessage(
+        'Installing greenlint. When the terminal is done, restart the scan server.',
+        'Restart Scan Server',
+      )
+      .then((choice) => {
+        if (choice === 'Restart Scan Server') {
+          // The failure that got us here is fixed or not; either way the next
+          // start reports for itself, so the guard must not swallow it.
+          this.lastErrorShown = undefined;
+          void vscode.commands.executeCommand('greenlint.restartServer');
+        }
+      });
   }
 }

@@ -6,6 +6,8 @@ full-history CI clones, full-fat base images, missing resource limits, N+1
 queries, manual O(n²) sorts. This extension runs the same rule set, unmodified,
 while you type.
 
+![The greenlint Findings panel, grouped by file: seven findings across Kubernetes manifests and Compose files, each with its rule id and line](https://raw.githubusercontent.com/fabiocicerchia/greenlint/main/extensions/vscode/media/screenshots/findings-panel.png)
+
 Every rule the CLI knows, the editor knows: there is no second implementation
 here. The extension drives `greenlint.py` itself through a small scan server, so
 a rule added to the linter shows up in the editor with no change on this side.
@@ -14,7 +16,8 @@ a rule added to the linter shows up in the editor with no change on this side.
 > does not bundle it. Install it once — `pipx install
 > git+https://github.com/fabiocicerchia/greenlint`, or `pip`, or an editable
 > checkout — and the extension finds it. Without it, greenlint says so on
-> startup and names what it tried. Python 3.11+ is the only other requirement;
+> startup, names what it tried, and offers to run the install for you in a
+> terminal. Python 3.11+ is the only other requirement;
 > see [Requirements](#requirements).
 
 ## What you get
@@ -39,17 +42,28 @@ a rule added to the linter shows up in the editor with no change on this side.
 - **`.greenlint.toml` is honoured** exactly as the CLI honours it: same walker,
   same ignore globs, same disable list. What CI blocks on is what you see.
 
+![The greenlint report: whole project, seven findings, a by-rule summary table, then every finding grouped by file with the fix and its CO2e estimate](https://raw.githubusercontent.com/fabiocicerchia/greenlint/main/extensions/vscode/media/screenshots/report.png)
+
 ## Install
 
-Not on the Marketplace yet, so build it from the checkout — from the repository
-root:
+From the [VS Code
+Marketplace](https://marketplace.visualstudio.com/items?itemName=fabiocicerchia.greenlint):
+open the Extensions view (<kbd>Ctrl</kbd>/<kbd>Cmd</kbd>+<kbd>Shift</kbd>+<kbd>X</kbd>),
+search for **greenlint**, and press *Install*. Or from a terminal:
 
 ```sh
-make ext-install    # builds the .vsix and installs it into VS Code
+code --install-extension fabiocicerchia.greenlint
 ```
 
-`make ext-package` stops at the `.vsix` if you would rather install it from the
-Extensions view (`...` → *Install from VSIX*). Reload the window afterwards.
+VSCodium, Cursor and the other editors that use [Open
+VSX](https://open-vsx.org/extension/fabiocicerchia/greenlint) get the same
+extension from there — same id, same version:
+
+```sh
+codium --install-extension fabiocicerchia.greenlint
+```
+
+From a checkout instead, `make ext-install` builds the `.vsix` and installs it.
 
 ## Requirements
 

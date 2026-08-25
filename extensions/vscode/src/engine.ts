@@ -24,11 +24,23 @@ interface Pending {
   reject: (reason: Error) => void;
   op: string;
   startedAt: number;
-  timer: NodeJS.Timeout;
+  /** Set by `rearm` before the request is sent. */
+  timer?: NodeJS.Timeout;
   onProgress?: (progress: ScanProgress) => void;
 }
 
-export class ScanServerError extends Error {}
+/** The one command that fixes "greenlint is not installed". Kept short on
+ * purpose: a toast is read in a second, and the log already lists every path
+ * that was tried. */
+export const INSTALL_COMMAND = 'pipx install git+https://github.com/fabiocicerchia/greenlint';
+
+export class ScanServerError extends Error {
+  /** Set only when no interpreter could run greenlint at all — the failure
+   * `INSTALL_COMMAND` actually fixes. A mid-session crash must not offer it. */
+  constructor(message: string, readonly install?: string) {
+    super(message);
+  }
+}
 
 /**
  * Client for `server/greenlint_server.py`.
@@ -43,6 +55,8 @@ export class ScanServer implements vscode.Disposable {
   private starting?: Promise<ServerInfo>;
   private info?: ServerInfo;
   private buffer = '';
+  /** How much of `buffer` is known to hold no newline — see `consume`. */
+  private searched = 0;
   private nextId = 1;
   private projectScanId?: number;
   private readonly pending = new Map<number, Pending>();
@@ -84,6 +98,7 @@ export class ScanServer implements vscode.Disposable {
     this.proc = undefined;
     this.info = undefined;
     this.buffer = '';
+    this.searched = 0;
     this.onReady = undefined;
     this.onFailed = undefined;
   }
@@ -172,6 +187,9 @@ export class ScanServer implements vscode.Disposable {
             `(${info.rules} rules) from ${info.module ?? 'installed package'}`,
         );
         this.info = info;
+        // A restart can be an upgrade, and a rule's wording is the upgraded
+        // greenlint's to state — so the shared copies go with the old process.
+        ruleProse.clear();
         // Sorting happens here, but the order is greenlint's.
         useSeverityOrder(info.severityOrder);
         return info;
@@ -191,10 +209,9 @@ export class ScanServer implements vscode.Disposable {
     const headline =
       reasons.length === 1
         ? reasons[0]
-        : 'could not start the scan server — install or upgrade greenlint ' +
-          '(`pip install -U git+https://github.com/fabiocicerchia/greenlint`, or `pipx` ' +
-          'if you have it), or set `greenlint.pythonPath` / `greenlint.greenlintPath`.';
-    throw new ScanServerError(`${headline}\nTried:\n${failures.join('\n')}`);
+        : 'could not start the scan server — install or upgrade greenlint, ' +
+          'or set `greenlint.pythonPath` / `greenlint.greenlintPath`.';
+    throw new ScanServerError(`${headline}\nTried:\n${failures.join('\n')}`, INSTALL_COMMAND);
   }
 
   private spawn(python: string, module?: string): Promise<ServerInfo> {
@@ -280,15 +297,21 @@ export class ScanServer implements vscode.Disposable {
 
   private consume(chunk: string): void {
     this.buffer += chunk;
-    let index = this.buffer.indexOf('\n');
+    // The search resumes where the last one ran out rather than starting over:
+    // a streamed batch is a single line of a hundred kilobytes arriving in many
+    // chunks, and re-scanning everything received so far for each of them is
+    // quadratic in the size of the message.
+    let index = this.buffer.indexOf('\n', this.searched);
     while (index >= 0) {
       const line = this.buffer.slice(0, index).trim();
       this.buffer = this.buffer.slice(index + 1);
       if (line) {
         this.handleLine(line);
       }
+      // What is left has not been looked at yet, so this one starts over.
       index = this.buffer.indexOf('\n');
     }
+    this.searched = this.buffer.length;
   }
 
   private handleLine(line: string): void {
@@ -312,7 +335,7 @@ export class ScanServer implements vscode.Disposable {
         pending.onProgress?.({
           files: Number(message.files ?? 0),
           found: Number(message.found ?? 0),
-          batch: (message.batch as Finding[] | undefined) ?? [],
+          batch: share((message.batch as Finding[] | undefined) ?? []),
         });
       }
       return;
@@ -376,7 +399,6 @@ export class ScanServer implements vscode.Disposable {
         reject,
         op,
         startedAt: Date.now(),
-        timer: setTimeout(() => undefined, 0),
         onProgress,
       };
       this.pending.set(id, pending);
@@ -406,7 +428,7 @@ export class ScanServer implements vscode.Disposable {
       text: document.getText(),
       root: rootFor(document.uri),
     });
-    return response.findings;
+    return share(response.findings);
   }
 
   async scanFile(uri: vscode.Uri): Promise<Finding[]> {
@@ -415,7 +437,7 @@ export class ScanServer implements vscode.Disposable {
       root: rootFor(uri),
       maxFileBytes: this.settings.maxFileBytes,
     });
-    return response.findings;
+    return share(response.findings);
   }
 
   /**
@@ -486,6 +508,44 @@ export class ScanServer implements vscode.Disposable {
 
 function rootFor(uri: vscode.Uri): string | undefined {
   return vscode.workspace.getWorkspaceFolder(uri)?.uri.fsPath;
+}
+
+/** One copy of each rule's prose, keyed by rule id — see `share`. */
+const ruleProse = new Map<string, { message: string; suggestion: string; co2e: string }>();
+
+/**
+ * Point every finding's repeated strings at one instance.
+ *
+ * greenlint's message, suggestion and CO2e note are fixed per rule, and its
+ * path is fixed per file — but they cross the pipe as JSON, and `JSON.parse`
+ * gives every finding its own copy of all four. On a project with thousands of
+ * findings that is megabytes of the same few sentences, held for as long as the
+ * window is open. The prose is shared through a map (bounded by the rule count);
+ * the path only against the previous finding, which is enough because a file's
+ * findings arrive together — and keeps no path alive after the batch.
+ */
+export function share(findings: Finding[]): Finding[] {
+  let lastFile: string | undefined;
+  for (const finding of findings) {
+    const prose = ruleProse.get(finding.rule);
+    if (prose) {
+      finding.message = prose.message;
+      finding.suggestion = prose.suggestion;
+      finding.co2e_estimate = prose.co2e;
+    } else {
+      ruleProse.set(finding.rule, {
+        message: finding.message,
+        suggestion: finding.suggestion,
+        co2e: finding.co2e_estimate,
+      });
+    }
+    if (lastFile !== undefined && finding.file === lastFile) {
+      finding.file = lastFile;
+    } else {
+      lastFile = finding.file;
+    }
+  }
+  return findings;
 }
 
 /** Workspace folders that contain a greenlint.py, for contributors working on

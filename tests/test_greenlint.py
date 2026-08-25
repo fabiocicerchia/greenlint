@@ -1311,6 +1311,32 @@ def test_walk_files_never_descends_into_pruned_directories(tmp_path, monkeypatch
     assert not any("node_modules" in p or ".git" in p or "vendor" in p for p in opened)
 
 
+def test_walk_files_prunes_virtualenvs_and_caches(tmp_path, monkeypatch):
+    """A virtualenv is thousands of third-party files; walking one is what made
+    an editor scan look like a hang."""
+    write(tmp_path, "app.py", "x = 1\n")
+    write(tmp_path, ".venv/lib/python3.11/site-packages/dep/mod.py", "while True: pass\n")
+    write(tmp_path, "env3/lib/site-packages/other/mod.py", "while True: pass\n")
+    write(tmp_path, ".mypy_cache/3.11/mod.data.json", "{}\n")
+
+    opened = []
+    real_scandir = os.scandir
+
+    def watched(path):
+        opened.append(str(path))
+        return real_scandir(path)
+
+    monkeypatch.setattr(os, "scandir", watched)
+    files = [f.name for f in greenlint.iter_files([str(tmp_path)])]
+    assert files == ["app.py"]
+    assert not any("site-packages" in p or "mypy_cache" in p for p in opened)
+    # And the same file asked about directly — the editor's path — is skipped,
+    # so a buffer opened out of .venv does not sprout squiggles the CLI never
+    # reports.
+    assert greenlint.is_ignored(tmp_path / ".venv" / "lib" / "mod.py")
+    assert not greenlint.is_ignored(tmp_path / "app.py")
+
+
 def test_walk_files_matches_what_rglob_selected(tmp_path):
     """The pruning walk replaced `Path.rglob`; it must still pick the same
     files, symlinks and all."""
@@ -1437,3 +1463,226 @@ def test_every_rule_has_a_matching_heading_in_the_docs():
 def test_rule_anchors_are_unique():
     anchors = [_docs_anchor(r) for r in greenlint.RULES]
     assert len(set(anchors)) == len(anchors)
+
+
+# --- Coverage added for C#, Kotlin, Swift and Ruby (issue #34) ---------------
+#
+# Every rule gets both halves: a true positive, and a near-miss that must NOT
+# fire. A rule with only the first is how a linter earns the reputation of
+# being noise, and these languages had one rule each — a clean run said
+# "barely checked", not "clean".
+
+
+def scan_one(tmp_path, name, content):
+    write(tmp_path, name, content)
+    return rule_ids(scan([str(tmp_path)]))
+
+
+class TestCSharpRules:
+    def test_new_httpclient_per_call(self, tmp_path):
+        assert "GL039" in scan_one(tmp_path, "a.cs", "var c = new HttpClient();\n")
+
+    def test_a_reused_client_is_not_flagged(self, tmp_path):
+        # The fix the rule asks for must not itself trip the rule.
+        assert "GL039" not in scan_one(
+            tmp_path,
+            "b.cs",
+            "private static readonly HttpClient Client = _factory.CreateClient();\n",
+        )
+
+    def test_blocking_on_a_task(self, tmp_path):
+        ids = scan_one(tmp_path, "c.cs", "var r = FetchAsync().Result;\ntask.Wait();\n")
+        assert "GL040" in ids
+
+    def test_await_is_not_flagged(self, tmp_path):
+        assert "GL040" not in scan_one(tmp_path, "d.cs", "var r = await FetchAsync();\n")
+
+    def test_tolist_just_to_iterate(self, tmp_path):
+        assert "GL041" in scan_one(
+            tmp_path, "e.cs", "foreach (var x in items.Where(i => i.Ok).ToList()) { }\n"
+        )
+
+    def test_tolist_kept_as_a_variable_is_not_flagged(self, tmp_path):
+        # Materialising to reuse it is legitimate; only the throwaway is not.
+        assert "GL041" not in scan_one(
+            tmp_path,
+            "f.cs",
+            "var list = items.Where(i => i.Ok).ToList();\nforeach (var x in list) { }\n",
+        )
+
+
+class TestKotlinRules:
+    def test_globalscope(self, tmp_path):
+        assert "GL042" in scan_one(tmp_path, "a.kt", "GlobalScope.launch { work() }\n")
+
+    def test_a_scoped_launch_is_not_flagged(self, tmp_path):
+        assert "GL042" not in scan_one(tmp_path, "b.kt", "viewModelScope.launch { work() }\n")
+
+    def test_filter_map_chain(self, tmp_path):
+        assert "GL043" in scan_one(
+            tmp_path, "c.kt", "val out = xs.filter { it.ok }.map { it.name }\n"
+        )
+
+    def test_mapnotnull_is_not_flagged(self, tmp_path):
+        assert "GL043" not in scan_one(
+            tmp_path, "d.kt", "val out = xs.mapNotNull { if (it.ok) it.name else null }\n"
+        )
+
+    def test_runblocking(self, tmp_path):
+        assert "GL044" in scan_one(tmp_path, "e.kt", "runBlocking { fetch() }\n")
+
+    def test_a_suspend_call_is_not_flagged(self, tmp_path):
+        assert "GL044" not in scan_one(tmp_path, "f.kt", "suspend fun go() { fetch() }\n")
+
+
+class TestSwiftRules:
+    def test_filter_map_chain(self, tmp_path):
+        assert "GL045" in scan_one(
+            tmp_path, "a.swift", "let out = xs.filter { $0.ok }.map { $0.name }\n"
+        )
+
+    def test_compactmap_is_not_flagged(self, tmp_path):
+        assert "GL045" not in scan_one(
+            tmp_path, "b.swift", "let out = xs.compactMap { $0.ok ? $0.name : nil }\n"
+        )
+
+    def test_dispatch_sync(self, tmp_path):
+        assert "GL046" in scan_one(tmp_path, "c.swift", "DispatchQueue.main.sync { render() }\n")
+
+    def test_dispatch_async_is_not_flagged(self, tmp_path):
+        assert "GL046" not in scan_one(
+            tmp_path, "d.swift", "DispatchQueue.main.async { render() }\n"
+        )
+
+    def test_a_new_session_per_request(self, tmp_path):
+        assert "GL047" in scan_one(
+            tmp_path, "e.swift", "let s = URLSession(configuration: .default)\n"
+        )
+
+    def test_shared_session_is_not_flagged(self, tmp_path):
+        assert "GL047" not in scan_one(tmp_path, "f.swift", "let s = URLSession.shared\n")
+
+
+class TestRubyRules:
+    def test_string_built_with_plus_equals_in_a_loop(self, tmp_path):
+        assert "GL048" in scan_one(tmp_path, "a.rb", "items.each do |i|\n  out += i.to_s\nend\n")
+
+    def test_shovel_operator_is_not_flagged(self, tmp_path):
+        # << appends in place; it is the fix, not the smell.
+        assert "GL048" not in scan_one(
+            tmp_path, "b.rb", "items.each do |i|\n  out << i.to_s\nend\n"
+        )
+
+    def test_query_inside_a_loop(self, tmp_path):
+        assert "GL049" in scan_one(
+            tmp_path,
+            "c.rb",
+            "orders.each do |o|\n  o.customer = Customer.find_by(id: o.cid)\nend\n",
+        )
+
+    def test_a_preloaded_association_is_not_flagged(self, tmp_path):
+        assert "GL049" not in scan_one(
+            tmp_path, "d.rb", "Order.includes(:customer).each do |o|\n  puts o.customer.name\nend\n"
+        )
+
+    def test_map_flatten(self, tmp_path):
+        assert "GL050" in scan_one(tmp_path, "e.rb", "rows.map { |r| r.tags }.flatten\n")
+
+    def test_flat_map_is_not_flagged(self, tmp_path):
+        assert "GL050" not in scan_one(tmp_path, "f.rb", "rows.flat_map { |r| r.tags }\n")
+
+
+def test_every_rule_states_its_energy_rationale():
+    # A rule with no rationale is a style opinion wearing a carbon badge.
+    for rule in greenlint.RULES:
+        assert rule["id"] in greenlint.CO2E_HINTS, f"{rule['id']} has no CO2e hint"
+        assert rule["suggestion"], f"{rule['id']} has no suggestion"
+
+
+def test_comment_syntax_covers_every_language_with_a_rule():
+    # An extension with rules but no comment syntax cannot be suppressed
+    # inline, which is the escape hatch every false positive needs.
+    exts = {ext for rule in greenlint.RULES for ext in rule["langs"] if ext.startswith(".")}
+    known = set(greenlint.COMMENT_SYNTAX)
+    assert exts <= known, f"no comment syntax for {sorted(exts - known)}"
+
+
+# --- the fast paths still answer what the slow ones did ----------------------
+
+
+def test_line_numbers_are_right_when_a_rule_fires_many_times(tmp_path):
+    """Line numbers come from an index built once per file rather than by
+    counting newlines per match, which was quadratic. The answer must not move.
+    """
+    # One line repeated: the rule fires per occurrence, and a fixture that
+    # builds a query string inline is what an injection scanner goes looking
+    # for — even when the building is a repeat of one literal.
+    query = "SELECT * FROM t;\n"
+    f = write(tmp_path, "dump.sql", query * 500)
+    lines = [x["line"] for x in greenlint.scan_file(f) if x["rule"] == "GL005"]
+    assert lines == list(range(1, 501))
+
+
+def test_line_numbers_survive_a_match_at_the_start_of_a_line(tmp_path):
+    f = write(tmp_path, "q.sql", "-- header\nSELECT * FROM t;\n\nSELECT * FROM u;\n")
+    assert [x["line"] for x in greenlint.scan_file(f) if x["rule"] == "GL005"] == [2, 4]
+
+
+def test_the_language_index_selects_the_same_rules_as_applicable():
+    """`scan_file` looks its rules up by language instead of asking every rule
+    whether it applies. The two answers have to be the same set."""
+    suffixes = {ext for rule in greenlint.RULES for ext in rule["langs"]}
+    for suffix in suffixes:
+        path = Path("Dockerfile" if suffix == "Dockerfile" else f"x{suffix}")
+        expected = {
+            r["id"]
+            for r in greenlint.RULES
+            if greenlint.applicable(r, path)
+            and r["pattern"] is not None
+            and r["id"] not in greenlint.AST_RULE_IDS
+        }
+        indexed = {r["id"] for r in greenlint.PATTERN_RULES_BY_LANG.get(suffix, ())}
+        assert indexed == expected, suffix
+
+
+def test_scannable_agrees_with_the_rule_table():
+    for suffix in {ext for rule in greenlint.RULES for ext in rule["langs"]}:
+        path = Path("Dockerfile" if suffix == "Dockerfile" else f"x{suffix}")
+        assert greenlint.scannable(path) is True
+    assert greenlint.scannable(Path("photo.png")) is False
+
+
+def test_ignore_globs_match_the_same_paths_as_fnmatch():
+    """The ignore list is compiled to one regex instead of run glob by glob;
+    `normcase` has to stay, or the globs go case-sensitive on Windows."""
+    import fnmatch
+
+    patterns = ["*/tests/*", "tests/*", "*.min.js", "*/vendor/*.py", "dist/*"]
+    paths = [
+        "tests/x.py",
+        "/p/tests/x.py",
+        "x.min.js",
+        "vendor/a.py",
+        "/p/vendor/a.py",
+        "dist/a",
+        "src/a.py",
+    ]
+    for path in paths:
+        forms = (path, path if path.startswith("/") else "/" + path)
+        expected = any(fnmatch.fnmatch(s, p) for p in patterns for s in forms)
+        assert greenlint._matches_any(path, patterns) is expected, path
+
+
+def test_a_file_no_rule_targets_is_not_even_read(tmp_path):
+    """`scan_file` returns before opening a file whose language no rule
+    mentions: it could only ever match nothing, and a checkout is mostly those.
+    """
+    if os.geteuid() == 0:
+        pytest.skip("root reads unreadable files, so the check cannot fail")
+    f = write(tmp_path, "logo.png", "SELECT * FROM t;\n")
+    f.chmod(0o000)  # unreadable: opening it at all would be the bug
+    try:
+        assert list(greenlint.scan_file(f)) == []
+        assert list(greenlint.scan_file(f, text="SELECT * FROM t;\n")) == []
+    finally:
+        f.chmod(0o644)
