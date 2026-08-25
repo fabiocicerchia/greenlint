@@ -120,6 +120,7 @@ def test_a_file_the_same_rule_matches_many_times_stays_linear(tmp_path):
     per match, which reads the file once per finding. On a generated SQL dump
     that is quadratic, and generated files are the large ones.
     """
+
     def scan_with(matches):
         path = write(
             tmp_path,
@@ -177,7 +178,9 @@ def _benchmark(target):  # pragma: no cover - a tool, not a test
     assets.mkdir(exist_ok=True)
     for index in range(200):
         (assets / f"asset{index}.png").write_text("x" * 200_000)
-    print(f"  200 assets    {1000 * best_of(lambda: greenlint.scan([str(assets)], config)):8.1f} ms")
+    print(
+        f"  200 assets    {1000 * best_of(lambda: greenlint.scan([str(assets)], config)):8.1f} ms"
+    )
 
     for index in range(500):
         path = scratch / "tree" / f"pkg{index % 20}" / f"m{index}.py"
