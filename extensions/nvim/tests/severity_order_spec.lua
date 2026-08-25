@@ -39,10 +39,10 @@ describe("greenlint's severity order", function()
       pending('no python3 or no greenlint.py to compare against')
       return
     end
-    -- Same words, and the same relative order. greenlint counts from 0 and this
-    -- counts from 1, which is a Lua convention rather than a disagreement.
-    assert.same(vim.tbl_keys(theirs), vim.tbl_keys(core.SEVERITY_ORDER))
-
+    -- Same words, and the same relative order -- both, since comparing the two
+    -- key lists sorted by value catches either drifting. greenlint counts from 0
+    -- and this counts from 1, which is a Lua convention rather than a
+    -- disagreement.
     local function ordered(map)
       local words = vim.tbl_keys(map)
       table.sort(words, function(a, b)
