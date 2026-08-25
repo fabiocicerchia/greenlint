@@ -46,6 +46,13 @@ lint: ## Run ruff
 test: ## Run tests
 	pytest -q
 
+# The suite guards the shape of a scan's cost; this prints the cost itself, for
+# when you are changing something and want to know which way it moved.
+# CORPUS=/some/big/tree make bench to point it at something larger than this repo.
+.PHONY: bench
+bench: ## Print what a scan costs (CORPUS=path to choose the tree)
+	python3 tests/test_performance.py $(CORPUS)
+
 ##@ Release
 
 .PHONY: build

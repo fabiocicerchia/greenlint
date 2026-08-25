@@ -17,6 +17,10 @@ Thanks for taking the time to contribute to greenlint!
   it wastes energy and what to do instead) and a test.
 - Update `docs/` and `examples/` when behavior changes.
 - Make sure `make lint` and `make test` pass locally.
+- If you touch the scan path, `make bench` prints what a scan costs before and
+  after. `tests/test_performance.py` guards the cheap parts from growing back —
+  it counts work (files opened, glob matches) rather than milliseconds, so it
+  says the same thing on your laptop and on CI.
 
 Don't edit `CHANGELOG.md` by hand — it's generated from commit messages by
 release-please (see [Releases](#releases)).

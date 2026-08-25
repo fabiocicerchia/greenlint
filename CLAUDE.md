@@ -17,6 +17,7 @@ command). Tests live in `tests/`.
 make dev     # editable install with dev deps (pytest, ruff, build)
 make lint    # ruff check .
 make test    # pytest -q
+make bench   # print what a scan costs (CORPUS=path for a bigger tree)
 make build   # python -m build
 make help    # Show this help
 make setup   # Install the pre-commit hook
