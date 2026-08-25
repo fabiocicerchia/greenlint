@@ -64,6 +64,16 @@ to find out — which is most functions. Breadth-first because that is
 `ast.walk`'s order, so each rule still sees its nodes in the order it did
 before.
 
+That one pass then got cheaper twice over. It no longer descends into
+expression nodes — Python has no expression that can contain a statement, so
+none of the five kinds it collects can be under one, and every name, call,
+constant and operator in the file is skipped rather than queued and rejected.
+And it walks children by reading `_fields` directly rather than through
+`ast.iter_child_nodes`, which is two nested generators and a `try/except` per
+node; this is the one loop in greenlint that runs tens of millions of times in
+a real scan. The index it produces was checked node for node against the
+previous implementation over 28,000 files.
+
 `_blank_comments()` is the other half of a scan's cost, and the only part
 whose work is per character rather than per match. It now jumps between the
 characters that can change anything — a quote, a comment token, a block opener
@@ -75,6 +85,34 @@ comment token in it returns immediately.
 Together these are ~2.8x on real Python with byte-identical findings; the
 rewrite was checked against the previous implementation over ~158,000
 generated (text, language) pairs plus every file in the standard library.
+
+## Performance
+
+![Scan cost, before and after, over six workloads](performance.svg)
+
+| Workload | Before | After | |
+|---|---:|---:|---:|
+| Project scan · this repository, 152 files | 169 ms | 122 ms | 1.4x |
+| Project scan · CPython 3.13 stdlib, 2,394 files | 17.6 s | 11.3 s | 1.6x |
+| Walk with 250 ignore globs · 500 files | 243 ms | 43 ms | 5.7x |
+| Files no rule targets · 200 assets | 22.6 ms | 1.4 ms | 16x |
+| One file, 20,000 matches · `SELECT *` dump | 1,284 ms | 30 ms | 43x |
+| Editor panel repaint · 20,000 findings | 2,349 ms | 7 ms | 336x |
+| Editor heap · 20,000 findings | 17.2 MB | 11.4 MB | −34% |
+
+The two whole-project rows are the honest headline: a real scan is dominated by
+`ast.parse`, which is CPython's compiler and not going anywhere. The rest are
+the pathological cases the general number hides — a tree of assets, an editor's
+hundred ignore globs, a generated file the same rule matches thousands of times,
+a panel repainting during a streaming scan. Those were the ones that made
+greenlint feel slow, because they are the ones that grew with something other
+than the amount of code.
+
+`make bench` prints the first five rows for any tree (`CORPUS=path make bench`).
+`tests/test_performance.py` is the guard that keeps them: it counts work — files
+opened, glob matches performed — rather than milliseconds, so it says the same
+thing on a laptop and on a loaded CI runner, and it fails on the implementation
+these numbers replaced.
 
 Cross-language rules (e.g. GL002 sub-100ms polling, GL005 `SELECT *`) use one
 compiled regex with a `|`-separated alternative per language's idiom (Python
@@ -105,10 +143,11 @@ Three small pieces of the module exist for it, and only for it:
 - **`scannable(path)`** and **`finding_sort_key(finding)`** — "would any rule
   even look at this file?", derived from `RULES` rather than a hardcoded list,
   and the CLI's ordering, so a front end assembling its own list produces the
-  same order. `scan_file()` on a file no rule targets yields nothing either way;
-  the predicate just lets a caller skip the read. The CLI does not use it —
-  reading a PNG and matching nothing is wasted I/O, but changing what the CLI
-  touches is a bigger decision than making a background scan cheap.
+  same order. Every rule is selected by suffix or by the name `Dockerfile`, so
+  a file this rejects cannot produce a finding whatever is in it: `scan_file()`
+  now returns on it before reading it, and the extension skips asking about it
+  at all rather than shipping the buffer across the process boundary to be told
+  there was nothing to look for.
 
 `extensions/vscode/server/greenlint_server.py` is a long-lived process speaking
 newline-delimited JSON over stdio. It exists because a CLI run spends ~100 ms on
@@ -139,6 +178,11 @@ directory and `*/vendor` covers the entry but nothing inside it. `prunable_bases
 decides on the shape of the pattern rather than on a guess about what it might
 match, because being wrong in the permissive direction would silently stop
 scanning files that are not ignored.
+
+The globs themselves are compiled once into a single alternation rather than
+matched one at a time: an editor merging in `files.exclude` and `search.exclude`
+brings a hundred patterns, and running each of them against every path was more
+work than reading some of the files would have been.
 
 `--exclude GLOB` (repeatable) adds ignore globs from the command line, in the
 same vocabulary and with the same matching as `ignore` in the config. It exists

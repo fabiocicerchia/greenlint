@@ -1,0 +1,102 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 760 500" width="760" height="500" role="img" aria-labelledby="chart-title chart-desc">
+  <title id="chart-title">What a greenlint scan costs, before and after the optimisation pass</title>
+  <desc id="chart-desc">Six workloads. Each full-width track is the cost before; the filled bar is the cost after, drawn to the same scale within its row. This repository, 152 files: 169 to 122 milliseconds, 1.4 times faster. CPython 3.13 standard library, 2,394 files: 17.6 to 11.3 seconds, 1.6 times faster. Walk with 250 ignore globs over 500 files: 243 to 43 milliseconds, 5.7 times faster. 200 files no rule targets: 22.6 to 1.4 milliseconds, 16 times faster. One file with 20,000 matches: 1,284 to 30 milliseconds, 43 times faster. Editor panel repaint with 20,000 findings: 2,349 to 7 milliseconds, 336 times faster.</desc>
+  <style>
+    .viz {
+      --surface: #fcfcfb;
+      --border: rgba(11, 11, 11, 0.10);
+      --ink: #0b0b0b;
+      --ink-2: #52514e;
+      --muted: #898781;
+      --before: #898781;
+      --after: #2a78d6;
+    }
+    @media (prefers-color-scheme: dark) {
+      .viz {
+        --surface: #1a1a19;
+        --border: rgba(255, 255, 255, 0.10);
+        --ink: #ffffff;
+        --ink-2: #c3c2b7;
+        --muted: #898781;
+        --before: #898781;
+        --after: #3987e5;
+      }
+    }
+    text {
+      font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+      fill: var(--ink);
+    }
+    .title { font-size: 17px; font-weight: 600; }
+    .subtitle, .caption { font-size: 11.5px; fill: var(--ink-2); }
+    .caption { fill: var(--muted); }
+    .row-label { font-size: 12.5px; }
+    .row-value { font-size: 12.5px; fill: var(--ink-2); font-variant-numeric: tabular-nums; }
+    .key { font-size: 11.5px; fill: var(--ink-2); }
+    .track { fill: var(--before); }
+    .fill { fill: var(--after); }
+    .surface { fill: var(--surface); stroke: var(--border); }
+  </style>
+
+  <g class="viz">
+    <rect class="surface" x="0.5" y="0.5" width="759" height="499" rx="6"/>
+
+    <text class="title" x="28" y="38">What a scan costs, before and after</text>
+    <text class="subtitle" x="28" y="58">Each row to its own scale: the full track is the cost before, the bar is what is left after. Shorter is better.</text>
+
+    <!-- key: two marks, so which is which is never left to colour memory alone -->
+    <g>
+      <rect class="track" x="28" y="74" width="18" height="9" rx="2"/>
+      <text class="key" x="52" y="82.5">before</text>
+      <rect class="fill" x="103" y="74" width="18" height="9" rx="2"/>
+      <text class="key" x="127" y="82.5">after</text>
+    </g>
+
+    <!-- rows: label + both values above the mark, so no label can collide with a short bar -->
+    <g>
+      <text class="row-label" x="28" y="114">Project scan · this repository, 152 files</text>
+      <text class="row-value" x="732" y="114" text-anchor="end">169 ms → 122 ms · 1.4× faster</text>
+      <rect class="track" x="28" y="122" width="704" height="14" rx="4"/>
+      <rect class="fill" x="28" y="122" width="511" height="14" rx="4"/>
+    </g>
+
+    <g>
+      <text class="row-label" x="28" y="166">Project scan · CPython 3.13 stdlib, 2,394 files</text>
+      <text class="row-value" x="732" y="166" text-anchor="end">17.6 s → 11.3 s · 1.6× faster</text>
+      <rect class="track" x="28" y="174" width="704" height="14" rx="4"/>
+      <rect class="fill" x="28" y="174" width="453" height="14" rx="4"/>
+    </g>
+
+    <g>
+      <text class="row-label" x="28" y="218">Walk with 250 ignore globs · 500 files</text>
+      <text class="row-value" x="732" y="218" text-anchor="end">243 ms → 43 ms · 5.7× faster</text>
+      <rect class="track" x="28" y="226" width="704" height="14" rx="4"/>
+      <rect class="fill" x="28" y="226" width="124" height="14" rx="4"/>
+    </g>
+
+    <g>
+      <text class="row-label" x="28" y="270">Files no rule targets · 200 assets</text>
+      <text class="row-value" x="732" y="270" text-anchor="end">22.6 ms → 1.4 ms · 16× faster</text>
+      <rect class="track" x="28" y="278" width="704" height="14" rx="4"/>
+      <rect class="fill" x="28" y="278" width="44" height="14" rx="4"/>
+    </g>
+
+    <g>
+      <text class="row-label" x="28" y="322">One file, 20,000 matches · SELECT * dump</text>
+      <text class="row-value" x="732" y="322" text-anchor="end">1,284 ms → 30 ms · 43× faster</text>
+      <rect class="track" x="28" y="330" width="704" height="14" rx="4"/>
+      <rect class="fill" x="28" y="330" width="17" height="14" rx="4"/>
+    </g>
+
+    <g>
+      <text class="row-label" x="28" y="374">Editor panel repaint · 20,000 findings</text>
+      <text class="row-value" x="732" y="374" text-anchor="end">2,349 ms → 7 ms · 336× faster</text>
+      <rect class="track" x="28" y="382" width="704" height="14" rx="4"/>
+      <rect class="fill" x="28" y="382" width="3" height="14" rx="1.5"/>
+    </g>
+
+    <line x1="28" y1="424" x2="732" y2="424" stroke="var(--border)" stroke-width="1"/>
+    <text class="caption" x="28" y="446">Memory: the editor holds 20,000 findings in 11.4 MB of heap, down from 17.2 MB — the same prose is no longer copied per finding.</text>
+    <text class="caption" x="28" y="464">Best of three runs on one 16-core Linux machine, CPython 3.13. Findings are identical before and after.</text>
+    <text class="caption" x="28" y="482">Only the cost of producing them moved. The first five rows are what make bench prints.</text>
+  </g>
+</svg>

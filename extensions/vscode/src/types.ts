@@ -70,8 +70,15 @@ export function useSeverityOrder(order: Record<string, number> | undefined): voi
 /** An unknown severity sorts last rather than sorting randomly. */
 const rankOf = (severity: string): number => severityRank[severity] ?? Number.MAX_SAFE_INTEGER;
 
+/** Code-unit order for the path, not `localeCompare`: greenlint's own
+ * `finding_sort_key` compares Python strings, so a locale-aware collation here
+ * would put the merged list in a different order from the one the CLI prints —
+ * and it costs an ICU call per comparison, which a project-wide sort makes
+ * thousands of. */
+const comparePaths = (a: string, b: string): number => (a < b ? -1 : a > b ? 1 : 0);
+
 export function compareFindings(a: Finding, b: Finding): number {
-  return rankOf(a.severity) - rankOf(b.severity) || a.file.localeCompare(b.file) || a.line - b.line;
+  return rankOf(a.severity) - rankOf(b.severity) || comparePaths(a.file, b.file) || a.line - b.line;
 }
 
 /**

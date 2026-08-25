@@ -466,3 +466,37 @@ def test_cancelling_a_project_scan_stops_the_walk(server, tmp_path):
     scan = next(line for line in responses(server) if line.get("id") == 1 and "ok" in line)
     assert scan["cancelled"] is True
     assert scan["findings"] == []
+
+
+def test_a_scan_cancelled_while_it_is_still_queued_never_walks(server, tmp_path):
+    """`pump` defers a project scan that arrives during another one, so a scan
+    can be cancelled before it has started. That cancel has to be remembered
+    until the scan it names runs."""
+    for index in range(100):
+        write(tmp_path, f"f{index}.sql", "SELECT * FROM t;\n")
+    args = {"op": "scanProject", "root": str(tmp_path), "paths": [str(tmp_path)]}
+    # Both arrive while scan 1 is walking: the second scan is deferred, and the
+    # cancel names it rather than the one running.
+    server.inbox.put(json.dumps({"id": 2, **args}))
+    server.inbox.put(json.dumps({"id": 3, "op": "cancel", "cancel": 2}))
+    server.dispatch({"id": 1, **args})
+    assert [d["id"] for d in server.deferred] == [2]
+    server.dispatch(server.deferred.pop(0))
+    deferred = next(line for line in responses(server) if line.get("id") == 2 and "ok" in line)
+    assert deferred["cancelled"] is True
+    assert deferred["findings"] == []
+    assert server.cancelled == set()  # and the id is not kept afterwards
+
+
+def test_a_cancel_for_a_scan_that_already_finished_is_not_remembered(server, tmp_path):
+    """Otherwise the set grows by one entry per cancelled scan for the life of
+    the window, and a later scan reusing the id would stop for no reason."""
+    write(tmp_path, "q.sql", "SELECT * FROM t;\n")
+    args = {"op": "scanProject", "root": str(tmp_path), "paths": [str(tmp_path)]}
+    server.dispatch({"id": 1, **args})
+    server.dispatch({"id": 2, "op": "cancel", "cancel": 1})
+    assert server.cancelled == set()
+    server.dispatch({"id": 3, **args})
+    scan = next(line for line in responses(server) if line.get("id") == 3 and "ok" in line)
+    assert "cancelled" not in scan
+    assert scan["summary"]["total"] == 1
