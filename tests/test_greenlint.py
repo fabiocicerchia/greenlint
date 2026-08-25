@@ -1605,3 +1605,80 @@ def test_comment_syntax_covers_every_language_with_a_rule():
     exts = {ext for rule in greenlint.RULES for ext in rule["langs"] if ext.startswith(".")}
     known = set(greenlint.COMMENT_SYNTAX)
     assert exts <= known, f"no comment syntax for {sorted(exts - known)}"
+
+
+# --- the fast paths still answer what the slow ones did ----------------------
+
+
+def test_line_numbers_are_right_when_a_rule_fires_many_times(tmp_path):
+    """Line numbers come from an index built once per file rather than by
+    counting newlines per match, which was quadratic. The answer must not move.
+    """
+    f = write(tmp_path, "dump.sql", "".join(f"SELECT * FROM t{i};\n" for i in range(500)))
+    lines = [x["line"] for x in greenlint.scan_file(f) if x["rule"] == "GL005"]
+    assert lines == list(range(1, 501))
+
+
+def test_line_numbers_survive_a_match_at_the_start_of_a_line(tmp_path):
+    f = write(tmp_path, "q.sql", "-- header\nSELECT * FROM t;\n\nSELECT * FROM u;\n")
+    assert [x["line"] for x in greenlint.scan_file(f) if x["rule"] == "GL005"] == [2, 4]
+
+
+def test_the_language_index_selects_the_same_rules_as_applicable():
+    """`scan_file` looks its rules up by language instead of asking every rule
+    whether it applies. The two answers have to be the same set."""
+    suffixes = {ext for rule in greenlint.RULES for ext in rule["langs"]}
+    for suffix in suffixes:
+        path = Path("Dockerfile" if suffix == "Dockerfile" else f"x{suffix}")
+        expected = {
+            r["id"]
+            for r in greenlint.RULES
+            if greenlint.applicable(r, path)
+            and r["pattern"] is not None
+            and r["id"] not in greenlint.AST_RULE_IDS
+        }
+        indexed = {r["id"] for r in greenlint.PATTERN_RULES_BY_LANG.get(suffix, ())}
+        assert indexed == expected, suffix
+
+
+def test_scannable_agrees_with_the_rule_table():
+    for suffix in {ext for rule in greenlint.RULES for ext in rule["langs"]}:
+        path = Path("Dockerfile" if suffix == "Dockerfile" else f"x{suffix}")
+        assert greenlint.scannable(path) is True
+    assert greenlint.scannable(Path("photo.png")) is False
+
+
+def test_ignore_globs_match_the_same_paths_as_fnmatch():
+    """The ignore list is compiled to one regex instead of run glob by glob;
+    `normcase` has to stay, or the globs go case-sensitive on Windows."""
+    import fnmatch
+
+    patterns = ["*/tests/*", "tests/*", "*.min.js", "*/vendor/*.py", "dist/*"]
+    paths = [
+        "tests/x.py",
+        "/p/tests/x.py",
+        "x.min.js",
+        "vendor/a.py",
+        "/p/vendor/a.py",
+        "dist/a",
+        "src/a.py",
+    ]
+    for path in paths:
+        forms = (path, path if path.startswith("/") else "/" + path)
+        expected = any(fnmatch.fnmatch(s, p) for p in patterns for s in forms)
+        assert greenlint._matches_any(path, patterns) is expected, path
+
+
+def test_a_file_no_rule_targets_is_not_even_read(tmp_path):
+    """`scan_file` returns before opening a file whose language no rule
+    mentions: it could only ever match nothing, and a checkout is mostly those.
+    """
+    if os.geteuid() == 0:
+        pytest.skip("root reads unreadable files, so the check cannot fail")
+    f = write(tmp_path, "logo.png", "SELECT * FROM t;\n")
+    f.chmod(0o000)  # unreadable: opening it at all would be the bug
+    try:
+        assert list(greenlint.scan_file(f)) == []
+        assert list(greenlint.scan_file(f, text="SELECT * FROM t;\n")) == []
+    finally:
+        f.chmod(0o644)

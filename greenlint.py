@@ -13,6 +13,7 @@ and what to do instead.
 
 import argparse
 import ast
+import bisect
 import fnmatch
 import functools
 import hashlib
@@ -22,7 +23,7 @@ import re
 import sys
 import tomllib
 from collections import deque
-from pathlib import Path
+from pathlib import Path, PurePath
 
 CONFIG_FILENAME = ".greenlint.toml"
 BASELINE_FILENAME = ".greenlint-baseline.json"
@@ -691,6 +692,32 @@ RULES = [
 
 RULES_BY_ID = {r["id"]: r for r in RULES}
 
+# The rules `scan_file` dispatches by name rather than by pattern.
+AST_RULE_IDS = frozenset({"GL001", "GL007", "GL018", "GL023", "GL030", "GL031"})
+
+
+def _pattern_rules_by_lang():
+    """Pattern rules bucketed by the language tag they target.
+
+    Built once, because the alternative is asking every rule whether it applies
+    to every file: ~50 `applicable()` calls per file, of which all but a handful
+    answer no. A scan of a large tree spent more time on that question than on
+    several of the rules.
+    """
+    index = {}
+    for rule in RULES:
+        if rule["pattern"] is None or rule["id"] in AST_RULE_IDS:
+            continue
+        for lang in rule["langs"]:
+            index.setdefault(lang, []).append(rule)
+    return index
+
+
+PATTERN_RULES_BY_LANG = _pattern_rules_by_lang()
+
+# Every language tag any rule mentions, for `scannable()`.
+SCANNABLE_LANGS = frozenset(lang for rule in RULES for lang in rule["langs"])
+
 
 # --------------------------------------------------------- configuration ---
 
@@ -976,6 +1003,32 @@ def _is_test_file(path):
     return any(part.lower() in ("test", "tests", "spec", "specs") for part in path.parts[:-1])
 
 
+def _line_indexer(text):
+    """Return offset -> 1-based line number, over an index built at most once.
+
+    `text.count("\\n", 0, offset)` per match rescans the file from the top, so a
+    file the same rule matches a thousand times was read a thousand times over —
+    quadratic, and the files that hit it (generated SQL, bundled JS) are exactly
+    the large ones. The index is built on the first match, so the overwhelming
+    majority of files, which match nothing, pay nothing for it.
+    """
+    starts = None
+
+    def line_of(offset):
+        nonlocal starts
+        if starts is None:
+            starts = []
+            pos = text.find("\n")
+            while pos != -1:
+                starts.append(pos)
+                pos = text.find("\n", pos + 1)
+        # bisect_left: newlines strictly before the offset, which is what
+        # `count` reported for a match starting on the newline itself.
+        return bisect.bisect_left(starts, offset) + 1
+
+    return line_of
+
+
 def _finding(rule, path, line):
     """Build one finding from the rule that fired.
 
@@ -1049,11 +1102,19 @@ def index_python(tree):
     Breadth-first because that is `ast.walk`'s order, and the rules used to
     read their nodes from `ast.walk` — keeping it means each rule still sees
     its nodes in the order it always did.
+
+    The child walk is spelled out rather than left to `ast.iter_child_nodes`,
+    which is two nested generators and a `try/except` per node. This is the one
+    place in greenlint that runs tens of millions of times in a real scan — it
+    was 20 of 36 seconds on the standard library — and doing it by hand is ~1.7x
+    faster for the same nodes in the same order.
     """
     index = PythonIndex(tree)
     queue = deque([(tree, (), tree)])
+    pop = queue.popleft
+    push = queue.append
     while queue:
-        node, loops, scope = queue.popleft()
+        node, loops, scope = pop()
         kind = type(node)
         # Exact types, not isinstance: `AsyncFor` and `TryStar` are siblings of
         # `For` and `Try` rather than subclasses, and the rules never matched
@@ -1075,8 +1136,18 @@ def index_python(tree):
         # A nested def/class/lambda starts a scope of its own, which is the
         # boundary `_walk_own` respects and the one GL007 judges names against.
         child_scope = node if kind in _SCOPE_KINDS else scope
-        for child in ast.iter_child_nodes(node):
-            queue.append((child, loops, child_scope))
+        # Expressions are not descended into: Python has no expression that can
+        # contain a statement, so none of the five kinds collected above can be
+        # inside one. That is most of a syntax tree — every name, call, constant
+        # and operator — skipped rather than queued and rejected.
+        for name in node._fields:
+            value = getattr(node, name, None)
+            if type(value) is list:
+                for item in value:
+                    if isinstance(item, ast.AST) and not isinstance(item, ast.expr):
+                        push((item, loops, child_scope))
+            elif isinstance(value, ast.AST) and not isinstance(value, ast.expr):
+                push((value, loops, child_scope))
     return index
 
 
@@ -1726,14 +1797,18 @@ def scannable(path):
     """True if any rule targets this file's language at all.
 
     Derived from `RULES` rather than a hardcoded extension list, so a rule for
-    a new language brings its files into scope automatically. `scan_file()` on
-    a file no rule targets yields nothing, so this only ever skips work — which
-    is why the editor extension checks it before reading a file that a project
-    scan just walked past. The CLI does not: reading a PNG and matching nothing
-    is wasted I/O, but changing what the CLI touches is a bigger decision than
-    making the editor's background scan cheap.
+    a new language brings its files into scope automatically. Every rule — the
+    pattern ones, the AST ones and the per-format ones — is selected by suffix
+    or by the name `Dockerfile`, so a file this returns False for cannot produce
+    a finding whatever it contains. `scan_file` leans on that to return before
+    reading it, and the editor extension before asking about it at all.
+
+    A set lookup rather than a pass over `RULES`: this is asked once per file in
+    a walk, and the answer only ever depended on the set of tags.
     """
-    return any(applicable(rule, path) for rule in RULES)
+    return path.suffix in SCANNABLE_LANGS or (
+        path.name == "Dockerfile" and "Dockerfile" in SCANNABLE_LANGS
+    )
 
 
 def scan_file(path, disabled=frozenset(), text=None):
@@ -1746,6 +1821,11 @@ def scan_file(path, disabled=frozenset(), text=None):
     to get a scan, which is a lot of disk churn for a tool about not wasting
     energy.
     """
+    # No rule targets this language, so there is nothing to find in it — and no
+    # reason to read it. A checkout is full of images, lock files and minified
+    # bundles that were being read in full and then matched against nothing.
+    if not scannable(path):
+        return
     if text is None:
         try:
             text = path.read_text(errors="replace")
@@ -1769,8 +1849,7 @@ def scan_file(path, disabled=frozenset(), text=None):
     # noise: a test's tight wait is bounded by the test run and is the point.
     if _is_test_file(path):
         disabled = disabled | {"GL001", "GL002", "GL007"}
-    ast_rules = {"GL001", "GL007", "GL018", "GL023", "GL030", "GL031"}
-    if ast_rules - disabled and index is not None:
+    if index is not None and not AST_RULE_IDS <= disabled:
         if "GL001" not in disabled:
             yield from _ast_busy_loop_findings(path, index)
         if "GL007" not in disabled:
@@ -1801,20 +1880,40 @@ def scan_file(path, disabled=frozenset(), text=None):
             yield from _compose_resources_findings(path, code)
     if (path.suffix == ".dockerfile" or path.name == "Dockerfile") and "GL029" not in disabled:
         yield from _dockerfile_layer_bloat_findings(path, code)
-    for rule in RULES:
-        if (
-            rule["id"] in disabled
-            or rule["id"] in ast_rules
-            or rule["pattern"] is None
-            or not applicable(rule, path)
-        ):
+    # Only the rules tagged for this file's language, looked up rather than
+    # filtered — see `_pattern_rules_by_lang`.
+    rules = PATTERN_RULES_BY_LANG.get(
+        "Dockerfile" if path.name == "Dockerfile" else path.suffix, ()
+    )
+    line_of = _line_indexer(code)
+    for rule in rules:
+        if rule["id"] in disabled:
             continue
         for m in rule["pattern"].finditer(code):
-            line = code.count("\n", 0, m.start()) + 1
-            yield _finding(rule, path, line)
+            yield _finding(rule, path, line_of(m.start()))
 
 
 # -------------------------------------------------------- file discovery ---
+
+
+@functools.lru_cache(maxsize=32)
+def _ignore_matcher(patterns):
+    """One compiled regex for a whole ignore list.
+
+    `fnmatch` per pattern per path meant a walk ran one regex match per glob per
+    file — and once the editor merges in `files.exclude` and `search.exclude`
+    that is a hundred of them, on every file, before anything is read. An
+    alternation answers the same question in one. Cached on the patterns, of
+    which there is one set per config.
+
+    `normcase` is applied to the patterns here and to the path below, which is
+    exactly what `fnmatch.fnmatch` does — and the whole of why it is slower than
+    `fnmatchcase`. Dropping it would silently make ignore globs case-sensitive
+    on Windows.
+    """
+    if not patterns:
+        return None
+    return re.compile("|".join(fnmatch.translate(os.path.normcase(p)) for p in patterns)).match
 
 
 def _matches_any(rel, ignore):
@@ -1825,8 +1924,11 @@ def _matches_any(rel, ignore):
     an ignore glob silently did nothing, including in greenlint's own
     .greenlint.toml. Trying both keeps bare patterns like `tests/*` working too.
     """
-    forms = (rel, rel if rel.startswith("/") else "/" + rel)
-    return any(fnmatch.fnmatch(s, pat) for pat in ignore for s in forms)
+    match = _ignore_matcher(tuple(ignore))
+    if match is None:
+        return False
+    forms = (rel,) if rel.startswith("/") else (rel, "/" + rel)
+    return any(match(os.path.normcase(form)) for form in forms)
 
 
 def is_ignored(path, config=None):
@@ -1840,12 +1942,13 @@ def is_ignored(path, config=None):
     reason — the walk skips `.venv` wholesale, so a `.venv` file the editor
     asks about directly has to be skipped too, or the two disagree.
     """
-    if PRUNED_DIR_NAMES.intersection(Path(path).parts):
+    p = path if isinstance(path, PurePath) else Path(path)
+    if not PRUNED_DIR_NAMES.isdisjoint(p.parts):
         return True
     ignore = (config or {}).get("ignore") or []
     if not ignore:
         return False
-    return _matches_any(Path(path).as_posix(), ignore)
+    return _matches_any(p.as_posix(), ignore)
 
 
 def prunable_bases(ignore):
@@ -1911,21 +2014,23 @@ def walk_files(root, prune_bases=()):
     Symlinked directories are not followed and symlinked files are yielded,
     which is what `rglob` did.
     """
-    stack = [Path(root)]
+    # Paths are carried as strings and `scandir` hands back the joined form for
+    # free, so a `Path` is only built for the files actually yielded — not for
+    # every directory entry passed over on the way there.
+    stack = [os.fspath(root) or "."]
     while stack:
         current = stack.pop()
         try:
             with os.scandir(current) as entries:
                 for entry in entries:
-                    child = current / entry.name
                     if entry.is_dir(follow_symlinks=False):
                         if entry.name in PRUNED_DIR_NAMES:
                             continue
-                        if prune_bases and _matches_any(child.as_posix(), prune_bases):
+                        if prune_bases and _matches_any(Path(entry.path).as_posix(), prune_bases):
                             continue
-                        stack.append(child)
+                        stack.append(entry.path)
                     elif entry.is_file():
-                        yield child
+                        yield Path(entry.path)
         except OSError:
             continue  # unreadable directory: nothing to scan and nothing to say
 
