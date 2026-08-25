@@ -21,10 +21,16 @@ export class FindingStore {
    * updates the badge on every batch, and counting every finding each time
    * would make the display cost grow with the results. */
   private total = 0;
+  /** `all()`, held until something changes it. One repaint asks for the whole
+   * project four times over — the panel, its title, the status bar, the report
+   * — and re-flattening and re-sorting every finding for each of them made a
+   * streaming scan quadratic in what it had already found. */
+  private flattened?: Finding[];
 
   private put(fsPath: string, findings: Finding[]): boolean {
     const previous = this.byFile.get(fsPath);
     this.total -= previous?.length ?? 0;
+    this.flattened = undefined;
     if (findings.length === 0) {
       return this.byFile.delete(fsPath);
     }
@@ -97,6 +103,7 @@ export class FindingStore {
   clear(): void {
     this.byFile.clear();
     this.total = 0;
+    this.flattened = undefined;
     this.emitter.fire(undefined);
   }
 
@@ -108,8 +115,17 @@ export class FindingStore {
     return this.byFile.entries();
   }
 
+  /** Every finding, worst first. The returned array is shared — treat it as
+   * read-only; it is handed to the panel, the report and the status bar in the
+   * same repaint. */
   all(): Finding[] {
-    return [...this.byFile.values()].flat().sort(compareFindings);
+    if (!this.flattened) {
+      // Each file's list is already sorted, so this only has to merge them —
+      // but a flat sort of an almost-sorted array is what V8's TimSort is good
+      // at, and it is one line rather than a merge.
+      this.flattened = [...this.byFile.values()].flat().sort(compareFindings);
+    }
+    return this.flattened;
   }
 
   get size(): number {

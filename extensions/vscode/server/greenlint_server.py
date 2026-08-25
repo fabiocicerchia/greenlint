@@ -202,6 +202,45 @@ class FindingCache:
         }
 
 
+class RunningSummary:
+    """The end-of-scan totals, accumulated as the walk goes.
+
+    Counted on the way past rather than from a list at the end, so a streaming
+    scan need not keep every finding alive purely to count it — the whole point
+    of streaming is that the client already has them.
+
+    Deliberately counts and nothing else. The CO2e hints are prose about
+    different physical quantities — grams per GB, grams per instance-day,
+    "negligible per call" — so adding them up would produce a number with no
+    unit and a false air of precision, which is the one thing this tool is
+    careful not to do.
+    """
+
+    __slots__ = ("by_rule", "by_severity", "files", "total")
+
+    def __init__(self):
+        self.total = 0
+        self.by_severity = {"high": 0, "medium": 0, "low": 0}
+        self.by_rule = {}
+        self.files = set()
+
+    def add(self, findings):
+        for finding in findings:
+            self.total += 1
+            severity = finding["severity"]
+            self.by_severity[severity] = self.by_severity.get(severity, 0) + 1
+            self.by_rule[finding["rule"]] = self.by_rule.get(finding["rule"], 0) + 1
+            self.files.add(finding["file"])
+
+    def result(self):
+        return {
+            "total": self.total,
+            "bySeverity": self.by_severity,
+            "byRule": dict(sorted(self.by_rule.items(), key=lambda kv: (-kv[1], kv[0]))),
+            "files": len(self.files),
+        }
+
+
 class Server:
     def __init__(self, gl, out, cache_entries=DEFAULT_CACHE_ENTRIES):
         self.gl = gl
@@ -211,7 +250,12 @@ class Server:
         self.cache = FindingCache(cache_entries)
         self.configs = {}
         self.config_fingerprint = None
+        # Scans asked to stop, and the one currently walking. The set is pruned
+        # to what can still be cancelled every time it is added to, so a cancel
+        # that arrives after its scan has finished is dropped rather than kept
+        # for the life of the process.
         self.cancelled = set()
+        self.active_scan = None
         self.deferred = []
         # Ignore globs the client adds on top of `.greenlint.toml` — the
         # editor's own exclude list, which greenlint has no way to know about.
@@ -368,7 +412,12 @@ class Server:
         stream = bool(request.get("stream"))
         config = self.config_for(root)
         started = time.perf_counter()
+        # Kept only when the client is not streaming. A streamed scan has
+        # already handed every finding over, so holding a second copy of a large
+        # tree's findings here — and sorting it — is work for a list nobody
+        # reads. The summary is accumulated instead.
         findings = []
+        summary = RunningSummary()
         batch = []
         counts = {"stat": 0, "hash": 0, "scan": 0, "skip": 0}
         seen = 0
@@ -383,40 +432,50 @@ class Server:
                     "id": request.get("id"),
                     "event": "progress",
                     "files": seen,
-                    "found": len(findings),
+                    "found": summary.total,
                     "batch": batch if stream else [],
                 }
             )
             batch.clear()
 
-        for path in self.gl.iter_files(paths, config):
-            seen += 1
-            if seen % INTERLEAVE_EVERY == 0:
-                # A full scan must not hold the editor hostage: buffer scans
-                # and cancellations are answered between batches of files.
-                self.pump()
-                if request.get("id") in self.cancelled:
-                    self.cancelled.discard(request["id"])
-                    return {"cancelled": True, "findings": []}
-                now = time.perf_counter()
-                if now - reported >= PROGRESS_INTERVAL_S:
-                    reported = now
-                    report()
-            found, how = self.scan_path(path, config, max_bytes)
-            counts[how] += 1
-            found = self.accepted(found, config)
-            if found:
-                findings.extend(found)
-                batch.extend(found)
+        scan_id = request.get("id")
+        self.active_scan = scan_id
+        try:
+            # Cancelled while it was still queued behind another scan.
+            if scan_id in self.cancelled:
+                return {"cancelled": True, "findings": []}
+            for path in self.gl.iter_files(paths, config):
+                seen += 1
+                if seen % INTERLEAVE_EVERY == 0:
+                    # A full scan must not hold the editor hostage: buffer scans
+                    # and cancellations are answered between batches of files.
+                    self.pump()
+                    if scan_id in self.cancelled:
+                        return {"cancelled": True, "findings": []}
+                    now = time.perf_counter()
+                    if now - reported >= PROGRESS_INTERVAL_S:
+                        reported = now
+                        report()
+                found, how = self.scan_path(path, config, max_bytes)
+                counts[how] += 1
+                found = self.accepted(found, config)
+                if found:
+                    summary.add(found)
+                    if not stream:
+                        findings.extend(found)
+                    batch.extend(found)
+        finally:
+            self.active_scan = None
+            self.cancelled.discard(scan_id)
         if stream and batch:
             report()  # whatever the last interval did not cover
         findings.sort(key=self.gl.finding_sort_key)
         return {
             # Streaming already delivered these one batch at a time; sending
             # them again would double the cost of the thing being optimised.
-            "findings": [] if stream else findings,
+            "findings": findings,
             "streamed": stream,
-            "summary": self.summarise(findings),
+            "summary": summary.result(),
             "stats": {
                 "files": seen,
                 "reusedFromStat": counts["stat"],
@@ -426,30 +485,6 @@ class Server:
                 "ms": round((time.perf_counter() - started) * 1000),
                 "cache": self.cache.stats(),
             },
-        }
-
-    @staticmethod
-    def summarise(findings):
-        """The totals, computed once at the end over the whole set.
-
-        Deliberately counts and nothing else. The CO2e hints are prose about
-        different physical quantities — grams per GB, grams per instance-day,
-        "negligible per call" — so adding them up would produce a number with
-        no unit and a false air of precision, which is the one thing this tool
-        is careful not to do.
-        """
-        by_severity = {"high": 0, "medium": 0, "low": 0}
-        by_rule = {}
-        files = set()
-        for finding in findings:
-            by_severity[finding["severity"]] += 1
-            by_rule[finding["rule"]] = by_rule.get(finding["rule"], 0) + 1
-            files.add(finding["file"])
-        return {
-            "total": len(findings),
-            "bySeverity": by_severity,
-            "byRule": dict(sorted(by_rule.items(), key=lambda kv: (-kv[1], kv[0]))),
-            "files": len(files),
         }
 
     # --- dispatch --------------------------------------------------------
@@ -519,8 +554,20 @@ class Server:
                 self.configs.clear()
             return {"cache": self.cache.stats()}
         if op == "cancel":
-            self.cancelled.add(request.get("cancel"))
-            return {}
+            target = request.get("cancel")
+            if target is None:
+                return {"cancelling": False}
+            self.cancelled.add(target)
+            # A scan can be cancelled while it is still queued — `pump` defers
+            # one project scan behind another — so this cannot be limited to the
+            # running one. What it can do is forget the ids that name no scan at
+            # all, which is what a cancel arriving just after its scan finished
+            # leaves behind.
+            pending = {d.get("id") for d in self.deferred if d.get("id") is not None}
+            if self.active_scan is not None:
+                pending.add(self.active_scan)
+            self.cancelled &= pending
+            return {"cancelling": target in self.cancelled}
         raise ValueError(f"unknown op: {op!r}")
 
     def parse(self, line):

@@ -75,3 +75,32 @@ test('keeps findings ordered worst-first however they arrived', () => {
   store.mergeBatch([finding('/p/b.py', { severity: 'medium' })]);
   assert.deepEqual(store.all().map((f) => f.severity), ['high', 'medium', 'low']);
 });
+
+test('does not serve a stale flattened list after a change', () => {
+  // `all()` is memoised, because one repaint asks for it several times over.
+  // A memo that outlives the change it should reflect is the bug that buys.
+  const store = new FindingStore();
+  store.setFile('/p/a.py', [finding('/p/a.py')]);
+  assert.equal(store.all().length, 1);
+  store.mergeBatch([finding('/p/b.py')]);
+  assert.equal(store.all().length, 2);
+  store.setFile('/p/a.py', []);
+  assert.deepEqual(store.all().map((f) => f.file), ['/p/b.py']);
+  store.pruneUnder('/p', new Set(), new Set());
+  assert.deepEqual(store.all(), []);
+  store.setFile('/p/c.py', [finding('/p/c.py')]);
+  store.clear();
+  assert.deepEqual(store.all(), []);
+});
+
+test('hands back the same flattened list until something changes it', () => {
+  // Identity, not equality: one repaint asks for the whole project four times
+  // over — panel, title, status bar, report — and the point of the memo is that
+  // those four share one flatten and one sort rather than repeating both.
+  const store = new FindingStore();
+  store.setFile('/p/a.py', [finding('/p/a.py')]);
+  const first = store.all();
+  assert.ok(store.all() === first, 'all() re-sorted an unchanged store');
+  store.setFile('/p/b.py', [finding('/p/b.py')]);
+  assert.ok(store.all() !== first, 'all() served a list from before the change');
+});
