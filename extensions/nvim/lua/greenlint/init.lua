@@ -14,7 +14,10 @@ local M = {}
 local cfg = nil
 --- absolute path -> findings
 local by_file = {}
-local running = {}
+--- Scans in flight, so `:GreenlintCancel` has something to stop. A killed scan
+--- has no answer to give, so its entry carries the flag that keeps its callback
+--- quiet rather than letting it report the kill as a failure.
+local jobs = {}
 local timers = {}
 local log_lines = {}
 local grouping = nil
@@ -70,6 +73,7 @@ local missing_reported = false
 local function run(argv, cb)
   local cmd = vim.list_extend(vim.list_slice(cfg.cmd, 1, #cfg.cmd), argv)
   log('run: %s', table.concat(cmd, ' '))
+  local job = { cancelled = false }
   -- vim.system raises when the executable is not there, and a missing greenlint
   -- must not be a traceback -- it is the likeliest thing to be wrong, and
   -- :checkhealth is where it is explained.
@@ -78,11 +82,19 @@ local function run(argv, cb)
     cwd = M.root(),
     timeout = cfg.timeout_ms,
   }, function(out)
+    jobs[job] = nil
+    -- Cancelled: the non-zero exit is the kill, not an answer, and reporting it
+    -- as a failed scan would make the command look broken.
+    if job.cancelled then
+      return
+    end
     vim.schedule(function()
       cb(out)
     end)
   end)
   if ok then
+    job.handle = handle
+    jobs[job] = true
     return handle
   end
   log('could not run %s: %s', cmd[1], tostring(handle))
@@ -137,9 +149,7 @@ function M.scan_file(path, opts)
     return
   end
 
-  running[path] = true
   run(core.scan_argv(cfg, { path }, { config = config_path(), baseline = baseline_path() }), function(out)
-    running[path] = nil
     local findings, err = decode(out)
     if not findings then
       log('%s: %s', relative(path), (err or ''):gsub('%s+$', ''))
@@ -474,6 +484,66 @@ function M.write_baseline()
     notify(message ~= '' and message:gsub('^greenlint: ', '') or ('wrote ' .. relative(target)))
     M.scan_project({})
   end)
+end
+
+--- Drop the baseline, so everything it was accepting is reported again.
+---
+--- Confirmed like writing one is: it deletes a file from the repository, and
+--- that file can be the record of which findings a team decided to live with.
+--- Going back is a scan; getting the list of accepted findings back is not.
+function M.clear_baseline()
+  local target = vim.fs.joinpath(M.root(), '.greenlint-baseline.json')
+  if not vim.uv.fs_stat(target) then
+    return notify('no baseline to clear.')
+  end
+  local choice = vim.fn.confirm(
+    ('Delete %s?\nEvery finding it was accepting is reported again.'):format(relative(target)),
+    '&Delete baseline\n&Cancel',
+    2
+  )
+  if choice ~= 1 then
+    return
+  end
+  local ok, err = os.remove(target)
+  if not ok then
+    return notify(('could not delete %s: %s'):format(relative(target), err or '?'), vim.log.levels.ERROR)
+  end
+  log('deleted %s', relative(target))
+  notify('deleted ' .. relative(target))
+  -- The findings on screen were filtered by the baseline that just went, so
+  -- they describe a world that no longer exists.
+  M.scan_project({})
+end
+
+--- Stop whatever greenlint is running.
+---
+--- Both halves of "running": the processes in flight, and the debounced scan
+--- that has not started yet -- cancelling one and leaving the other would put a
+--- scan back milliseconds after the command said it stopped them.
+function M.cancel()
+  local stopped = 0
+  for job in pairs(jobs) do
+    job.cancelled = true
+    jobs[job] = nil
+    if job.handle then
+      pcall(function()
+        job.handle:kill('sigterm')
+      end)
+    end
+    stopped = stopped + 1
+  end
+  local pending = 0
+  for key, timer in pairs(timers) do
+    timer:stop()
+    timer:close()
+    timers[key] = nil
+    pending = pending + 1
+  end
+  log('cancelled %d scan(s), %d pending', stopped, pending)
+  if stopped == 0 and pending == 0 then
+    return notify('nothing running.')
+  end
+  notify(('stopped %d scan(s).'):format(stopped + pending))
 end
 
 function M.show_log()

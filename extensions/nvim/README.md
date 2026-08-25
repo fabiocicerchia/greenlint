@@ -107,13 +107,15 @@ An answer that arrives after a newer edit is discarded rather than shown.
 | Command | What it does |
 | --- | --- |
 | `:GreenlintScan` | Scan the current file (unsaved buffers included) |
-| `:GreenlintScanProject` | Scan the whole project |
+| `:GreenlintScanAll` | Scan the whole project |
+| `:GreenlintCancel` | Stop the running scan |
 | `:GreenlintReport` | The report, in a float |
 | `:GreenlintList` | Every finding, in the quickfix list |
 | `:GreenlintFilter` | Findings at one severity |
 | `:GreenlintGroupBy` | Group the report by file, severity or rule |
 | `:GreenlintHover` | Explain the finding under the cursor |
 | `:GreenlintBaselineWrite` | Accept every current finding (asks first) |
+| `:GreenlintBaselineClear` | Delete the baseline, so every finding is reported again (asks first) |
 | `:GreenlintLog` | What was run, and what came back |
 
 ## Statusline

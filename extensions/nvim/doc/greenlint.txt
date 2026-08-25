@@ -104,8 +104,13 @@ anything CI should honour too; `exclude` here is for the editor only.
 :GreenlintScan            Scan the current file. An unsaved buffer is scanned
                           as it stands.
 
-                                                       *:GreenlintScanProject*
-:GreenlintScanProject     Scan the whole project.
+                                                           *:GreenlintScanAll*
+:GreenlintScanAll         Scan the whole project.
+
+                                                            *:GreenlintCancel*
+:GreenlintCancel          Stop the running scan. Both the greenlint processes
+                          in flight and a debounced scan that has not started
+                          yet, so nothing starts up again a moment later.
 
                                                             *:GreenlintReport*
 :GreenlintReport          The report, in a float, grouped by `grouping`.
@@ -128,6 +133,12 @@ anything CI should honour too; `exclude` here is for the editor only.
                           starts green. Asks first: it writes a file into the
                           repository and quietens real findings.
 
+                                                    *:GreenlintBaselineClear*
+:GreenlintBaselineClear   Delete the baseline; every finding it was accepting
+                          is shown again. Asks first: the file is the record of
+                          what a team decided to live with, and a scan brings
+                          the findings back but not that list.
+
                                                                *:GreenlintLog*
 :GreenlintLog             What was run, and what came back.
 
@@ -138,7 +149,10 @@ anything CI should honour too; `exclude` here is for the editor only.
     setup(opts)
     scan_file(path, opts)
     scan_buffer(bufnr, opts)
-    scan_project(opts)
+    scan_project(opts)      -- what :GreenlintScanAll runs
+    cancel()                -- stop the scans in flight and the pending one
+    write_baseline()
+    clear_baseline()
     findings()              -- everything, worst first
     findings_for(path)
     counts()                -- { high, medium, low }

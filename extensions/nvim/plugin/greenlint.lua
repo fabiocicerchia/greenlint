@@ -26,9 +26,13 @@ command('GreenlintScan', function()
   end
 end, { desc = 'greenlint: scan the current file' })
 
-command('GreenlintScanProject', function()
+command('GreenlintScanAll', function()
   ready().scan_project({ notify = true })
 end, { desc = 'greenlint: scan the whole project' })
+
+command('GreenlintCancel', function()
+  ready().cancel()
+end, { desc = 'greenlint: stop the running scan' })
 
 command('GreenlintReport', function()
   ready().report()
@@ -53,6 +57,10 @@ end, { desc = 'greenlint: explain the finding under the cursor' })
 command('GreenlintBaselineWrite', function()
   ready().write_baseline()
 end, { desc = 'greenlint: accept current findings (write baseline)' })
+
+command('GreenlintBaselineClear', function()
+  ready().clear_baseline()
+end, { desc = 'greenlint: delete the baseline, reporting every finding again' })
 
 command('GreenlintLog', function()
   ready().show_log()

@@ -101,11 +101,42 @@ end, 100)
 check(typed == true, 'the buffer scan completed')
 check(#greenlint.findings_for(project .. '/src/worker.py') == 0, 'fixing the loop in the buffer cleared it')
 
+-- The baseline round trip: accept everything, see nothing, clear it, see it all
+-- again. `vim.fn.confirm` is stubbed to 1 above, so both prompts say yes.
+vim.cmd.edit(project .. '/src/query.sql')
+greenlint.write_baseline()
+vim.wait(60000, function()
+  return vim.uv.fs_stat(project .. '/.greenlint-baseline.json') ~= nil and #greenlint.findings() == 0
+end, 100)
+check(vim.uv.fs_stat(project .. '/.greenlint-baseline.json') ~= nil, 'the baseline was written')
+check(#greenlint.findings() == 0, 'a written baseline accepts every current finding')
+
+greenlint.clear_baseline()
+vim.wait(60000, function()
+  return #greenlint.findings() > 0
+end, 100)
+check(vim.uv.fs_stat(project .. '/.greenlint-baseline.json') == nil, 'clearing deleted the baseline')
+check(#greenlint.findings() > 0, 'and every finding is reported again')
+
+-- Cancelling: the scan is killed, so its callback never lands and `on_done`
+-- stays nil. Nothing else may break on the way.
+local after_cancel = nil
+greenlint.scan_project({ on_done = function(ok)
+  after_cancel = ok
+end })
+greenlint.cancel()
+vim.wait(1500, function()
+  return after_cancel ~= nil
+end, 50)
+check(after_cancel == nil, 'a cancelled scan reports nothing rather than a failure')
+check(#greenlint.findings() > 0, 'and leaves the findings it already had')
+
 for _, name in ipairs({
   'GreenlintReport',
   'GreenlintList',
   'GreenlintFilter',
   'GreenlintGroupBy',
+  'GreenlintCancel',
   'GreenlintLog',
 }) do
   local ok, err = pcall(vim.cmd, name)
