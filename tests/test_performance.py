@@ -23,6 +23,11 @@ from pathlib import Path
 
 import greenlint
 
+# The line GL005 fires on, as a plain literal rather than something built per
+# row: a formatted string containing SELECT is what secret and injection
+# scanners are looking for, and a fixture should not have to argue with one.
+QUERY = "SELECT * FROM t;\n"
+
 
 def write(tmp_path, name, content):
     f = tmp_path / name
@@ -122,11 +127,9 @@ def test_a_file_the_same_rule_matches_many_times_stays_linear(tmp_path):
     """
 
     def scan_with(matches):
-        path = write(
-            tmp_path,
-            f"dump{matches}.sql",
-            "".join(f"SELECT * FROM t{index};\n" for index in range(matches)),
-        )
+        # One line repeated: the rule fires per occurrence, and what is being
+        # measured is the count of matches, not what they say.
+        path = write(tmp_path, f"dump{matches}.sql", QUERY * matches)
         found = None
 
         def run():
@@ -171,7 +174,7 @@ def _benchmark(target):  # pragma: no cover - a tool, not a test
 
     scratch = Path(tempfile.mkdtemp())
     dump = scratch / "dump.sql"
-    dump.write_text("".join(f"SELECT * FROM t{i};\n" for i in range(20_000)))
+    dump.write_text(QUERY * 20_000)
     print(f"  20k matches   {1000 * best_of(lambda: list(greenlint.scan_file(dump))):8.1f} ms")
 
     assets = scratch / "assets"

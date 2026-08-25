@@ -88,7 +88,7 @@ generated (text, language) pairs plus every file in the standard library.
 
 ## Performance
 
-![Six workloads, each drawn as the cost after the optimisation pass against the cost before it. The same numbers are in the table below.](performance.svg)
+![Scan cost, before and after, over six workloads](performance.svg)
 
 | Workload | Before | After | |
 |---|---:|---:|---:|
