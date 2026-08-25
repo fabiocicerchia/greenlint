@@ -9,6 +9,19 @@ name: release
 # Draft first because releases here are immutable: once published, the assets
 # are frozen.
 #
+# Why this is two release-please jobs and not one — do not collapse them back:
+# a draft release has no git tag, publishing it is what creates the tag. A
+# single invocation cuts the release and then computes the next release PR in
+# the same run, while the release is still a draft — so there is no tag for the
+# version already in .release-please-manifest.json, release-please loses its
+# anchor, walks the entire history and opens a PR re-releasing everything.
+# Merging that cuts another release, which opens another PR, forever. So:
+#
+#   release-please   phase 1 — cut the draft release only
+#   build/pypi/extension  attach what belongs to the release
+#   publish-release  publish the draft -> tag exists
+#   release-pr       phase 2 — open/update the next release PR only
+#
 # Publishing to PyPI is opt-in: configure a Trusted Publisher for this
 # repository on pypi.org (workflow: release.yml, environment: pypi) and set the
 # repository variable PUBLISH_TO_PYPI to "true".
@@ -37,6 +50,8 @@ jobs:
         # manifest on the same version as the tag — has no action input.
         # `release-type: python` is still the strategy; it bumps `version` in
         # pyproject.toml and maintains CHANGELOG.md.
+        with:
+          skip-github-pull-request: true # phase 2 opens it, once the tag exists
 
   build:
     needs: release-please
@@ -123,3 +138,26 @@ jobs:
           GH_REPO: ${{ github.repository }}
           TAG: ${{ needs.release-please.outputs.tag_name }}
         run: gh release edit "$TAG" --draft=false
+
+  # Phase 2 — open/update the next release PR, now that `publish-release` has
+  # published the draft and the tag exists. `always()` because on an ordinary
+  # push no release was cut and `publish-release` is skipped, yet the release PR
+  # still has to be kept up to date; when a release *was* cut, `publish-release`
+  # must have succeeded, or there is no tag to anchor on and this would
+  # re-release the whole history.
+  release-pr:
+    needs: [release-please, publish-release]
+    if: always()
+      && needs.release-please.result == 'success'
+      && (needs.release-please.outputs.release_created != 'true'
+      || needs.publish-release.result == 'success')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write # open/update the release PR
+    steps:
+      # Same configuration as phase 1 — the two invocations must agree, and
+      # both read release-please-config.json by default.
+      - uses: googleapis/release-please-action@45996ed1f6d02564a971a2fa1b5860e934307cf7  # v5.0.0
+        with:
+          skip-github-release: true
