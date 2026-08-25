@@ -2075,14 +2075,26 @@ def main(argv=None):
         description=__doc__,
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
-    p.add_argument("paths", nargs="*", default=["."],
-                   help="files or directories to scan (default: the current directory)")
-    p.add_argument("--list-rules", action="store_true",
-                   help="print every rule with its energy rationale, then exit")
-    p.add_argument("--format", choices=["text", "json", "github"], default="text",
-                   help="text for humans, json for tooling, github for workflow annotations")
-    p.add_argument("--fail-on-findings", action="store_true",
-                   help="exit 1 when anything is found; the CI gate")
+    p.add_argument(
+        "paths",
+        nargs="*",
+        default=["."],
+        help="files or directories to scan (default: the current directory)",
+    )
+    p.add_argument(
+        "--list-rules",
+        action="store_true",
+        help="print every rule with its energy rationale, then exit",
+    )
+    p.add_argument(
+        "--format",
+        choices=["text", "json", "github"],
+        default="text",
+        help="text for humans, json for tooling, github for workflow annotations",
+    )
+    p.add_argument(
+        "--fail-on-findings", action="store_true", help="exit 1 when anything is found; the CI gate"
+    )
     p.add_argument("--config", help=f"path to config (default: ./{CONFIG_FILENAME} if present)")
     p.add_argument(
         "--exclude",
