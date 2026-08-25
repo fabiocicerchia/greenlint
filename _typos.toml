@@ -1,0 +1,4 @@
+# `noet` is `noexpandtab` in the modeline every vim help file ends with, not a
+# misspelling of "note".
+[default.extend-words]
+noet = "noet"

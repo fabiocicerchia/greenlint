@@ -1,0 +1,223 @@
+*greenlint.txt*  Flag energy-wasteful code and config, in Neovim
+
+==============================================================================
+CONTENTS                                                   *greenlint-contents*
+
+  1. Introduction ............................ |greenlint-introduction|
+  2. Requirements ............................ |greenlint-requirements|
+  3. Setup ................................... |greenlint-setup|
+  4. Configuration ........................... |greenlint-configuration|
+  5. Commands ................................ |greenlint-commands|
+  6. API ..................................... |greenlint-api|
+  7. Statusline .............................. |greenlint-statusline|
+  8. Health .................................. |greenlint-health|
+  9. Differences from the VS Code extension .. |greenlint-differences|
+
+==============================================================================
+1. INTRODUCTION                                        *greenlint-introduction*
+
+greenlint statically flags energy-wasteful code and config: busy loops,
+sub-100ms polling, every-minute crons, `SELECT *`, full-history CI clones,
+oversized instances, quadratic rebuilds in loops, missing log retention. 38
+rules, each with a concrete "do instead" and a CO2e hint whose arithmetic is
+documented against one stated model.
+
+The rule set is the product, so this plugin does not reimplement it. greenlint
+is Python regexes plus six `ast`-based analyses; a Lua reimplementation would
+be a different linter that mostly agrees, which is the worst possible outcome.
+The CLI is run instead -- it costs about 60ms for a file and 120ms for a small
+repository, interpreter start included, which is what makes that affordable.
+
+==============================================================================
+2. REQUIREMENTS                                        *greenlint-requirements*
+
+  - Neovim 0.11 or newer
+  - the `greenlint` CLI (`pip install greenlint`), or a `greenlint.py` checkout
+  - plenary.nvim, for running the test suite only
+
+|:checkhealth| greenlint reports on all of it, including how many rules the
+build you are running has.
+
+==============================================================================
+3. SETUP                                                      *greenlint-setup*
+
+setup() is optional -- every command works on the defaults. >lua
+
+    require('greenlint').setup({ run = 'on_type' })
+<
+Against a checkout rather than an installed release: >lua
+
+    require('greenlint').setup({
+      cmd = { 'python3', '/path/to/greenlint.py' },
+    })
+<
+With lazy.nvim: >lua
+
+    {
+      'fabiocicerchia/greenlint',
+      rtp = 'extensions/nvim',
+      event = { 'BufReadPost', 'BufNewFile' },
+      cmd = { 'GreenlintScan', 'GreenlintReport' },
+      opts = {},
+    }
+<
+==============================================================================
+4. CONFIGURATION                                      *greenlint-configuration*
+
+Defaults, deep-merged with whatever you pass: >lua
+
+    {
+      enabled = true,
+      cmd = { 'greenlint' },
+      run = 'on_save',            -- on_save | on_type | manual
+      debounce_ms = 400,
+      scan_project_on_startup = true,
+      max_file_bytes = 1000000,
+      exclude = {},               -- extra ignore globs, editor-only
+      timeout_ms = 60000,
+      diagnostics = {
+        enabled = true,
+        severity = {
+          high   = vim.diagnostic.severity.WARN,
+          medium = vim.diagnostic.severity.INFO,
+          low    = vim.diagnostic.severity.HINT,
+        },
+      },
+      grouping = 'file',          -- severity | file | rule
+    }
+<
+                                                         *greenlint-on-type*
+`run = 'on_type'` scans the buffer as you go, debounced. The CLI reads files
+rather than buffers, so the buffer is written to a temp file first -- keeping
+its basename, because greenlint picks a rule set by extension and recognises a
+test file by its name. An answer that arrives after a newer edit is discarded
+rather than shown.
+
+`.greenlint.toml` in the project root is picked up automatically and passed as
+`--config`, as is `.greenlint-baseline.json` as `--baseline`. Prefer those for
+anything CI should honour too; `exclude` here is for the editor only.
+
+==============================================================================
+5. COMMANDS                                                *greenlint-commands*
+
+                                                              *:GreenlintScan*
+:GreenlintScan            Scan the current file. An unsaved buffer is scanned
+                          as it stands.
+
+                                                           *:GreenlintScanAll*
+:GreenlintScanAll         Scan the whole project.
+
+                                                            *:GreenlintCancel*
+:GreenlintCancel          Stop the running scan. Both the greenlint processes
+                          in flight and a debounced scan that has not started
+                          yet, so nothing starts up again a moment later.
+
+                                                            *:GreenlintReport*
+:GreenlintReport          The report, in a float, grouped by `grouping`.
+
+                                                              *:GreenlintList*
+:GreenlintList            Every finding, in the quickfix list.
+
+                                                            *:GreenlintFilter*
+:GreenlintFilter          Findings at one severity, in the quickfix list.
+
+                                                           *:GreenlintGroupBy*
+:GreenlintGroupBy         Group the report by file, severity or rule.
+
+                                                             *:GreenlintHover*
+:GreenlintHover           Explain the finding under the cursor: what to do
+                          instead, and what it roughly costs.
+
+                                                    *:GreenlintBaselineWrite*
+:GreenlintBaselineWrite   Accept every current finding, so an existing codebase
+                          starts green. Asks first: it writes a file into the
+                          repository and quietens real findings.
+
+                                                    *:GreenlintBaselineClear*
+:GreenlintBaselineClear   Delete the baseline; every finding it was accepting
+                          is shown again. Asks first: the file is the record of
+                          what a team decided to live with, and a scan brings
+                          the findings back but not that list.
+
+                                                               *:GreenlintLog*
+:GreenlintLog             What was run, and what came back.
+
+==============================================================================
+6. API                                                          *greenlint-api*
+
+>lua
+    setup(opts)
+    scan_file(path, opts)
+    scan_buffer(bufnr, opts)
+    scan_project(opts)      -- what :GreenlintScanAll runs
+    cancel()                -- stop the scans in flight and the pending one
+    write_baseline()
+    clear_baseline()
+    findings()              -- everything, worst first
+    findings_for(path)
+    counts()                -- { high, medium, low }
+    statusline()            -- see |greenlint-statusline|
+    root()
+<
+==============================================================================
+7. STATUSLINE                                            *greenlint-statusline*
+
+>lua
+    require('lualine').setup({
+      sections = { lualine_x = { { require('greenlint').statusline } } },
+    })
+<
+Reads "0/2/0" -- high, medium and low counts. Empty when nothing was found,
+which is the state you want it in.
+
+==============================================================================
+8. HEALTH                                                    *greenlint-health*
+
+>vim
+    :checkhealth greenlint
+<
+Reports whether greenlint runs and how many rules it has, whether the project
+has a `.greenlint.toml` or a baseline, and -- under `on_type` -- that each scan
+writes a temp file.
+
+==============================================================================
+9. DIFFERENCES FROM THE VS CODE EXTENSION               *greenlint-differences*
+
+The VS Code extension ships a long-lived Python scan server that imports
+greenlint and calls its functions, with a stat/hash cache behind it. That is
+excellent, and it is more than a plugin needs: at 60ms a file, running the CLI
+is fast enough, and one fewer moving part is worth more than the milliseconds.
+
+Consequences, all of them stated rather than hidden:
+
+  No stat/hash cache      The server skips unchanged files without opening
+                          them. Here every scan reads what it scans. On a
+                          small repository the whole walk is ~120ms, so this
+                          shows up only on a very large tree -- scan a file
+                          rather than the project when that bites.
+
+  No streaming            The server delivers findings in batches as it walks;
+                          the CLI answers once. A project scan appears all at
+                          once instead of filling in.
+
+  `pythonPath`,           One `cmd` list replaces both.
+  `greenlintPath`
+
+  `trace`                 |:GreenlintLog| always records what ran.
+
+  `restartServer`         There is no server to restart.
+
+  `respectEditorExcludes` Neovim has no `files.exclude` / `search.exclude` to
+                          translate. Use `exclude`, or `.greenlint.toml` for
+                          anything CI should skip too.
+
+Different:
+
+  Findings pane           The quickfix list (|:GreenlintList|,
+                          |:GreenlintFilter|) and a float
+                          (|:GreenlintReport|), rather than a tree view.
+
+  Hover                   |:GreenlintHover| on request, so it never competes
+                          with your LSP.
+
+vim:tw=78:ts=8:noet:ft=help:norl:
