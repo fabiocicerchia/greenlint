@@ -1,5 +1,23 @@
 # Changelog
 
+## [0.8.0](https://github.com/fabiocicerchia/greenlint/compare/v0.7.0...v0.8.0) (2026-08-25)
+
+
+### Features
+
+* **docs:** build the docs site in Actions and drop Read the Docs ([#63](https://github.com/fabiocicerchia/greenlint/issues/63)) ([5457cd0](https://github.com/fabiocicerchia/greenlint/commit/5457cd01346a20d2908136336161d8681752883f))
+* **nvim:** greenlint.nvim, a Neovim port of the editor integration ([#55](https://github.com/fabiocicerchia/greenlint/issues/55)) ([1e0b513](https://github.com/fabiocicerchia/greenlint/commit/1e0b51368598f9cf77c3932b24172972bebc2321))
+
+
+### Bug Fixes
+
+* **ci:** compute the next release PR after the draft is published ([#61](https://github.com/fabiocicerchia/greenlint/issues/61)) ([d90f018](https://github.com/fabiocicerchia/greenlint/commit/d90f0188f107b69b8028ab319ce98cff8d244e25))
+
+
+### Performance Improvements
+
+* cut what a scan and an editor repaint cost ([#64](https://github.com/fabiocicerchia/greenlint/issues/64)) ([a3ec48a](https://github.com/fabiocicerchia/greenlint/commit/a3ec48ad9b574cc8f09b67b2ccb461c695f80196))
+
 ## [0.7.0](https://github.com/fabiocicerchia/greenlint/compare/v0.6.0...v0.7.0) (2026-08-24)
 
 
