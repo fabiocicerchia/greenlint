@@ -28,7 +28,7 @@ jobs:
 
       # Catch common typos in code and docs.
       - name: typos
-        uses: crate-ci/typos@5e38bf262baaf477ca9f241b3a7cd3d277fd7df8  # master
+        uses: crate-ci/typos@1a51d4b5a03bb97576af186c813af67e9137ba7c  # master
 
       # pre-commit runs the hooks in .pre-commit-config.yaml (incl. ruff).
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97  # v7.0.0
