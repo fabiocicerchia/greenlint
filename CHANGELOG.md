@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.8.2](https://github.com/fabiocicerchia/greenlint/compare/v0.8.1...v0.8.2) (2026-08-28)
+
+
+### Bug Fixes
+
+* **GL007:** infer numeric names from arithmetic, not just initialisers ([#76](https://github.com/fabiocicerchia/greenlint/issues/76)) ([4b1340b](https://github.com/fabiocicerchia/greenlint/commit/4b1340ba15c3ec55678044a83adcab951d00931a))
+* **vscode:** make Collapse All actually collapse the findings tree ([#77](https://github.com/fabiocicerchia/greenlint/issues/77)) ([6a221e9](https://github.com/fabiocicerchia/greenlint/commit/6a221e9e498e92c118c30aae8bd0802312b91d02))
+
 ## [0.8.1](https://github.com/fabiocicerchia/greenlint/compare/v0.8.0...v0.8.1) (2026-08-28)
 
 
