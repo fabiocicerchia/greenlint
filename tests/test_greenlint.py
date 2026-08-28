@@ -803,6 +803,49 @@ def test_full_history_clone_in_a_comment_not_flagged(tmp_path):
     assert "GL004" not in rule_ids(scan([str(tmp_path)]))
 
 
+def test_full_history_clone_not_flagged_for_docs_date_plugins(tmp_path):
+    """A "last updated" date per page is read from that file's own commit
+    history. Shallow-cloning does not make the docs build cheaper — it makes
+    every page claim it changed today.
+    """
+    write(
+        tmp_path,
+        "docs.yml",
+        "jobs:\n  build:\n    steps:\n      - uses: actions/checkout@v5\n        with:\n"
+        "          fetch-depth: 0\n"
+        "      - run: pip install mkdocs-git-revision-date-localized-plugin\n"
+        "      - run: mkdocs build --strict\n",
+    )
+    assert "GL004" not in rule_ids(scan([str(tmp_path)]))
+
+
+def test_full_history_clone_not_flagged_for_super_linter(tmp_path):
+    """With VALIDATE_ALL_CODEBASE off, super-linter lints the diff against the
+    default branch — which it cannot work out from a shallow clone.
+    """
+    write(
+        tmp_path,
+        "linter.yml",
+        "jobs:\n  lint:\n    steps:\n      - uses: actions/checkout@v5\n        with:\n"
+        "          fetch-depth: 0\n"
+        "      - uses: docker://ghcr.io/super-linter/super-linter@sha256:abc\n",
+    )
+    assert "GL004" not in rule_ids(scan([str(tmp_path)]))
+
+
+def test_full_history_clone_still_flagged_for_a_plain_build(tmp_path):
+    """The exemption is per job and per tool: a build job that clones all of
+    history for nothing is exactly what GL004 is for.
+    """
+    write(
+        tmp_path,
+        "ci.yml",
+        "jobs:\n  build:\n    steps:\n      - uses: actions/checkout@v5\n        with:\n"
+        "          fetch-depth: 0\n      - run: make build\n",
+    )
+    assert "GL004" in rule_ids(scan([str(tmp_path)]))
+
+
 def test_full_history_clone_not_flagged_for_release_tooling(tmp_path):
     write(
         tmp_path,

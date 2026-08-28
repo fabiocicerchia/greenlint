@@ -1647,7 +1647,16 @@ NEEDS_FULL_HISTORY = re.compile(
     # goreleaser builds its changelog from the tag history.
     r"|goreleaser"
     # Reviewers that diff a PR against its merge-base need both branches.
-    r"|gandalf|merge-base",
+    # super-linter belongs here too: with VALIDATE_ALL_CODEBASE off it lints
+    # the diff against the default branch, which it cannot compute from a
+    # shallow clone.
+    r"|gandalf|merge-base|super-linter"
+    # Docs builds that stamp a "last updated" date per page read each file's
+    # own commit history — mkdocs-material's git-revision-date-localized, and
+    # the git-committers/git-authors plugins alongside it. A shallow clone
+    # gives them nothing to read, so they fall back to the build date and
+    # every page claims to have changed today.
+    r"|git-revision-date|git-committers|git-authors",
     re.IGNORECASE,
 )
 
