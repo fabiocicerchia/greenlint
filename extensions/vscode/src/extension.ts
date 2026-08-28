@@ -84,6 +84,9 @@ class Controller implements vscode.Disposable {
     this.findings.grouping = context.workspaceState.get<Grouping>('grouping', 'file');
     this.tree = vscode.window.createTreeView('greenlint.findings', {
       treeDataProvider: this.findings,
+      // The view's own collapse-all button, implemented inside the tree, so it
+      // always works. gandalf and depwatch both use it.
+      showCollapseAll: true,
     });
     this.status.command = 'greenlint.findings.focus';
     this.status.name = 'greenlint';
@@ -150,7 +153,6 @@ class Controller implements vscode.Disposable {
       command('greenlint.cancelScan', () => this.server.cancelProjectScan()),
       command('greenlint.writeBaseline', () => this.writeBaseline()),
       command('greenlint.expandAll', () => this.setExpanded(true)),
-      command('greenlint.collapseAll', () => this.setExpanded(false)),
       command('greenlint.showOutput', () => this.log.show(true)),
       command('greenlint.restartServer', async () => {
         await this.server.restart();
@@ -629,9 +631,8 @@ class Controller implements vscode.Disposable {
   }
 
   private setExpanded(expanded: boolean): void {
-    this.findings.expanded = expanded;
+    this.findings.setExpanded(expanded);
     void vscode.commands.executeCommand('setContext', 'greenlint.expanded', expanded);
-    this.repaint();
   }
 
   private setScope(scope: Scope): void {

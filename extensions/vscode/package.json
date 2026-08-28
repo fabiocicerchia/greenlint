@@ -186,12 +186,6 @@
         "icon": "$(expand-all)"
       },
       {
-        "command": "greenlint.collapseAll",
-        "title": "Collapse All Findings",
-        "category": "greenlint",
-        "icon": "$(collapse-all)"
-      },
-      {
         "command": "greenlint.cancelScan",
         "title": "Cancel Running Scan",
         "category": "greenlint",
@@ -225,7 +219,7 @@
     "viewsWelcome": [
       {
         "view": "greenlint.findings",
-        "contents": "No findings yet.\n[Scan Workspace](command:greenlint.scanProject)\nOr open a file and start typing — greenlint scans the buffer as you go.",
+        "contents": "No findings yet.\n[Scan Workspace](command:greenlint.scanProject)\nOr open a file and start typing \u2014 greenlint scans the buffer as you go.",
         "when": "!greenlint.hasFindings"
       }
     ],
@@ -263,12 +257,7 @@
         },
         {
           "command": "greenlint.expandAll",
-          "when": "view == greenlint.findings && !greenlint.expanded",
-          "group": "navigation@9"
-        },
-        {
-          "command": "greenlint.collapseAll",
-          "when": "view == greenlint.findings && greenlint.expanded",
+          "when": "view == greenlint.findings",
           "group": "navigation@9"
         }
       ],

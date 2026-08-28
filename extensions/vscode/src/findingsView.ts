@@ -16,6 +16,8 @@ const SEVERITY_THEME: Record<Severity, { icon: string; colour: string }> = {
 };
 
 interface Group {
+  /** The raw grouping key — unique, unlike the displayed label. */
+  key: string;
   label: string;
   description: string;
   icon: vscode.ThemeIcon;
@@ -40,16 +42,41 @@ export class FindingsProvider implements vscode.TreeDataProvider<Node> {
 
   scope: Scope = 'project';
   grouping: Grouping = 'file';
-  /** Whether groups start open. VS Code's own collapse-all works on the view's
-   * state, which a refresh discards — declaring it here is what survives the
-   * repaint a streaming scan causes every half second. */
+  /** Whether groups start open. */
   expanded = true;
+  /**
+   * Bumped whenever expand/collapse is asked for.
+   *
+   * It goes into each group's TreeItem id, and that is what makes the request
+   * take effect: VS Code reads `collapsibleState` only the first time it sees
+   * an element, and from then on keeps its own expansion state against that
+   * id. Repainting the same ids is therefore ignored, so setting `expanded`
+   * and firing a refresh looked like it did nothing. A new id is a new
+   * element, so the state is read afresh.
+   *
+   * Only expand/collapse bumps it. An ordinary repaint — a streaming scan
+   * fires one every half second — keeps the ids, so whatever the user has
+   * opened by hand stays open.
+   */
+  private generation = 0;
   private currentFile?: string;
 
   constructor(private readonly store: FindingStore) {}
 
   refresh(): void {
     this.emitter.fire(undefined);
+  }
+
+  /** Expand or collapse every group. */
+  setExpanded(expanded: boolean): void {
+    this.expanded = expanded;
+    this.generation += 1;
+    this.refresh();
+  }
+
+  /** The id a group renders with — exposed so a test can prove it changes. */
+  idFor(key: string): string {
+    return `${this.generation}:${this.scope}:${this.grouping}:${key}`;
   }
 
   setCurrentFile(fsPath: string | undefined): void {
@@ -88,6 +115,7 @@ export class FindingsProvider implements vscode.TreeDataProvider<Node> {
         .map((severity) => ({ severity, items: findings.filter((f) => f.severity === severity) }))
         .filter(({ items }) => items.length > 0)
         .map(({ severity, items }) => ({
+          key: severity,
           label: severity,
           description: `${items.length}`,
           icon: severityIcon(severity),
@@ -106,6 +134,7 @@ export class FindingsProvider implements vscode.TreeDataProvider<Node> {
       }
     }
     return [...groups.entries()].map(([key, items]) => ({
+      key,
       label: byFile ? path.basename(key) : `${key} — ${items[0].message}`,
       description: byFile ? `${path.dirname(workspaceRelative(key))} · ${items.length}` : `${items.length}`,
       icon: byFile ? vscode.ThemeIcon.File : severityIcon(items[0].severity),
@@ -122,6 +151,9 @@ export class FindingsProvider implements vscode.TreeDataProvider<Node> {
           ? vscode.TreeItemCollapsibleState.Expanded
           : vscode.TreeItemCollapsibleState.Collapsed,
       );
+      // Keyed on the group key, not the label: grouping by file shows
+      // basenames, and two directories can hold the same one.
+      item.id = this.idFor(node.key);
       item.description = node.description;
       item.iconPath = node.icon;
       item.resourceUri = node.resource;
