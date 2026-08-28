@@ -1344,6 +1344,43 @@ SCALAR_CALLS = frozenset(
 # Operators that only numbers support, so an expression using one is numeric.
 SCALAR_OPS = (ast.Div, ast.FloorDiv, ast.Sub, ast.Mod, ast.Pow)
 
+# Operators no sequence defines, so a name appearing as an operand of one is
+# certainly a number. `+` and `*` are shared with str/bytes/tuple/list, and `%`
+# is str formatting, so none of those three prove anything and none are here.
+NUMERIC_ONLY_OPS = (ast.Sub, ast.Div, ast.FloorDiv, ast.Pow, ast.MatMult)
+
+
+def _names_used_as_numbers(nodes):
+    """Names that arithmetic elsewhere in this scope proves are numeric.
+
+    `_names_bound_to_lists` can only classify a name it watched being
+    initialised to a literal, and a counter seeded from something opaque — a
+    parameter, a call, another name — tells it nothing. `y = top` then
+    `y += row_height(r) + gap` inside a loop therefore read as a sequence
+    rebuild, which is how this rule fired on the layout arithmetic of an SVG
+    renderer.
+
+    A scope that walks a coordinate almost always does arithmetic on it that
+    only numbers support, and one `y - gap` or `-y` settles the question. This
+    infers nothing the operators do not already guarantee: `s - 1` on the str
+    that GL007 exists to catch is a TypeError, so no genuine rebuild is hidden.
+    """
+    numeric = set()
+
+    def note(node):
+        if isinstance(node, ast.Name):
+            numeric.add(node.id)
+
+    for node in nodes:
+        if isinstance(node, ast.BinOp) and isinstance(node.op, NUMERIC_ONLY_OPS):
+            note(node.left)
+            note(node.right)
+        elif isinstance(node, ast.AugAssign) and isinstance(node.op, NUMERIC_ONLY_OPS):
+            note(node.target)
+        elif isinstance(node, ast.UnaryOp) and isinstance(node.op, (ast.USub, ast.UAdd)):
+            note(node.operand)
+    return numeric
+
 
 def _is_scalar_expr(node):
     """True when the expression is certainly numeric, so `x += node` is a
@@ -1436,6 +1473,7 @@ def _ast_quadratic_rebuild_findings(path, index):
         # statement already knows which loops it sits inside.
         own = list(_walk_own_loops(scope))
         list_names, scalar_names = _names_bound_to_lists(node for node, _ in own)
+        scalar_names |= _names_used_as_numbers(node for node, _ in own)
         for stmt, enclosing in own:
             if not enclosing:
                 continue
