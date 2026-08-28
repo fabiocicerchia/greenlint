@@ -1379,6 +1379,14 @@ def _names_used_as_numbers(nodes):
             note(node.target)
         elif isinstance(node, ast.UnaryOp) and isinstance(node.op, (ast.USub, ast.UAdd)):
             note(node.operand)
+        # A name *assigned* arithmetic is as numeric as one used in it, and
+        # this is the commoner shape: `day = start - (start % DAY)` then
+        # `day += DAY` in the loop. Reading only operands left the target of
+        # the seed unclassified, because it never appears beside an operator
+        # itself.
+        elif isinstance(node, (ast.Assign, ast.AnnAssign)) and _is_scalar_expr(node.value):
+            for target in node.targets if isinstance(node, ast.Assign) else [node.target]:
+                note(target)
     return numeric
 
 

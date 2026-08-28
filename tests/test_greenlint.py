@@ -706,6 +706,39 @@ def test_rebinding_from_other_names_is_not_flagged(tmp_path):
     assert "GL007" not in rule_ids(scan([str(tmp_path)]))
 
 
+def test_cursor_seeded_from_arithmetic_is_not_flagged(tmp_path):
+    # `day` never appears beside an operator itself — it is the *target* of
+    # the arithmetic that seeds it. Reading only operands left it unclassified
+    # and `day += DAY` read as a rebuild.
+    write(
+        tmp_path,
+        "a.py",
+        "def days(start, end):\n"
+        "    out = []\n"
+        "    day = start - (start % DAY)\n"
+        "    while day <= end:\n"
+        "        out.append(day)\n"
+        "        day += DAY\n"
+        "    return out\n",
+    )
+    assert "GL007" not in rule_ids(scan([str(tmp_path)]))
+
+
+def test_assignment_of_a_list_expression_still_detects_rebuild(tmp_path):
+    # The assignment rule must not clear a name assigned a *sequence*
+    # expression: `out = out + [i]` is the canonical rebuild.
+    write(
+        tmp_path,
+        "a.py",
+        "def f(n):\n"
+        "    out = other + [0]\n"
+        "    for i in range(n):\n"
+        "        out = out + [i]\n"
+        "    return out\n",
+    )
+    assert "GL007" in rule_ids(scan([str(tmp_path)]))
+
+
 def test_coordinate_seeded_from_a_parameter_is_not_flagged(tmp_path):
     # `y = top` says nothing about y's type, so the initialiser check cannot
     # clear it — but `y - gap` later in the scope can: no sequence defines `-`.
