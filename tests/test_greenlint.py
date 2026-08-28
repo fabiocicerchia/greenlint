@@ -706,6 +706,50 @@ def test_rebinding_from_other_names_is_not_flagged(tmp_path):
     assert "GL007" not in rule_ids(scan([str(tmp_path)]))
 
 
+def test_coordinate_seeded_from_a_parameter_is_not_flagged(tmp_path):
+    # `y = top` says nothing about y's type, so the initialiser check cannot
+    # clear it — but `y - gap` later in the scope can: no sequence defines `-`.
+    write(
+        tmp_path,
+        "a.py",
+        "def render(rows, top, gap):\n"
+        "    y = top\n"
+        "    for row in rows:\n"
+        "        y += height(row) + gap\n"
+        "    return y - gap\n",
+    )
+    assert "GL007" not in rule_ids(scan([str(tmp_path)]))
+
+
+def test_string_accumulator_is_still_flagged_when_the_scope_does_arithmetic(tmp_path):
+    # The numeric evidence has to be about *this* name. `n - 1` clears `n`
+    # and must leave the genuine rebuild of `s` alone.
+    write(
+        tmp_path,
+        "a.py",
+        "def f(words, n):\n    s = ''\n    for w in words:\n        s += w\n    return s, n - 1\n",
+    )
+    assert "GL007" in rule_ids(scan([str(tmp_path)]))
+
+
+def test_numeric_evidence_does_not_leak_across_scopes(tmp_path):
+    # Same reason the initialiser sets are per-scope: `total - 1` in one
+    # function must not clear `total` in the next.
+    write(
+        tmp_path,
+        "a.py",
+        "def a(total):\n"
+        "    return total - 1\n"
+        "\n"
+        "def b(chunks):\n"
+        "    total = b''\n"
+        "    for c in chunks:\n"
+        "        total += c\n"
+        "    return total\n",
+    )
+    assert "GL007" in rule_ids(scan([str(tmp_path)]))
+
+
 def test_helm_template_not_flagged_for_missing_resources(tmp_path):
     write(
         tmp_path,
