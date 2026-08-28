@@ -74,6 +74,12 @@ a new rule has to show.
 - **Triggers on:** `fetch-depth: 0` (an unshallow clone) in a CI workflow.
 - **Fix:** unshallow clones download and store far more history than most
   jobs need; use a shallow fetch-depth unless full history is required.
+- **Not flagged** when the same job runs something that reads commit history
+  and would be wrong without it: secret scanners (`gitleaks`, `trufflehog`),
+  release tooling (`release-please`, `semantic-release`, `goreleaser`,
+  `git-cliff`), PR reviewers that need a merge-base, and docs builds using
+  `git-revision-date-localized` / `git-committers` / `git-authors`, which read
+  each page's own history to stamp a "last updated" date.
 
 ## GL005 — SELECT * query
 
