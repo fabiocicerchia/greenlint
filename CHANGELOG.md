@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.8.1](https://github.com/fabiocicerchia/greenlint/compare/v0.8.0...v0.8.1) (2026-08-28)
+
+
+### Bug Fixes
+
+* **GL004:** exempt docs builds and super-linter, which genuinely need history ([#74](https://github.com/fabiocicerchia/greenlint/issues/74)) ([4b6e428](https://github.com/fabiocicerchia/greenlint/commit/4b6e428f337915867961af44bea45f9846e3568e))
+
 ## [0.8.0](https://github.com/fabiocicerchia/greenlint/compare/v0.7.0...v0.8.0) (2026-08-25)
 
 
