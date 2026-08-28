@@ -1,0 +1,51 @@
+#
+# CodeQL lives in the language overlay, not in the shared security.yml: the
+# analysis is language-specific, and the shared file cannot know what the repo
+# is written in.
+#
+# security.yml already analyses this repo's Python. It cannot also cover the
+# VS Code extension under extensions/vscode/, because editing the shared file
+# to add a language is drift that the next sync overwrites — so the second
+# language lives here, which is what the overlay is for.
+name: codeql
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+  schedule:
+    - cron: "0 6 * * 1" # weekly, catches newly published queries
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  codeql:
+    name: codeql
+    # GitHub Advanced Security is required for this on private repos; skip instead of failing red.
+    if: ${{ !github.event.repository.private }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write # upload SARIF to the Security tab
+    strategy:
+      fail-fast: false
+      matrix:
+        language: [javascript-typescript]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          # Nothing here pushes; don't leave the token in .git/config.
+          persist-credentials: false
+      - uses: github/codeql-action/init@ff2f1c621b7f889edc0d3c761ac2e6a3f8cdb0dd  # v4.37.7
+        with:
+          languages: ${{ matrix.language }}
+      - uses: github/codeql-action/analyze@ff2f1c621b7f889edc0d3c761ac2e6a3f8cdb0dd  # v4.37.7
+        with:
+          # Distinct from the python analysis security.yml uploads, so the two
+          # sets of results do not overwrite one another.
+          category: "/language:${{ matrix.language }}"
