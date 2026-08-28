@@ -64,3 +64,48 @@ test('empty severity groups do not appear', () => {
   view.grouping = 'severity';
   assert.deepEqual(labels(view.getChildren()), ['medium']);
 });
+
+// --- expand and collapse -----------------------------------------------------
+//
+// Setting `expanded` and firing a refresh is not enough on its own: VS Code
+// reads `collapsibleState` only the first time it sees an element, then keeps
+// its own expansion state against that element's id. Repainting the same ids
+// is ignored, which is why Collapse All did nothing. The id carries a
+// generation so a collapse presents new elements.
+
+test('collapsing gives the groups new ids, so VS Code re-reads the state', () => {
+  const view = provider([finding('/repo/a.py'), finding('/repo/b.py')]);
+  const before = view.getChildren();
+  const idBefore = view.getTreeItem(before[0]).id;
+  assert.ok(idBefore, 'groups need an id for the expansion state to key on');
+
+  view.setExpanded(false);
+  const item = view.getTreeItem(view.getChildren()[0]);
+  assert.notEqual(item.id, idBefore);
+  assert.equal(item.collapsibleState, 1, 'Collapsed');
+
+  view.setExpanded(true);
+  assert.equal(view.getTreeItem(view.getChildren()[0]).collapsibleState, 2, 'Expanded');
+});
+
+test('an ordinary repaint keeps the ids, so hand-opened groups stay open', () => {
+  // A streaming scan repaints every half second; if that changed the ids it
+  // would slam every group shut while the user was reading one.
+  const view = provider([finding('/repo/a.py')]);
+  const before = view.getTreeItem(view.getChildren()[0]).id;
+  view.refresh();
+  assert.equal(view.getTreeItem(view.getChildren()[0]).id, before);
+});
+
+test('group ids are unique when two directories share a basename', () => {
+  const view = provider([finding('/repo/a/util.py'), finding('/repo/b/util.py')]);
+  const ids = view.getChildren().map((g) => view.getTreeItem(g).id);
+  assert.equal(new Set(ids).size, 2, 'two groups collided on one id');
+});
+
+test('the id distinguishes the grouping, so switching regroups cleanly', () => {
+  const view = provider([finding('/repo/a.py', { severity: 'high' })]);
+  const byFile = view.getTreeItem(view.getChildren()[0]).id;
+  view.grouping = 'severity';
+  assert.notEqual(view.getTreeItem(view.getChildren()[0]).id, byFile);
+});
