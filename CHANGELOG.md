@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.8.3](https://github.com/fabiocicerchia/greenlint/compare/v0.8.2...v0.8.3) (2026-08-29)
+
+
+### Bug Fixes
+
+* unblock quality and clear the Scorecard pinned-dependencies finding ([#79](https://github.com/fabiocicerchia/greenlint/issues/79)) ([d846c2b](https://github.com/fabiocicerchia/greenlint/commit/d846c2b70b88d1633c638eb9c3168813f378e930))
+
 ## [0.8.2](https://github.com/fabiocicerchia/greenlint/compare/v0.8.1...v0.8.2) (2026-08-28)
 
 
