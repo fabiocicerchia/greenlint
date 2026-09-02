@@ -1239,6 +1239,16 @@ def _nearest_loop(root, target):
 # ------------------------------------------------------ python AST rules ---
 
 
+def _calls_sleep(node):
+    """True when `node` is a call to something named `sleep` — `time.sleep(x)`,
+    `asyncio.sleep(x)` or a bare `sleep(x)` pulled in by `from time import`.
+    """
+    return isinstance(node, ast.Call) and (
+        (isinstance(node.func, ast.Attribute) and node.func.attr == "sleep")
+        or (isinstance(node.func, ast.Name) and node.func.id == "sleep")
+    )
+
+
 def _ast_busy_loop_findings(path, index):
     """AST-based replacement for GL001 on Python: the regex version flags
     `while True:` unless "sleep" appears *anywhere* in the file, which both
@@ -1250,15 +1260,7 @@ def _ast_busy_loop_findings(path, index):
     for node, _ in index.whiles:
         if not (isinstance(node.test, ast.Constant) and node.test.value is True):
             continue
-        sleeps = any(
-            isinstance(n, ast.Call)
-            and (
-                (isinstance(n.func, ast.Attribute) and n.func.attr == "sleep")
-                or (isinstance(n.func, ast.Name) and n.func.id == "sleep")
-            )
-            for body_node in node.body
-            for n in ast.walk(body_node)
-        )
+        sleeps = any(_calls_sleep(n) for body_node in node.body for n in ast.walk(body_node))
         if sleeps or _loop_can_exit(node):
             continue
         yield _finding(rule, path, node.lineno)
@@ -1463,6 +1465,50 @@ def _names_bound_to_lists(nodes):
     return lists, scalars
 
 
+def _accumulating_add(stmt):
+    """(target, value) when `stmt` accumulates onto a plain name with `+`/`+=`,
+    else (None, None).
+
+    Only `x += <expr>` and `x = x + <expr>`: `x = y + z` rebinds rather than
+    accumulates, and a non-name target (`d[k] += …`) is not a name to track.
+    """
+    if isinstance(stmt, ast.AugAssign) and isinstance(stmt.op, ast.Add):
+        target, value = stmt.target, stmt.value
+    elif (
+        isinstance(stmt, ast.Assign)
+        and len(stmt.targets) == 1
+        and isinstance(stmt.value, ast.BinOp)
+        and isinstance(stmt.value.op, ast.Add)
+    ):
+        target, value = stmt.targets[0], stmt.value
+        left = stmt.value.left
+        if not (isinstance(left, ast.Name) and left.id == getattr(target, "id", None)):
+            return None, None
+    else:
+        return None, None
+    return (target, value) if isinstance(target, ast.Name) else (None, None)
+
+
+def _is_sequence_rebuild(stmt, list_names, scalar_names):
+    """True when `stmt` copies the whole sequence built so far — the O(n^2) shape."""
+    target, value = _accumulating_add(stmt)
+    if target is None:
+        return False
+    # A numeric counter (`total += 1`, `seen += len(chunk)`, `kwh +=
+    # watts * hours / 1000`) accumulates in O(1) — not a rebuild.
+    if _is_scalar_expr(value) or target.id in scalar_names:
+        return False
+    # `xs += ...` is `list.extend` when xs is a list: in place, O(k), no copy.
+    # Either the list literal on the right proves it (`+=` a list is a
+    # TypeError for str/bytes/tuple), or the name was seen being initialised to
+    # one. Only the rebinding form (`xs = xs + [a]`) copies everything
+    # accumulated so far.
+    return not (
+        isinstance(stmt, ast.AugAssign)
+        and (isinstance(value, (ast.List, ast.ListComp)) or target.id in list_names)
+    )
+
+
 def _ast_quadratic_rebuild_findings(path, index):
     """GL007: accumulating with `+`/`+=` inside a loop, which copies the whole
     sequence built so far on every iteration — O(n^2) allocation where
@@ -1492,38 +1538,9 @@ def _ast_quadratic_rebuild_findings(path, index):
                 continue
             if not isinstance(stmt, (ast.AugAssign, ast.Assign)) or stmt.lineno in seen:
                 continue
-            target = value = None
-            if isinstance(stmt, ast.AugAssign) and isinstance(stmt.op, ast.Add):
-                target, value = stmt.target, stmt.value
-            elif (
-                isinstance(stmt, ast.Assign)
-                and len(stmt.targets) == 1
-                and isinstance(stmt.value, ast.BinOp)
-                and isinstance(stmt.value.op, ast.Add)
-            ):
-                target, value = stmt.targets[0], stmt.value
-            if not isinstance(target, ast.Name):
-                continue
-            # `x = x + ...` only — `x = y + z` rebinds, not accumulates.
-            if isinstance(stmt, ast.Assign):
-                left = stmt.value.left
-                if not (isinstance(left, ast.Name) and left.id == target.id):
-                    continue
-            # A numeric counter (`total += 1`, `seen += len(chunk)`, `kwh +=
-            # watts * hours / 1000`) accumulates in O(1) — not a rebuild.
-            if _is_scalar_expr(value) or target.id in scalar_names:
-                continue
-            # `xs += ...` is `list.extend` when xs is a list: in place,
-            # O(k), no copy. Either the list literal on the right proves it
-            # (`+=` a list is a TypeError for str/bytes/tuple), or the name
-            # was seen being initialised to one. Only the rebinding form
-            # (`xs = xs + [a]`) copies everything accumulated so far.
-            if isinstance(stmt, ast.AugAssign) and (
-                isinstance(value, (ast.List, ast.ListComp)) or target.id in list_names
-            ):
-                continue
-            seen.add(stmt.lineno)
-            yield _finding(rule, path, stmt.lineno)
+            if _is_sequence_rebuild(stmt, list_names, scalar_names):
+                seen.add(stmt.lineno)
+                yield _finding(rule, path, stmt.lineno)
 
 
 # Conversions whose failure is routinely used as a type test, where a
@@ -1871,6 +1888,73 @@ def scannable(path):
     )
 
 
+# The AST rules, in the order their findings come out, wired to the ids
+# `AST_RULE_IDS` names. Each takes the shared per-file index, never its own walk.
+AST_FINDERS = (
+    ("GL001", _ast_busy_loop_findings),
+    ("GL007", _ast_quadratic_rebuild_findings),
+    ("GL018", _ast_nested_loop_findings),
+    ("GL023", _ast_bubble_sort_findings),
+    ("GL030", _ast_dict_iterator_findings),
+    ("GL031", _ast_try_in_loop_findings),
+)
+
+# The rules that need a whole resource block rather than one match, keyed the
+# way `PATTERN_RULES_BY_LANG` is: the suffix, or `Dockerfile` by name. Tags that
+# mean the same format share one tuple, the way the pattern index aliases them.
+BLOCK_FINDERS = {
+    ".tf": (
+        ("GL013", _tf_s3_lifecycle_findings),
+        ("GL024", _tf_asg_static_size_findings),
+        ("GL026", _tf_log_retention_findings),
+    ),
+    ".yml": (
+        ("GL014", _k8s_resources_findings),
+        ("GL033", _k8s_hpa_static_findings),
+        ("GL034", _compose_resources_findings),
+    ),
+    "Dockerfile": (("GL029", _dockerfile_layer_bloat_findings),),
+}
+BLOCK_FINDERS[".tofu"] = BLOCK_FINDERS[".tf"]
+BLOCK_FINDERS[".yaml"] = BLOCK_FINDERS[".yml"]
+BLOCK_FINDERS[".dockerfile"] = BLOCK_FINDERS["Dockerfile"]
+
+
+def _lang_key(path):
+    """The tag the rule indexes are keyed by: the suffix, or `Dockerfile` by name."""
+    return "Dockerfile" if path.name == "Dockerfile" else path.suffix
+
+
+def _context_findings(path, text, code, index, disabled):
+    """Findings from the checks that read whole-file or whole-block context
+    instead of matching one regex — the AST rules, and the per-format ones that
+    look for the *absence* of a key.
+    """
+    if index is not None and not AST_RULE_IDS <= disabled:
+        for rule_id, finder in AST_FINDERS:
+            if rule_id not in disabled:
+                yield from finder(path, index)
+    # GL004 takes `text`, not `code`: it reads comments deliberately, to tell a
+    # real `fetch-depth: 0` from one being discussed in a comment above it.
+    if path.suffix in (".yml", ".yaml") and "GL004" not in disabled:
+        yield from _fetch_depth_findings(path, text)
+    for rule_id, finder in BLOCK_FINDERS.get(_lang_key(path), ()):
+        if rule_id not in disabled:
+            yield from finder(path, code)
+
+
+def _pattern_findings(path, code, disabled):
+    """Findings from the single-regex rules tagged for this file's language,
+    looked up rather than filtered — see `_pattern_rules_by_lang`.
+    """
+    line_of = _LineIndex(code).line_of
+    for rule in PATTERN_RULES_BY_LANG.get(_lang_key(path), ()):
+        if rule["id"] in disabled:
+            continue
+        for m in rule["pattern"].finditer(code):
+            yield _finding(rule, path, line_of(m.start()))
+
+
 def scan_file(path, disabled=frozenset(), text=None):
     """Yield findings for every enabled rule that matches the file's contents.
 
@@ -1909,48 +1993,8 @@ def scan_file(path, disabled=frozenset(), text=None):
     # noise: a test's tight wait is bounded by the test run and is the point.
     if _is_test_file(path):
         disabled = disabled | {"GL001", "GL002", "GL007"}
-    if index is not None and not AST_RULE_IDS <= disabled:
-        if "GL001" not in disabled:
-            yield from _ast_busy_loop_findings(path, index)
-        if "GL007" not in disabled:
-            yield from _ast_quadratic_rebuild_findings(path, index)
-        if "GL018" not in disabled:
-            yield from _ast_nested_loop_findings(path, index)
-        if "GL023" not in disabled:
-            yield from _ast_bubble_sort_findings(path, index)
-        if "GL030" not in disabled:
-            yield from _ast_dict_iterator_findings(path, index)
-        if "GL031" not in disabled:
-            yield from _ast_try_in_loop_findings(path, index)
-    if path.suffix in (".tf", ".tofu"):
-        if "GL013" not in disabled:
-            yield from _tf_s3_lifecycle_findings(path, code)
-        if "GL024" not in disabled:
-            yield from _tf_asg_static_size_findings(path, code)
-        if "GL026" not in disabled:
-            yield from _tf_log_retention_findings(path, code)
-    if path.suffix in (".yml", ".yaml"):
-        if "GL004" not in disabled:
-            yield from _fetch_depth_findings(path, text)
-        if "GL014" not in disabled:
-            yield from _k8s_resources_findings(path, code)
-        if "GL033" not in disabled:
-            yield from _k8s_hpa_static_findings(path, code)
-        if "GL034" not in disabled:
-            yield from _compose_resources_findings(path, code)
-    if (path.suffix == ".dockerfile" or path.name == "Dockerfile") and "GL029" not in disabled:
-        yield from _dockerfile_layer_bloat_findings(path, code)
-    # Only the rules tagged for this file's language, looked up rather than
-    # filtered — see `_pattern_rules_by_lang`.
-    rules = PATTERN_RULES_BY_LANG.get(
-        "Dockerfile" if path.name == "Dockerfile" else path.suffix, ()
-    )
-    line_of = _LineIndex(code).line_of
-    for rule in rules:
-        if rule["id"] in disabled:
-            continue
-        for m in rule["pattern"].finditer(code):
-            yield _finding(rule, path, line_of(m.start()))
+    yield from _context_findings(path, text, code, index, disabled)
+    yield from _pattern_findings(path, code, disabled)
 
 
 # -------------------------------------------------------- file discovery ---
@@ -2128,8 +2172,8 @@ def scan(paths, config=None):
 # ------------------------------------------------------------------- cli ---
 
 
-def main(argv=None):
-    """CLI entry point; returns the process exit code."""
+def _build_parser():
+    """The command-line surface: every flag greenlint accepts, and its help."""
     p = argparse.ArgumentParser(
         prog="greenlint",
         description=__doc__,
@@ -2178,13 +2222,55 @@ def main(argv=None):
         metavar="FILE",
         help="record every current finding as accepted and exit",
     )
-    args = p.parse_args(argv)
+    return p
+
+
+def _print_rules():
+    """`--list-rules`: every rule, with the language tags it targets."""
+    for r in RULES:
+        print(f"{r['id']} [{r['severity']:6s}] ({', '.join(sorted(r['langs']))}): {r['message']}")
+
+
+def _print_github(findings):
+    """`--format github`: one workflow annotation per finding."""
+    # https://docs.github.com/actions/using-workflows/workflow-commands-for-github-actions#setting-a-notice-message
+    level = {"high": "error", "medium": "warning", "low": "notice"}
+    for f in findings:
+        print(
+            f"::{level[f['severity']]} file={f['file']},line={f['line']},"
+            f"title=greenlint {f['rule']}::{f['message']} — {f['suggestion']}"
+        )
+
+
+def _print_text(findings, accepted, baseline_path):
+    """`--format text`: the human report, and the count a reader looks for."""
+    for f in findings:
+        print(f"{f['file']}:{f['line']}: [{f['rule']}/{f['severity']}] {f['message']}")
+        print(f"    ↳ {f['suggestion']}")
+        if f["co2e_estimate"]:
+            print(f"    ~ {f['co2e_estimate']}")
+    accepted_note = f" ({accepted} accepted by {baseline_path})" if accepted else ""
+    print(f"\ngreenlint: {len(findings)} finding(s){accepted_note}")
+
+
+def _resolve_baseline(explicit):
+    """The baseline file to honour, from `--baseline` or the default name.
+
+    An explicit `--baseline` must exist; the default one is used when it happens
+    to be there. A typo in a flag should be an error, not a silent no-op.
+    """
+    path = Path(explicit) if explicit else Path(BASELINE_FILENAME)
+    if explicit and not path.is_file():
+        raise SystemExit(f"greenlint: no such baseline: {path}")
+    return path
+
+
+def main(argv=None):
+    """CLI entry point; returns the process exit code."""
+    args = _build_parser().parse_args(argv)
 
     if args.list_rules:
-        for r in RULES:
-            print(
-                f"{r['id']} [{r['severity']:6s}] ({', '.join(sorted(r['langs']))}): {r['message']}"
-            )
+        _print_rules()
         return 0
 
     config = load_config(args.config)
@@ -2198,32 +2284,15 @@ def main(argv=None):
         print(f"greenlint: {count} finding(s) accepted in {path}")
         return 0
 
-    # An explicit --baseline must exist; the default one is used when it happens
-    # to be there. A typo in a flag should be an error, not a silent no-op.
-    baseline_path = Path(args.baseline) if args.baseline else Path(BASELINE_FILENAME)
-    if args.baseline and not baseline_path.is_file():
-        raise SystemExit(f"greenlint: no such baseline: {baseline_path}")
+    baseline_path = _resolve_baseline(args.baseline)
     before = len(findings)
     findings = apply_baseline(findings, load_baseline(baseline_path), baseline_path.parent)
-    accepted = before - len(findings)
     if args.format == "json":
         json.dump(findings, sys.stdout, indent=2)
     elif args.format == "github":
-        # https://docs.github.com/actions/using-workflows/workflow-commands-for-github-actions#setting-a-notice-message
-        level = {"high": "error", "medium": "warning", "low": "notice"}
-        for f in findings:
-            print(
-                f"::{level[f['severity']]} file={f['file']},line={f['line']},"
-                f"title=greenlint {f['rule']}::{f['message']} — {f['suggestion']}"
-            )
+        _print_github(findings)
     else:
-        for f in findings:
-            print(f"{f['file']}:{f['line']}: [{f['rule']}/{f['severity']}] {f['message']}")
-            print(f"    ↳ {f['suggestion']}")
-            if f["co2e_estimate"]:
-                print(f"    ~ {f['co2e_estimate']}")
-        accepted_note = f" ({accepted} accepted by {baseline_path})" if accepted else ""
-        print(f"\ngreenlint: {len(findings)} finding(s){accepted_note}")
+        _print_text(findings, before - len(findings), baseline_path)
     return 1 if findings and args.fail_on_findings else 0
 
 
