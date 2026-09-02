@@ -314,48 +314,56 @@ local function debounce(key, ms, fn)
   end)
 end
 
+--- Automatic, as opposed to a command: 'manual' means only when asked.
+local function scans_by_itself()
+  return cfg.enabled and cfg.run ~= 'manual'
+end
+
+local function on_write(event)
+  if scans_by_itself() then
+    M.scan_file(event.match, {})
+  end
+end
+
+--- A file coming into view: repaint what is already known about it, and scan
+--- it only when nothing is.
+local function on_open(event)
+  local path = vim.fs.normalize(event.match)
+  local known = by_file[path]
+  if known then
+    vim.schedule(function()
+      ui.render(path, known, cfg)
+    end)
+  elseif scans_by_itself() and vim.uv.fs_stat(path) then
+    M.scan_file(path, {})
+  end
+end
+
+local function on_edit(event)
+  if not (cfg.enabled and cfg.run == 'on_type') then
+    return
+  end
+  debounce(event.buf, cfg.debounce_ms, function()
+    if vim.api.nvim_buf_is_valid(event.buf) then
+      M.scan_buffer(event.buf, {})
+    end
+  end)
+end
+
+--- Which handler answers which events. Both on-type events share one entry:
+--- editing in normal mode and editing in insert mode are the same trigger, and
+--- two registrations is two places for the guard to drift.
+local TRIGGERS = {
+  { 'BufWritePost', on_write },
+  { { 'BufReadPost', 'BufEnter' }, on_open },
+  { { 'TextChanged', 'TextChangedI' }, on_edit },
+}
+
 local function attach_autocmds()
   local group = vim.api.nvim_create_augroup('greenlint', { clear = true })
-
-  vim.api.nvim_create_autocmd('BufWritePost', {
-    group = group,
-    callback = function(event)
-      if cfg.enabled and cfg.run ~= 'manual' then
-        M.scan_file(event.match, {})
-      end
-    end,
-  })
-
-  vim.api.nvim_create_autocmd({ 'BufReadPost', 'BufEnter' }, {
-    group = group,
-    callback = function(event)
-      local path = vim.fs.normalize(event.match)
-      local known = by_file[path]
-      if known then
-        vim.schedule(function()
-          ui.render(path, known, cfg)
-        end)
-      elseif cfg.enabled and cfg.run ~= 'manual' and vim.uv.fs_stat(path) then
-        M.scan_file(path, {})
-      end
-    end,
-  })
-
-  -- Both events, one registration: editing in normal mode and editing in insert
-  -- mode are the same trigger, and two copies of the guard is two places for
-  -- the debounce to drift.
-  vim.api.nvim_create_autocmd({ 'TextChanged', 'TextChangedI' }, {
-    group = group,
-    callback = function(event)
-      if cfg.enabled and cfg.run == 'on_type' then
-        debounce(event.buf, cfg.debounce_ms, function()
-          if vim.api.nvim_buf_is_valid(event.buf) then
-            M.scan_buffer(event.buf, {})
-          end
-        end)
-      end
-    end,
-  })
+  for _, trigger in ipairs(TRIGGERS) do
+    vim.api.nvim_create_autocmd(trigger[1], { group = group, callback = trigger[2] })
+  end
 end
 
 -- --- commands ----------------------------------------------------------------
