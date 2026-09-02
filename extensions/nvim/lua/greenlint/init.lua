@@ -341,19 +341,10 @@ local function attach_autocmds()
     end,
   })
 
-  vim.api.nvim_create_autocmd('TextChanged', {
-    group = group,
-    callback = function(event)
-      if cfg.enabled and cfg.run == 'on_type' then
-        debounce(event.buf, cfg.debounce_ms, function()
-          if vim.api.nvim_buf_is_valid(event.buf) then
-            M.scan_buffer(event.buf, {})
-          end
-        end)
-      end
-    end,
-  })
-  vim.api.nvim_create_autocmd('TextChangedI', {
+  -- Both events, one registration: editing in normal mode and editing in insert
+  -- mode are the same trigger, and two copies of the guard is two places for
+  -- the debounce to drift.
+  vim.api.nvim_create_autocmd({ 'TextChanged', 'TextChangedI' }, {
     group = group,
     callback = function(event)
       if cfg.enabled and cfg.run == 'on_type' then
