@@ -5,8 +5,10 @@
 -- scan on save, and even on a debounced keystroke, by running the CLI rather
 -- than keeping a server alive.
 
+local commands = require('greenlint.commands')
 local config = require('greenlint.config')
 local core = require('greenlint.core')
+local log = require('greenlint.log')
 local ui = require('greenlint.ui')
 
 local M = {}
@@ -19,19 +21,9 @@ local by_file = {}
 --- quiet rather than letting it report the kill as a failure.
 local jobs = {}
 local timers = {}
-local log_lines = {}
-local grouping = nil
 
-local function log(fmt, ...)
-  log_lines[#log_lines + 1] = string.format('[%s] ' .. fmt, os.date('%H:%M:%S'), ...)
-  if #log_lines > 500 then
-    table.remove(log_lines, 1)
-  end
-end
-
-local function notify(msg, level)
-  vim.notify('greenlint: ' .. msg, level or vim.log.levels.INFO)
-end
+local log_line = log.add
+local notify = ui.notify
 
 function M.is_setup()
   return cfg ~= nil
@@ -42,7 +34,7 @@ function M.config()
 end
 
 function M.log_text()
-  return log_lines
+  return log.lines()
 end
 
 function M.root()
@@ -72,7 +64,7 @@ local missing_reported = false
 
 local function run(argv, cb)
   local cmd = vim.list_extend(vim.list_slice(cfg.cmd, 1, #cfg.cmd), argv)
-  log('run: %s', table.concat(cmd, ' '))
+  log_line('run: %s', table.concat(cmd, ' '))
   local job = { cancelled = false }
   -- vim.system raises when the executable is not there, and a missing greenlint
   -- must not be a traceback -- it is the likeliest thing to be wrong, and
@@ -97,7 +89,7 @@ local function run(argv, cb)
     jobs[job] = true
     return handle
   end
-  log('could not run %s: %s', cmd[1], tostring(handle))
+  log_line('could not run %s: %s', cmd[1], tostring(handle))
   if not missing_reported then
     missing_reported = true
     notify(('could not run `%s` — see :checkhealth greenlint'):format(cmd[1]), vim.log.levels.ERROR)
@@ -142,7 +134,7 @@ function M.scan_file(path, opts)
 
   local stat = vim.uv.fs_stat(path)
   if stat and stat.size > cfg.max_file_bytes then
-    log('%s: %d bytes, over the cap', relative(path), stat.size)
+    log_line('%s: %d bytes, over the cap', relative(path), stat.size)
     if opts.on_done then
       opts.on_done(true)
     end
@@ -152,13 +144,13 @@ function M.scan_file(path, opts)
   run(core.scan_argv(cfg, { path }, { config = config_path(), baseline = baseline_path() }), function(out)
     local findings, err = decode(out)
     if not findings then
-      log('%s: %s', relative(path), (err or ''):gsub('%s+$', ''))
+      log_line('%s: %s', relative(path), (err or ''):gsub('%s+$', ''))
       if opts.notify then
         notify(vim.split(err or 'scan failed', '\n')[1], vim.log.levels.WARN)
       end
     else
       store(path, findings)
-      log('%s: %d finding(s)', relative(path), #findings)
+      log_line('%s: %d finding(s)', relative(path), #findings)
     end
     if opts.on_done then
       opts.on_done(findings ~= nil)
@@ -194,7 +186,7 @@ function M.scan_buffer(buf, opts)
     pcall(vim.fn.delete, dir, 'rf')
     local findings, err = decode(out)
     if not findings then
-      log('%s (buffer): %s', relative(path), (err or ''):gsub('%s+$', ''))
+      log_line('%s (buffer): %s', relative(path), (err or ''):gsub('%s+$', ''))
       if opts.on_done then
         opts.on_done(false)
       end
@@ -212,7 +204,7 @@ function M.scan_buffer(buf, opts)
       finding.file = path
     end
     store(path, findings)
-    log('%s (buffer): %d finding(s)', relative(path), #findings)
+    log_line('%s (buffer): %d finding(s)', relative(path), #findings)
     if opts.on_done then
       opts.on_done(true)
     end
@@ -229,7 +221,7 @@ function M.scan_project(opts)
   run(core.scan_argv(cfg, { root }, { config = config_path(), baseline = baseline_path() }), function(out)
     local findings, err = decode(out)
     if not findings then
-      log('project: %s', (err or ''):gsub('%s+$', ''))
+      log_line('project: %s', (err or ''):gsub('%s+$', ''))
       if opts.notify then
         notify(vim.split(err or 'scan failed', '\n')[1], vim.log.levels.WARN)
       end
@@ -257,7 +249,7 @@ function M.scan_project(opts)
     for path, list in pairs(grouped) do
       store(path, list)
     end
-    log('project: %d finding(s) in %d file(s)', #findings, vim.tbl_count(grouped))
+    log_line('project: %d finding(s) in %d file(s)', #findings, vim.tbl_count(grouped))
     if opts.on_done then
       opts.on_done(true)
     end
@@ -368,95 +360,13 @@ end
 
 -- --- commands ----------------------------------------------------------------
 
-local function ensure_scanned(cb)
-  if not vim.tbl_isempty(by_file) then
-    return cb()
-  end
-  M.scan_project({ on_done = cb })
-end
-
-function M.report()
-  ensure_scanned(function()
-    ui.float(
-      core.report_lines(M.findings(), grouping or cfg.grouping, relative),
-      { title = ' greenlint report ', filetype = 'greenlint-report' }
-    )
-  end)
-end
-
-function M.list()
-  ensure_scanned(function()
-    local findings = M.findings()
-    if #findings == 0 then
-      return notify('nothing wasteful found.')
-    end
-    ui.to_quickfix(findings, 'greenlint')
-    vim.cmd('copen')
-  end)
-end
-
-function M.filter()
-  ensure_scanned(function()
-    local counts = M.counts()
-    local items = {}
-    for _, severity in ipairs(core.SEVERITIES) do
-      if counts[severity] > 0 then
-        items[#items + 1] = severity
-      end
-    end
-    if #items == 0 then
-      return notify('nothing wasteful found.')
-    end
-    vim.ui.select(items, {
-      prompt = 'Show findings at severity',
-      format_item = function(severity)
-        return string.format('%-7s %d', severity, counts[severity])
-      end,
-    }, function(severity)
-      if not severity then
-        return
-      end
-      local rows = {}
-      for _, finding in ipairs(M.findings()) do
-        if finding.severity == severity then
-          rows[#rows + 1] = finding
-        end
-      end
-      ui.to_quickfix(rows, 'greenlint: ' .. severity)
-      vim.cmd('copen')
-    end)
-  end)
-end
-
-function M.set_grouping()
-  vim.ui.select({ 'file', 'severity', 'rule' }, {
-    prompt = 'Group findings by',
-    format_item = function(choice)
-      local blurb = {
-        file = 'one group per file',
-        severity = 'high, then medium, then low',
-        rule = 'one group per rule',
-      }
-      return string.format('%-9s %s', choice, blurb[choice])
-    end,
-  }, function(choice)
-    if choice then
-      grouping = choice
-      M.report()
-    end
-  end)
-end
-
-function M.hover()
-  local path = vim.fs.normalize(vim.api.nvim_buf_get_name(0))
-  local lnum = vim.api.nvim_win_get_cursor(0)[1]
-  for _, finding in ipairs(M.findings_for(path)) do
-    if finding.line == lnum then
-      return ui.hover(core.hover_lines(finding))
-    end
-  end
-  notify('no finding on this line.')
-end
+M.report = commands.report
+M.list = commands.list
+M.filter = commands.filter
+M.set_grouping = commands.set_grouping
+M.hover = commands.hover
+M.clear_baseline = commands.clear_baseline
+M.show_log = commands.show_log
 
 --- Accept everything currently found, so an existing codebase starts green.
 --- Confirmed first: it writes a file into the repository and quietens real
@@ -485,35 +395,6 @@ function M.write_baseline()
   end)
 end
 
---- Drop the baseline, so everything it was accepting is reported again.
----
---- Confirmed like writing one is: it deletes a file from the repository, and
---- that file can be the record of which findings a team decided to live with.
---- Going back is a scan; getting the list of accepted findings back is not.
-function M.clear_baseline()
-  local target = vim.fs.joinpath(M.root(), '.greenlint-baseline.json')
-  if not vim.uv.fs_stat(target) then
-    return notify('no baseline to clear.')
-  end
-  local choice = vim.fn.confirm(
-    ('Delete %s?\nEvery finding it was accepting is reported again.'):format(relative(target)),
-    '&Delete baseline\n&Cancel',
-    2
-  )
-  if choice ~= 1 then
-    return
-  end
-  local ok, err = os.remove(target)
-  if not ok then
-    return notify(('could not delete %s: %s'):format(relative(target), err or '?'), vim.log.levels.ERROR)
-  end
-  log('deleted %s', relative(target))
-  notify('deleted ' .. relative(target))
-  -- The findings on screen were filtered by the baseline that just went, so
-  -- they describe a world that no longer exists.
-  M.scan_project({})
-end
-
 --- Stop whatever greenlint is running.
 ---
 --- Both halves of "running": the processes in flight, and the debounced scan
@@ -538,15 +419,11 @@ function M.cancel()
     timers[key] = nil
     pending = pending + 1
   end
-  log('cancelled %d scan(s), %d pending', stopped, pending)
+  log_line('cancelled %d scan(s), %d pending', stopped, pending)
   if stopped == 0 and pending == 0 then
     return notify('nothing running.')
   end
   notify(('stopped %d scan(s).'):format(stopped + pending))
-end
-
-function M.show_log()
-  ui.float(#log_lines > 0 and log_lines or { 'nothing logged yet' }, { title = ' greenlint log ', filetype = 'log' })
 end
 
 -- --- setup -------------------------------------------------------------------

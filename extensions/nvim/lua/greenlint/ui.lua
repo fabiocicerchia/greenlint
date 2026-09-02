@@ -7,6 +7,11 @@ local M = {}
 local NS = vim.api.nvim_create_namespace('greenlint')
 M.namespace = NS
 
+--- Everything the plugin says to the user, prefixed once.
+function M.notify(message, level)
+  vim.notify('greenlint: ' .. message, level or vim.log.levels.INFO)
+end
+
 --- One finding as a diagnostic spanning the code on `text`.
 ---
 --- The squiggle starts at the first non-whitespace character, so it traces the
