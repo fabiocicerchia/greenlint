@@ -12,7 +12,7 @@ Each item fired because a measurement crossed a threshold. The numbers and the e
 | Minor | 1 |
 | Notes | 1 |
 
-### Worth attention · 2 module(s) are more than 4× the median size (136 lines); the largest is 2380 lines.
+### Worth attention · 2 module(s) are more than 4× the median size (136 lines); the largest is 2583 lines.
 
 **Why it matters.** A file this far from the median is rarely one idea. It cannot be reviewed in one sitting, it produces merge conflicts between people working on unrelated things, and it hides its internal structure from every tool that works at file granularity — including this one, which sees it as a single node.
 
@@ -22,7 +22,7 @@ Each item fired because a measurement crossed a threshold. The numbers and the e
 
 <details><summary>Evidence</summary>
 
-- `greenlint.py` — 2380 lines
+- `greenlint.py` — 2583 lines
 - `extensions/vscode/src/extension.ts` — 765 lines
 
 </details>
@@ -118,7 +118,7 @@ The section above reasons about the import graph, where an edge either exists or
 
 <details><summary>Evidence</summary>
 
-- `greenlint.py:283` — `SELECT\s+\*\s+FROM`
+- `greenlint.py:286` — `SELECT\s+\*\s+FROM`
 
 </details>
 
@@ -132,7 +132,7 @@ The section above reasons about the import graph, where an edge either exists or
 
 <details><summary>Evidence</summary>
 
-- `greenlint.py:1916` — `sha1(`
+- `greenlint.py:2110` — `sha1(`
 
 </details>
 
@@ -165,12 +165,12 @@ The section above reasons about the import graph, where an edge either exists or
 
 <details><summary>Evidence</summary>
 
-- `greenlint.py:708` — `3 levels of loop nesting`
+- `greenlint.py:783` — `3 levels of loop nesting`
 - `extensions/vscode/src/excludes.ts:22` — `4 levels of loop nesting`
 
 </details>
 
-**Minor · PERF-SELECTSTAR** — 2 occurrence(s) across 2 file(s).
+**Minor · PERF-SELECTSTAR** — 3 occurrence(s) across 2 file(s).
 
 *Why it matters.* Selecting every column transfers and deserialises data the caller does not use, prevents the database from answering from an index alone, and couples the code to column order and to columns that have not been added yet.
 
@@ -180,7 +180,8 @@ The section above reasons about the import graph, where an edge either exists or
 
 <details><summary>Evidence</summary>
 
-- `greenlint.py:968` — `SELECT * FROM`
+- `greenlint.py:1134` — `SELECT * FROM`
+- `greenlint.py:1162` — `SELECT * FROM`
 - `examples/basic/sample.py:10` — `SELECT * FROM`
 
 </details>
@@ -213,7 +214,7 @@ The section above reasons about the import graph, where an edge either exists or
 
 <details><summary>Evidence</summary>
 
-- `greenlint.py:2311` — `sorted(`
+- `greenlint.py:2514` — `sorted(`
 
 </details>
 
@@ -235,7 +236,7 @@ The section above reasons about the import graph, where an edge either exists or
 
 ### Readability
 
-**Worth attention · RDB-NESTING** — 2 of 130 Python functions (2%) nest control flow 4 levels or deeper.
+**Worth attention · RDB-NESTING** — 2 of 134 Python functions (1%) nest control flow 4 levels or deeper.
 
 *Why it matters.* Each level of nesting is a condition the reader must keep true in their head for everything inside it. Depth compounds: at four levels the reader is tracking four simultaneous invariants to understand one line. Nesting correlates with defects more strongly than length does.
 
@@ -245,8 +246,8 @@ The section above reasons about the import graph, where an edge either exists or
 
 <details><summary>Evidence</summary>
 
-- `greenlint.py:2190` — `walk_files`, depth 6
-- `greenlint.py:1169` — `index_python`, depth 5
+- `greenlint.py:2393` — `walk_files`, depth 6
+- `greenlint.py:1363` — `index_python`, depth 5
 
 </details>
 
@@ -268,7 +269,7 @@ What was read, and where every import went. Third-party means the target is expe
 
 - 19 modules across 3 components
 - 28 internal import edges, 1 component couplings
-- 5559 lines
+- 5762 lines
 - propagation cost 17% — the share of other components an average component can reach through import paths
 
 ## Component graph
@@ -277,7 +278,7 @@ What was read, and where every import went. Third-party means the target is expe
 graph LR
   examples["examples<br/><small>Python · 1 mod · 10 loc</small>"]
   extensions["extensions<br/><small>JavaScript/Python+ · 17 mod · 3169 loc</small>"]
-  greenlint["greenlint<br/><small>Python · 1 mod · 2380 loc</small>"]
+  greenlint["greenlint<br/><small>Python · 1 mod · 2583 loc</small>"]
   extensions -->|1| greenlint
 ```
 
@@ -518,7 +519,7 @@ extensions.vscode.server.scan_cache  (Python)
 |---|---|---:|---:|---:|---:|---:|
 | `examples` | Python | 1 | 10 | 0 | 0 | 0.0 |
 | `extensions` | JavaScript, Python, TypeScript | 17 | 3169 | 0 | 1 | 1.0 |
-| `greenlint` | Python | 1 | 2380 | 1 | 0 | 0.0 |
+| `greenlint` | Python | 1 | 2583 | 1 | 0 | 0.0 |
 
 Instability is fan-out / (fan-in + fan-out). A component many things depend on that itself depends widely propagates change in both directions.
 
@@ -545,7 +546,7 @@ Most-changed files in the last 12 months. This is where any map you carry in you
 
 | File | Lines touched | LOC | Language |
 |---|---:|---:|---|
-| `greenlint.py` | 3848 | 2380 | Python |
+| `greenlint.py` | 4121 | 2583 | Python |
 | `extensions/vscode/server/greenlint_server.py` | 1573 | 411 | Python |
 | `extensions/vscode/src/engine.ts` | 994 | 320 | TypeScript |
 | `extensions/vscode/src/extension.ts` | 831 | 765 | TypeScript |
@@ -648,54 +649,54 @@ _Showing 40 of 63; `--full` lists them all._
 
 </details>
 
-<details><summary><code>greenlint</code> — 46 exported</summary>
+<details><summary><code>greenlint</code> — 48 exported</summary>
 
 
-_Showing 40 of 46; `--full` lists them all._
+_Showing 40 of 48; `--full` lists them all._
 
 
 `greenlint`
 
-- class PythonIndex:1090
-- const AST_FINDERS:1973
-- const AST_RULE_IDS:696
+- class PythonIndex:1284
+- const AST_FINDERS:2167
+- const AST_RULE_IDS:771
 - const BASELINE_FILENAME:29
-- const BLOCK_FINDERS:1985
+- const BLOCK_FINDERS:2179
 - const BUSY_CORE_WATTS:93
 - const CO2E_HINTS:113
-- const COMMENT_SYNTAX:769
+- const COMMENT_SYNTAX:844
 - const CONFIG_FILENAME:28
 - const GRID_INTENSITY_G_PER_KWH:92
 - const G_CO2E_PER_GB:95
 - const KWH_PER_GB_TRANSFERRED:94
-- const NEEDS_FULL_HISTORY:1780
-- const NUMERIC_ONLY_OPS:1410
-- const PATTERN_RULES_BY_LANG:716
-- const PROBE_CALLS:1616
-- const PRUNED_DIR_NAMES:2170
+- const NEEDS_FULL_HISTORY:1974
+- const NUMERIC_ONLY_OPS:1604
+- const PATTERN_RULES_BY_LANG:791
+- const PROBE_CALLS:1810
+- const PRUNED_DIR_NAMES:2373
 - const RULES:199
-- const RULES_BY_ID:693
-- const SCALAR_CALLS:1401
-- const SCALAR_OPS:1405
-- const SCANNABLE_LANGS:719
-- const SCOPE_BOUNDARIES:1214
-- const SEVERITY_ORDER:1874
-- const TEST_FILENAME:1012
-- const _COLLECTORS:1158
+- const RULES_BY_ID:768
+- const SCALAR_CALLS:1595
+- const SCALAR_OPS:1599
+- const SCANNABLE_LANGS:794
+- const SCOPE_BOUNDARIES:1408
+- const SEVERITY_ORDER:2068
+- const TEST_FILENAME:1206
+- const _COLLECTORS:1352
 - const _HOT_PATH:111
-- const _NOT_NEWLINE:810
-- const _SLASH:768
-- def applicable:1886
-- def apply_baseline:1935
+- const _NOT_NEWLINE:885
+- const _SLASH:843
+- const _STRING_LANGS:1043
+- const _STRING_OPEN:1069
+- def applicable:2080
+- def apply_baseline:2129
 - def core_seconds_per_gram:98
-- def finding_sort_key:1877
-- def fingerprint:1893
-- def index_python:1169
-- def is_ignored:2118
-- def iter_files:2222
-- def load_baseline:1919
-- def load_config:743
-- def main:2348
+- def finding_sort_key:2071
+- def fingerprint:2087
+- def index_python:1363
+- def is_ignored:2321
+- def iter_files:2425
+- def load_baseline:2113
 
 </details>
 
