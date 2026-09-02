@@ -1003,30 +1003,33 @@ def _is_test_file(path):
     return any(part.lower() in ("test", "tests", "spec", "specs") for part in path.parts[:-1])
 
 
-def _line_indexer(text):
-    """Return offset -> 1-based line number, over an index built at most once.
+class _LineIndex:
+    """`line_of(offset)` -> 1-based line number, over an index built at most once.
 
     `text.count("\\n", 0, offset)` per match rescans the file from the top, so a
     file the same rule matches a thousand times was read a thousand times over —
     quadratic, and the files that hit it (generated SQL, bundled JS) are exactly
-    the large ones. The index is built on the first match, so the overwhelming
+    the large ones. The index is built on the first call, so the overwhelming
     majority of files, which match nothing, pay nothing for it.
     """
-    starts = None
 
-    def line_of(offset):
-        nonlocal starts
-        if starts is None:
+    __slots__ = ("_starts", "_text")
+
+    def __init__(self, text):
+        self._text = text
+        self._starts = None
+
+    def line_of(self, offset):
+        if self._starts is None:
             starts = []
-            pos = text.find("\n")
+            pos = self._text.find("\n")
             while pos != -1:
                 starts.append(pos)
-                pos = text.find("\n", pos + 1)
+                pos = self._text.find("\n", pos + 1)
+            self._starts = starts
         # bisect_left: newlines strictly before the offset, which is what
         # `count` reported for a match starting on the newline itself.
-        return bisect.bisect_left(starts, offset) + 1
-
-    return line_of
+        return bisect.bisect_left(self._starts, offset) + 1
 
 
 def _finding(rule, path, line):
@@ -1350,6 +1353,12 @@ SCALAR_OPS = (ast.Div, ast.FloorDiv, ast.Sub, ast.Mod, ast.Pow)
 NUMERIC_ONLY_OPS = (ast.Sub, ast.Div, ast.FloorDiv, ast.Pow, ast.MatMult)
 
 
+def _note_numeric(numeric, node):
+    """Record `node`'s name in `numeric`, when `node` is a plain name."""
+    if isinstance(node, ast.Name):
+        numeric.add(node.id)
+
+
 def _names_used_as_numbers(nodes):
     """Names that arithmetic elsewhere in this scope proves are numeric.
 
@@ -1366,19 +1375,14 @@ def _names_used_as_numbers(nodes):
     that GL007 exists to catch is a TypeError, so no genuine rebuild is hidden.
     """
     numeric = set()
-
-    def note(node):
-        if isinstance(node, ast.Name):
-            numeric.add(node.id)
-
     for node in nodes:
         if isinstance(node, ast.BinOp) and isinstance(node.op, NUMERIC_ONLY_OPS):
-            note(node.left)
-            note(node.right)
+            _note_numeric(numeric, node.left)
+            _note_numeric(numeric, node.right)
         elif isinstance(node, ast.AugAssign) and isinstance(node.op, NUMERIC_ONLY_OPS):
-            note(node.target)
+            _note_numeric(numeric, node.target)
         elif isinstance(node, ast.UnaryOp) and isinstance(node.op, (ast.USub, ast.UAdd)):
-            note(node.operand)
+            _note_numeric(numeric, node.operand)
         # A name *assigned* arithmetic is as numeric as one used in it, and
         # this is the commoner shape: `day = start - (start % DAY)` then
         # `day += DAY` in the loop. Reading only operands left the target of
@@ -1386,7 +1390,7 @@ def _names_used_as_numbers(nodes):
         # itself.
         elif isinstance(node, (ast.Assign, ast.AnnAssign)) and _is_scalar_expr(node.value):
             for target in node.targets if isinstance(node, ast.Assign) else [node.target]:
-                note(target)
+                _note_numeric(numeric, target)
     return numeric
 
 
@@ -1410,6 +1414,29 @@ def _is_scalar_expr(node):
     return False
 
 
+def _classify_binding(target, value, lists, scalars):
+    """Record `target` in `lists` or `scalars`, judged from the shape of `value`."""
+    # Unpacking binds each name to its own initialiser, so pair the sides
+    # up rather than judging the tuple as a whole: `mwh, grams = 0.0, 0.0`
+    # is two counters, and reading only single-name targets left both
+    # unclassified — which flagged `mwh += r` as a rebuild.
+    if isinstance(target, (ast.Tuple, ast.List)) and isinstance(value, (ast.Tuple, ast.List)):
+        if len(target.elts) == len(value.elts):
+            for element, initialiser in zip(target.elts, value.elts, strict=True):
+                _classify_binding(element, initialiser, lists, scalars)
+        return
+    if not isinstance(target, ast.Name):
+        return
+    if isinstance(value, (ast.List, ast.ListComp)):
+        lists.add(target.id)
+    elif (
+        isinstance(value, ast.Constant)
+        and isinstance(value.value, (int, float))
+        and not isinstance(value.value, bool)
+    ):
+        scalars.add(target.id)
+
+
 def _names_bound_to_lists(nodes):
     """(list_names, scalar_names) — names seen initialised to a list, and names
     seen initialised to a number, among `nodes`.
@@ -1427,34 +1454,12 @@ def _names_bound_to_lists(nodes):
     is the difference between `errors += e` being a counter and a rebuild.
     """
     lists, scalars = set(), set()
-
-    def classify(target, value):
-        # Unpacking binds each name to its own initialiser, so pair the sides
-        # up rather than judging the tuple as a whole: `mwh, grams = 0.0, 0.0`
-        # is two counters, and reading only single-name targets left both
-        # unclassified — which flagged `mwh += r` as a rebuild.
-        if isinstance(target, (ast.Tuple, ast.List)) and isinstance(value, (ast.Tuple, ast.List)):
-            if len(target.elts) == len(value.elts):
-                for t, v in zip(target.elts, value.elts, strict=True):
-                    classify(t, v)
-            return
-        if not isinstance(target, ast.Name):
-            return
-        if isinstance(value, (ast.List, ast.ListComp)):
-            lists.add(target.id)
-        elif (
-            isinstance(value, ast.Constant)
-            and isinstance(value.value, (int, float))
-            and not isinstance(value.value, bool)
-        ):
-            scalars.add(target.id)
-
     for node in nodes:
         if not isinstance(node, (ast.Assign, ast.AnnAssign)):
             continue
         targets = node.targets if isinstance(node, ast.Assign) else [node.target]
         for target in targets:
-            classify(target, node.value)
+            _classify_binding(target, node.value, lists, scalars)
     return lists, scalars
 
 
@@ -1940,7 +1945,7 @@ def scan_file(path, disabled=frozenset(), text=None):
     rules = PATTERN_RULES_BY_LANG.get(
         "Dockerfile" if path.name == "Dockerfile" else path.suffix, ()
     )
-    line_of = _line_indexer(code)
+    line_of = _LineIndex(code).line_of
     for rule in rules:
         if rule["id"] in disabled:
             continue
