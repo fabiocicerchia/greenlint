@@ -44,6 +44,11 @@ One pass over the tree, no build, no execution:
       │                       so line numbers still point at the real file
       │                       (GL004 is the exception: it reads comments)
       │
+  blank strings ───────────► same trick again, for the rules that describe code
+      │                       shape rather than embedded content — `while(true)`
+      │                       inside a doc string is prose, `SELECT *` inside
+      │                       one is a query
+      │
       ├─ .py  ─────────────► parse once, index once, then six AST rules
       │                       busy loop · quadratic rebuild · nested loop
       │                       bubble sort · dict iterator · try in loop
@@ -64,7 +69,10 @@ One pass over the tree, no build, no execution:
 The AST rules exist because a regex cannot tell `while True:` with a `sleep`
 from one without, and the regex rules exist because most of the file types
 that waste the most energy — CI configs, Terraform, Kubernetes manifests —
-have no parser worth carrying a dependency for.
+have no parser worth carrying a dependency for. Blanking string literals is
+how the regex rules buy back the largest class of false positive a parser
+would have caught for free: a rule about code shape stops matching the example
+in a docstring, a comment block quoted into a heredoc, or a test fixture.
 
 More in [`docs/architecture.md`](docs/architecture.md).
 
