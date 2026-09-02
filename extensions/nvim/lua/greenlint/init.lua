@@ -168,12 +168,46 @@ function M.scan_file(path, opts)
   end)
 end
 
+--- The buffer's bytes in a file greenlint can read.
+---
+--- The basename is kept: greenlint picks a rule set by extension and
+--- recognises a test file by its name. Returns the directory to delete
+--- afterwards and the file itself.
+local function write_buffer_to_temp(buf, path)
+  local dir = vim.fn.tempname()
+  vim.fn.mkdir(dir, 'p')
+  local temp = vim.fs.joinpath(dir, vim.fs.basename(path))
+  vim.fn.writefile(vim.api.nvim_buf_get_lines(buf, 0, -1, false), temp)
+  return dir, temp
+end
+
+--- Take the answer to a buffer scan, or say why it was not taken.
+---
+--- Findings come back naming the temp file, so the path is mapped home before
+--- anything sees it.
+local function absorb_buffer_scan(out, buf, path, version)
+  local findings, err = decode(out)
+  if not findings then
+    log_line('%s (buffer): %s', relative(path), (err or ''):gsub('%s+$', ''))
+    return false
+  end
+  -- A newer edit landed while this was in flight; its scan is already
+  -- scheduled and this answer describes text nobody is looking at.
+  if vim.api.nvim_buf_is_valid(buf) and version and vim.b[buf].changedtick ~= version then
+    return false
+  end
+  for _, finding in ipairs(findings) do
+    finding.file = path
+  end
+  store(path, findings)
+  log_line('%s (buffer): %d finding(s)', relative(path), #findings)
+  return true
+end
+
 --- Scan an unsaved buffer.
 ---
---- The CLI reads files, not buffers, so the buffer is written to a temp file --
---- keeping its basename, because greenlint picks a rule set by extension and
---- recognises a test file by its name. Findings come back naming the temp file,
---- so the path is mapped home before anything sees it.
+--- The CLI reads files, not buffers, so the buffer is written to a temp file
+--- and scanned there.
 function M.scan_buffer(buf, opts)
   opts = opts or {}
   if not cfg.enabled then
@@ -185,32 +219,36 @@ function M.scan_buffer(buf, opts)
     return
   end
 
-  local dir = vim.fn.tempname()
-  vim.fn.mkdir(dir, 'p')
-  local temp = vim.fs.joinpath(dir, vim.fs.basename(path))
-  local lines = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
-  vim.fn.writefile(lines, temp)
-
-  local version = vim.api.nvim_buf_get_var and vim.b[buf].changedtick or nil
+  local dir, temp = write_buffer_to_temp(buf, path)
+  local version = vim.b[buf].changedtick
   run(scan_argv_for({ temp }), function(out)
     pcall(vim.fn.delete, dir, 'rf')
-    local findings, err = decode(out)
-    if not findings then
-      log_line('%s (buffer): %s', relative(path), (err or ''):gsub('%s+$', ''))
-      return finished(opts, false)
-    end
-    -- A newer edit landed while this was in flight; its scan is already
-    -- scheduled and this answer describes text nobody is looking at.
-    if vim.api.nvim_buf_is_valid(buf) and version and vim.b[buf].changedtick ~= version then
-      return finished(opts, false)
-    end
-    for _, finding in ipairs(findings) do
-      finding.file = path
-    end
-    store(path, findings)
-    log_line('%s (buffer): %d finding(s)', relative(path), #findings)
-    finished(opts, true)
+    finished(opts, absorb_buffer_scan(out, buf, path, version))
   end)
+end
+
+--- Everything known about the tree under `root` is now history: the walk that
+--- just finished is the whole truth for it, so a file it reached and found
+--- nothing in must lose its old findings too.
+local function forget_under(root)
+  for path in pairs(by_file) do
+    if path:sub(1, #root) == root then
+      by_file[path] = nil
+      ui.clear(path)
+    end
+  end
+end
+
+--- The findings of a project scan, keyed by the normalised file they name.
+local function group_by_file(findings)
+  local grouped = {}
+  for _, finding in ipairs(findings) do
+    local path = vim.fs.normalize(finding.file)
+    finding.file = path
+    grouped[path] = grouped[path] or {}
+    table.insert(grouped[path], finding)
+  end
+  return grouped
 end
 
 --- Scan the whole project.
@@ -230,21 +268,8 @@ function M.scan_project(opts)
       return finished(opts, false)
     end
 
-    -- A whole-project scan is the whole truth for the tree it walked, so files
-    -- it reached and found nothing in must lose their old findings too.
-    for path in pairs(by_file) do
-      if path:sub(1, #root) == root then
-        by_file[path] = nil
-        ui.clear(path)
-      end
-    end
-    local grouped = {}
-    for _, finding in ipairs(findings) do
-      local path = vim.fs.normalize(finding.file)
-      finding.file = path
-      grouped[path] = grouped[path] or {}
-      table.insert(grouped[path], finding)
-    end
+    forget_under(root)
+    local grouped = group_by_file(findings)
     for path, list in pairs(grouped) do
       store(path, list)
     end
