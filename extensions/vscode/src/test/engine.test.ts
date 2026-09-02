@@ -7,7 +7,9 @@ import { test } from 'node:test';
 import type * as vscode from 'vscode';
 
 import type { Settings } from '../config';
-import { INSTALL_COMMAND, ScanServer, ScanServerError, share } from '../engine';
+import { INSTALL_COMMAND, ScanServer } from '../engine';
+import { ScanServerError } from '../protocol';
+import { share } from '../share';
 import type { Finding } from '../types';
 import { vscode as shim } from './vscode-shim';
 

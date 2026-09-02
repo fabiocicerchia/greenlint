@@ -1,46 +1,19 @@
 import * as cp from 'child_process';
-import * as fs from 'fs';
-import * as path from 'path';
 
 import * as vscode from 'vscode';
 
 import type { Settings } from './config';
+import { candidates, dedupe } from './interpreters';
+import { LineProtocol, type ScanProgress, ScanServerError } from './protocol';
+import { forgetRuleProse, share } from './share';
 import { type Finding, type ScanStats, type ScanSummary, type ServerInfo, useSeverityOrder } from './types';
 
 const START_TIMEOUT_MS = 20_000;
-const REQUEST_TIMEOUT_MS = 120_000;
-
-export interface ScanProgress {
-  /** Files walked so far. */
-  files: number;
-  /** Findings made so far, across every batch. */
-  found: number;
-  /** Findings made since the previous progress event. */
-  batch: Finding[];
-}
-
-interface Pending {
-  resolve: (value: Record<string, unknown>) => void;
-  reject: (reason: Error) => void;
-  op: string;
-  startedAt: number;
-  /** Set by `rearm` before the request is sent. */
-  timer?: NodeJS.Timeout;
-  onProgress?: (progress: ScanProgress) => void;
-}
 
 /** The one command that fixes "greenlint is not installed". Kept short on
  * purpose: a toast is read in a second, and the log already lists every path
  * that was tried. */
 export const INSTALL_COMMAND = 'pipx install git+https://github.com/fabiocicerchia/greenlint';
-
-export class ScanServerError extends Error {
-  /** Set only when no interpreter could run greenlint at all — the failure
-   * `INSTALL_COMMAND` actually fixes. A mid-session crash must not offer it. */
-  constructor(message: string, readonly install?: string) {
-    super(message);
-  }
-}
 
 /**
  * Client for `server/greenlint_server.py`.
@@ -48,30 +21,28 @@ export class ScanServerError extends Error {
  * One process for the window, started on the first scan and kept alive: the
  * interpreter start and the ~40 regex compiles behind every `greenlint` run are
  * the single largest cost in an editor loop, and they are the same work every
- * time. Requests are line-delimited JSON correlated by id.
+ * time. Requests are line-delimited JSON correlated by id — see `protocol.ts`.
  */
 export class ScanServer implements vscode.Disposable {
   private proc?: cp.ChildProcess;
   private starting?: Promise<ServerInfo>;
   private info?: ServerInfo;
-  private buffer = '';
-  /** How much of `buffer` is known to hold no newline — see `consume`. */
-  private searched = 0;
-  private nextId = 1;
   private projectScanId?: number;
-  private readonly pending = new Map<number, Pending>();
-  private onReady?: () => void;
-  private onFailed?: (error: Error) => void;
   private disposed = false;
+  private readonly protocol: LineProtocol;
 
   constructor(
     private readonly serverScript: string,
     private settings: Settings,
     private readonly log: vscode.OutputChannel,
-  ) {}
+  ) {
+    this.protocol = new LineProtocol(log);
+    this.protocol.trace = settings.trace;
+  }
 
   updateSettings(settings: Settings): void {
     this.settings = settings;
+    this.protocol.trace = settings.trace;
   }
 
   get running(): boolean {
@@ -93,14 +64,11 @@ export class ScanServer implements vscode.Disposable {
   }
 
   private killProcess(reason: Error): void {
-    this.failPending(reason);
+    this.protocol.failPending(reason);
+    this.protocol.reset();
     this.proc?.kill();
     this.proc = undefined;
     this.info = undefined;
-    this.buffer = '';
-    this.searched = 0;
-    this.onReady = undefined;
-    this.onFailed = undefined;
   }
 
   async restart(): Promise<void> {
@@ -109,52 +77,6 @@ export class ScanServer implements vscode.Disposable {
   }
 
   // --- process lifecycle ------------------------------------------------
-
-  /**
-   * Candidate (interpreter, greenlint module) pairs, most likely first.
-   *
-   * An explicitly configured path is the only candidate — a typo there should
-   * be an error, not a silent fallback to some other greenlint whose rules the
-   * user never asked for.
-   *
-   * Otherwise a greenlint.py in the workspace comes before the installed
-   * package, for two reasons that turn out to be the same one: someone editing
-   * the rules wants to see their edits, and an installed release can be older
-   * than the module surface this extension needs. A candidate whose greenlint
-   * is too old refuses to start, so the loop simply moves on to the next.
-   */
-  private candidates(): Array<{ python: string; module?: string }> {
-    if (this.settings.pythonPath && this.settings.greenlintPath) {
-      return [{ python: this.settings.pythonPath, module: this.settings.greenlintPath }];
-    }
-    const plain = this.settings.pythonPath
-      ? [this.settings.pythonPath]
-      : process.platform === 'win32'
-        ? ['python', 'py']
-        : ['python3', 'python'];
-    const pairs: Array<{ python: string; module?: string }> = [];
-    // A module loaded from a path needs no particular interpreter — any Python
-    // that runs will import it — so these come first and only need `plain`.
-    for (const module of this.settings.greenlintPath
-      ? [this.settings.greenlintPath]
-      : workspaceGreenlintModules()) {
-      for (const python of plain) {
-        pairs.push({ python, module });
-      }
-    }
-    if (!this.settings.greenlintPath) {
-      // `import greenlint`, which is a question about the interpreter rather
-      // than about greenlint: pipx and venv installs are deliberately invisible
-      // to the `python3` on PATH, so the interpreter that owns the `greenlint`
-      // command gets a turn too.
-      for (const python of this.settings.pythonPath
-        ? plain
-        : dedupe([...plain, ...interpretersOwningGreenlint()])) {
-        pairs.push({ python });
-      }
-    }
-    return pairs;
-  }
 
   async start(): Promise<ServerInfo> {
     if (this.info && this.running) {
@@ -171,15 +93,15 @@ export class ScanServer implements vscode.Disposable {
 
   private async startOnce(): Promise<ServerInfo> {
     const failures: string[] = [];
-    const candidates = this.candidates();
+    const tries = candidates(this.settings);
     // Printed up front because the interesting failure is often what is *not*
     // in this list — no workspace greenlint.py, or a single configured path.
     this.log.appendLine(
-      `[greenlint] looking for greenlint in order: ${candidates
+      `[greenlint] looking for greenlint in order: ${tries
         .map((c) => `${c.python}${c.module ? ` + ${c.module}` : ' + installed package'}`)
         .join(', ')}`,
     );
-    for (const candidate of candidates) {
+    for (const candidate of tries) {
       try {
         const info = await this.spawn(candidate.python, candidate.module);
         this.log.appendLine(
@@ -187,9 +109,7 @@ export class ScanServer implements vscode.Disposable {
             `(${info.rules} rules) from ${info.module ?? 'installed package'}`,
         );
         this.info = info;
-        // A restart can be an upgrade, and a rule's wording is the upgraded
-        // greenlint's to state — so the shared copies go with the old process.
-        ruleProse.clear();
+        forgetRuleProse();
         // Sorting happens here, but the order is greenlint's.
         useSeverityOrder(info.severityOrder);
         return info;
@@ -226,7 +146,7 @@ export class ScanServer implements vscode.Disposable {
     });
     this.proc = proc;
     proc.stdout?.setEncoding('utf8');
-    proc.stdout?.on('data', (chunk: string) => this.consume(chunk));
+    proc.stdout?.on('data', (chunk: string) => this.protocol.consume(chunk));
     proc.stderr?.setEncoding('utf8');
     proc.stderr?.on('data', (chunk: string) => this.log.append(`[greenlint:stderr] ${chunk}`));
 
@@ -249,7 +169,7 @@ export class ScanServer implements vscode.Disposable {
           reject(error);
         }
       };
-      this.onReady = () => {
+      this.protocol.onReady = () => {
         // `ready` only says the process is alive; the ping is what proves it
         // found a rule set to scan with.
         this.request<ServerInfo>('ping', {}).then(
@@ -261,7 +181,7 @@ export class ScanServer implements vscode.Disposable {
           fail,
         );
       };
-      this.onFailed = fail;
+      this.protocol.onFailed = fail;
       proc.on('error', (error) => fail(new ScanServerError(error.message)));
       // `close`, not `exit`: a server that refuses to start writes *why* to
       // stdout and then exits, and `exit` can beat the last stdout chunk. That
@@ -273,7 +193,7 @@ export class ScanServer implements vscode.Disposable {
         // Only the current process may tear down shared state: a candidate
         // that already lost the race exiting later must not kill the winner.
         if (proc === this.proc) {
-          this.failPending(reason);
+          this.protocol.failPending(reason);
           this.proc = undefined;
           this.starting = undefined;
           this.info = undefined;
@@ -283,103 +203,6 @@ export class ScanServer implements vscode.Disposable {
         }
       });
     });
-  }
-
-  private failPending(error: Error): void {
-    for (const [id, pending] of this.pending) {
-      clearTimeout(pending.timer);
-      pending.reject(error);
-      this.pending.delete(id);
-    }
-  }
-
-  // --- protocol ---------------------------------------------------------
-
-  private consume(chunk: string): void {
-    this.buffer += chunk;
-    // The search resumes where the last one ran out rather than starting over:
-    // a streamed batch is a single line of a hundred kilobytes arriving in many
-    // chunks, and re-scanning everything received so far for each of them is
-    // quadratic in the size of the message.
-    let index = this.buffer.indexOf('\n', this.searched);
-    while (index >= 0) {
-      const line = this.buffer.slice(0, index).trim();
-      this.buffer = this.buffer.slice(index + 1);
-      if (line) {
-        this.handleLine(line);
-      }
-      // What is left has not been looked at yet, so this one starts over.
-      index = this.buffer.indexOf('\n');
-    }
-    this.searched = this.buffer.length;
-  }
-
-  private handleLine(line: string): void {
-    let message: Record<string, unknown>;
-    try {
-      message = JSON.parse(line) as Record<string, unknown>;
-    } catch {
-      this.log.appendLine(`[greenlint] unparsable line from the scan server: ${line}`);
-      return;
-    }
-    if (message.event === 'ready') {
-      this.onReady?.();
-      return;
-    }
-    if (message.event === 'progress') {
-      // Liveness, not an answer: a scan that is still walking must not time
-      // out, and must not resolve either.
-      const pending = this.pending.get(message.id as number);
-      if (pending) {
-        this.rearm(message.id as number, pending);
-        pending.onProgress?.({
-          files: Number(message.files ?? 0),
-          found: Number(message.found ?? 0),
-          batch: share((message.batch as Finding[] | undefined) ?? []),
-        });
-      }
-      return;
-    }
-    if (message.fatal) {
-      this.onFailed?.(new ScanServerError(String(message.error)));
-      return;
-    }
-    const pending = this.pending.get(message.id as number);
-    if (!pending) {
-      return;
-    }
-    clearTimeout(pending.timer);
-    this.pending.delete(message.id as number);
-    if (this.settings.trace) {
-      const stats = message.stats as ScanStats | undefined;
-      const detail = stats
-        ? ` files=${stats.files} scanned=${stats.scanned} stat=${stats.reusedFromStat} hash=${stats.reusedFromHash} skip=${stats.skipped}`
-        : message.source
-          ? ` source=${String(message.source)}`
-          : '';
-      this.log.appendLine(
-        `[greenlint] ${pending.op} took ${Date.now() - pending.startedAt}ms${detail}`,
-      );
-    }
-    if (message.ok === false) {
-      pending.reject(new ScanServerError(String(message.error)));
-      return;
-    }
-    pending.resolve(message);
-  }
-
-  /** Restart a pending request's timeout. The timeout measures silence, not
-   * total duration: a project scan of a large tree is slow but not stuck. */
-  private rearm(id: number, pending: Pending): void {
-    clearTimeout(pending.timer);
-    pending.timer = setTimeout(() => {
-      this.pending.delete(id);
-      pending.reject(
-        new ScanServerError(
-          `${pending.op} timed out after ${REQUEST_TIMEOUT_MS / 1000}s with no progress`,
-        ),
-      );
-    }, REQUEST_TIMEOUT_MS);
   }
 
   private request<T>(
@@ -392,21 +215,7 @@ export class ScanServer implements vscode.Disposable {
     if (!proc?.stdin) {
       return Promise.reject(new ScanServerError('scan server is not running'));
     }
-    const id = this.nextId++;
-    const promise = new Promise<T>((resolve, reject) => {
-      const pending: Pending = {
-        resolve: resolve as (value: Record<string, unknown>) => void,
-        reject,
-        op,
-        startedAt: Date.now(),
-        onProgress,
-      };
-      this.pending.set(id, pending);
-      this.rearm(id, pending);
-    });
-    proc.stdin.write(`${JSON.stringify({ id, op, ...payload })}\n`);
-    onSent?.(id);
-    return promise;
+    return this.protocol.send<T>(proc.stdin, op, payload, onProgress, onSent);
   }
 
   /** Start if needed, then send. Every public call goes through here. */
@@ -508,117 +317,4 @@ export class ScanServer implements vscode.Disposable {
 
 function rootFor(uri: vscode.Uri): string | undefined {
   return vscode.workspace.getWorkspaceFolder(uri)?.uri.fsPath;
-}
-
-/** One copy of each rule's prose, keyed by rule id — see `share`. */
-const ruleProse = new Map<string, { message: string; suggestion: string; co2e: string }>();
-
-/**
- * Point every finding's repeated strings at one instance.
- *
- * greenlint's message, suggestion and CO2e note are fixed per rule, and its
- * path is fixed per file — but they cross the pipe as JSON, and `JSON.parse`
- * gives every finding its own copy of all four. On a project with thousands of
- * findings that is megabytes of the same few sentences, held for as long as the
- * window is open. The prose is shared through a map (bounded by the rule count);
- * the path only against the previous finding, which is enough because a file's
- * findings arrive together — and keeps no path alive after the batch.
- */
-export function share(findings: Finding[]): Finding[] {
-  let lastFile: string | undefined;
-  for (const finding of findings) {
-    const prose = ruleProse.get(finding.rule);
-    if (prose) {
-      finding.message = prose.message;
-      finding.suggestion = prose.suggestion;
-      finding.co2e_estimate = prose.co2e;
-    } else {
-      ruleProse.set(finding.rule, {
-        message: finding.message,
-        suggestion: finding.suggestion,
-        co2e: finding.co2e_estimate,
-      });
-    }
-    if (lastFile !== undefined && finding.file === lastFile) {
-      finding.file = lastFile;
-    } else {
-      lastFile = finding.file;
-    }
-  }
-  return findings;
-}
-
-/** Workspace folders that contain a greenlint.py, for contributors working on
- * the rules themselves — their checkout should win over an installed release. */
-function workspaceGreenlintModules(): string[] {
-  const found: string[] = [];
-  for (const folder of vscode.workspace.workspaceFolders ?? []) {
-    const candidate = path.join(folder.uri.fsPath, 'greenlint.py');
-    if (fs.existsSync(candidate)) {
-      found.push(candidate);
-    }
-  }
-  return found;
-}
-
-function dedupe(values: string[]): string[] {
-  return [...new Set(values)];
-}
-
-/**
- * Interpreters that can plausibly `import greenlint` even though the `python3`
- * on PATH cannot.
- *
- * The documented install is `pipx`, which puts greenlint in its own virtualenv
- * precisely so it does not appear in any interpreter on PATH — so looking only
- * at `python3` fails for exactly the users who followed the instructions. Two
- * cheap ways to find the real one: the shebang of the `greenlint` command
- * (a console script names its own interpreter on line one), and pipx's
- * standard venv layout.
- */
-function interpretersOwningGreenlint(): string[] {
-  const found: string[] = [];
-  const script = onPath('greenlint');
-  if (script) {
-    try {
-      const shebang = /^#!\s*("?)(\S+?)\1(?:\s|$)/.exec(
-        fs.readFileSync(script, 'utf8').slice(0, 512).split('\n')[0] ?? '',
-      );
-      // A pyenv or asdf shim is a shell script, so its shebang is a shell —
-      // only take the line seriously when it actually names a Python.
-      if (shebang && /python/i.test(path.basename(shebang[2]))) {
-        found.push(shebang[2]);
-      }
-    } catch {
-      // Unreadable or binary: nothing to learn, and not worth reporting.
-    }
-  }
-  const home = process.env.HOME ?? process.env.USERPROFILE;
-  if (home) {
-    const pipx =
-      process.platform === 'win32'
-        ? path.join(home, 'pipx', 'venvs', 'greenlint', 'Scripts', 'python.exe')
-        : path.join(home, '.local', 'pipx', 'venvs', 'greenlint', 'bin', 'python');
-    if (fs.existsSync(pipx)) {
-      found.push(pipx);
-    }
-  }
-  return found;
-}
-
-/** First executable named `command` on PATH. */
-function onPath(command: string): string | undefined {
-  const extensions = process.platform === 'win32' ? ['.exe', '.cmd', '.bat', ''] : [''];
-  for (const dir of (process.env.PATH ?? '').split(path.delimiter)) {
-    if (!dir) {
-      continue;
-    }
-    for (const extension of extensions) {
-      const candidate = path.join(dir, command + extension);
-      if (fs.existsSync(candidate)) {
-        return candidate;
-      }
-    }
-  }
-  return undefined;
 }

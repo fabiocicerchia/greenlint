@@ -4,7 +4,8 @@ import * as vscode from 'vscode';
 
 import { readSettings, requiresRestart } from './config';
 import { GreenlintHoverProvider, SOURCE, toDiagnostics } from './diagnostics';
-import { ScanServer, ScanServerError } from './engine';
+import { ScanServer } from './engine';
+import { ScanServerError } from './protocol';
 import { editorExcludeGlobs } from './excludes';
 import {
   countBySeverity,
