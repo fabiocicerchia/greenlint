@@ -23,8 +23,8 @@ Each item fired because a measurement crossed a threshold. The numbers and the e
 <details><summary>Evidence</summary>
 
 - `greenlint.py` — 2300 lines
-- `extensions/vscode/src/extension.ts` — 738 lines
-- `extensions/vscode/server/greenlint_server.py` — 692 lines
+- `extensions/vscode/src/extension.ts` — 764 lines
+- `extensions/vscode/server/greenlint_server.py` — 735 lines
 - `extensions/vscode/src/engine.ts` — 624 lines
 
 </details>
@@ -42,8 +42,8 @@ Each item fired because a measurement crossed a threshold. The numbers and the e
 <details><summary>Evidence</summary>
 
 - `extensions/vscode/esbuild.mjs` — 31 lines
-- `extensions/vscode/server/greenlint_server.py` — 692 lines
-- `extensions/vscode/src/extension.ts` — 738 lines
+- `extensions/vscode/server/greenlint_server.py` — 735 lines
+- `extensions/vscode/src/extension.ts` — 764 lines
 
 </details>
 
@@ -232,7 +232,7 @@ The section above reasons about the import graph, where an edge either exists or
 
 </details>
 
-**Worth attention · MNT-COMPLEX** — 5 of 110 Python functions (5%) have a cyclomatic complexity of 12 or more; the highest is 22.
+**Worth attention · MNT-COMPLEX** — 3 of 117 Python functions (3%) have a cyclomatic complexity of 12 or more; the highest is 22.
 
 *Why it matters.* Complexity counts the independent paths through a function, which is also the number of test cases needed to cover it and the number of cases a reader must hold at once. Past about ten, reviewers stop simulating the function and start trusting it, which is where defects survive review.
 
@@ -244,13 +244,11 @@ The section above reasons about the import graph, where an edge either exists or
 
 - `greenlint.py:853` — `_blank_comments` complexity 22, 85 lines, nesting 5
 - `greenlint.py:1102` — `index_python` complexity 16, 53 lines, nesting 6
-- `extensions/vscode/server/greenlint_server.py:287` — `config_for` complexity 14, 51 lines, nesting 1
-- `extensions/vscode/server/greenlint_server.py:400` — `scan_project` complexity 13, 89 lines, nesting 4
 - `greenlint.py:1364` — `_names_used_as_numbers` complexity 12, 33 lines, nesting 6
 
 </details>
 
-**Minor · MNT-LONGFUNC** — 2 of 110 Python functions (2%) are 80 lines or longer; the longest is 89.
+**Minor · MNT-LONGFUNC** — 1 of 117 Python functions (1%) are 80 lines or longer; the longest is 85.
 
 *Why it matters.* Length is a proxy for how much has to be understood before any part can be changed. A function that does not fit on a screen cannot be checked against its own beginning, and long functions accumulate local variables whose lifetimes overlap in ways nothing enforces.
 
@@ -260,14 +258,13 @@ The section above reasons about the import graph, where an edge either exists or
 
 <details><summary>Evidence</summary>
 
-- `extensions/vscode/server/greenlint_server.py:400` — `scan_project`, 89 lines
 - `greenlint.py:853` — `_blank_comments`, 85 lines
 
 </details>
 
 ### Readability
 
-**Worth attention · RDB-NESTING** — 5 of 110 Python functions (5%) nest control flow 4 levels or deeper.
+**Worth attention · RDB-NESTING** — 4 of 117 Python functions (3%) nest control flow 4 levels or deeper.
 
 *Why it matters.* Each level of nesting is a condition the reader must keep true in their head for everything inside it. Depth compounds: at four levels the reader is tracking four simultaneous invariants to understand one line. Nesting correlates with defects more strongly than length does.
 
@@ -281,7 +278,6 @@ The section above reasons about the import graph, where an edge either exists or
 - `greenlint.py:1364` — `_names_used_as_numbers`, depth 6
 - `greenlint.py:2110` — `walk_files`, depth 6
 - `greenlint.py:853` — `_blank_comments`, depth 5
-- `extensions/vscode/server/greenlint_server.py:400` — `scan_project`, depth 4
 
 </details>
 
@@ -303,7 +299,7 @@ What was read, and where every import went. Third-party means the target is expe
 
 - 13 modules across 3 components
 - 20 internal import edges, 1 component couplings
-- 5282 lines
+- 5351 lines
 - propagation cost 17% — the share of other components an average component can reach through import paths
 
 ## Component graph
@@ -311,7 +307,7 @@ What was read, and where every import went. Third-party means the target is expe
 ```mermaid
 graph LR
   examples["examples<br/><small>Python · 1 mod · 10 loc</small>"]
-  extensions["extensions<br/><small>JavaScript/Python+ · 11 mod · 2972 loc</small>"]
+  extensions["extensions<br/><small>JavaScript/Python+ · 11 mod · 3041 loc</small>"]
   greenlint["greenlint<br/><small>Python · 1 mod · 2300 loc</small>"]
   extensions -->|1| greenlint
 ```
@@ -338,7 +334,7 @@ Components a route can touch by following imports, to a depth of four. This is t
 
 ## The nouns
 
-20 types declared: 0 inheritance and 11 composition relationships between types defined in this tree. Relationships to types declared elsewhere are omitted rather than guessed, so this is a lower bound. 5 types were read with a real parser; the rest come from declaration syntax, which is reliable for the declaration and weaker for the member lists.
+21 types declared: 0 inheritance and 11 composition relationships between types defined in this tree. Relationships to types declared elsewhere are omitted rather than guessed, so this is a lower bound. 6 types were read with a real parser; the rest come from declaration syntax, which is reliable for the declaration and weaker for the member lists.
 
 ### `extensions`
 
@@ -356,8 +352,8 @@ classDiagram
     +start(0)
     +dispose(0)
     +register(0)
-    +schedule(2)
-    +… 20 more methods
+    +commands(0)
+    +… 24 more methods
   }
   class Finding {
     <<interface>>
@@ -546,7 +542,7 @@ extensions.vscode.esbuild  (JavaScript)
 | Component | Languages | Modules | LOC | Fan-in | Fan-out | Instability |
 |---|---|---:|---:|---:|---:|---:|
 | `examples` | Python | 1 | 10 | 0 | 0 | 0.0 |
-| `extensions` | JavaScript, Python, TypeScript | 11 | 2972 | 0 | 1 | 1.0 |
+| `extensions` | JavaScript, Python, TypeScript | 11 | 3041 | 0 | 1 | 1.0 |
 | `greenlint` | Python | 1 | 2300 | 1 | 0 | 0.0 |
 
 Instability is fan-out / (fan-in + fan-out). A component many things depend on that itself depends widely propagates change in both directions.
@@ -572,8 +568,8 @@ Most-changed files in the last 12 months. This is where any map you carry in you
 | File | Lines touched | LOC | Language |
 |---|---:|---:|---|
 | `greenlint.py` | 3586 | 2300 | Python |
-| `extensions/vscode/server/greenlint_server.py` | 946 | 692 | Python |
-| `extensions/vscode/src/extension.ts` | 792 | 738 | TypeScript |
+| `extensions/vscode/server/greenlint_server.py` | 1179 | 735 | Python |
+| `extensions/vscode/src/extension.ts` | 828 | 764 | TypeScript |
 | `extensions/vscode/src/engine.ts` | 648 | 624 | TypeScript |
 | `extensions/vscode/src/findingsView.ts` | 239 | 231 | TypeScript |
 | `extensions/vscode/src/report.ts` | 194 | 194 | TypeScript |
@@ -597,17 +593,18 @@ Most-changed files in the last 12 months. This is where any map you carry in you
 
 </details>
 
-<details><summary><code>extensions</code> — 49 exported</summary>
+<details><summary><code>extensions</code> — 51 exported</summary>
 
 
-_Showing 40 of 49; `--full` lists them all._
+_Showing 40 of 51; `--full` lists them all._
 
 
 `extensions.vscode.server.greenlint_server`
 
-- class FindingCache:146
-- class RunningSummary:205
-- class Server:244
+- class FindingCache:156
+- class ProjectScan:254
+- class RunningSummary:215
+- class Server:309
 - const DEFAULT_CACHE_ENTRIES:55
 - const DEFAULT_MAX_FILE_BYTES:56
 - const INTERLEAVE_EVERY:60
@@ -617,8 +614,9 @@ _Showing 40 of 49; `--full` lists them all._
 - def digest:139
 - def greenlint_version:122
 - def load_greenlint:65
-- def main:660
+- def main:703
 - def missing_api:112
+- def mtime:146
 
 `extensions.vscode.src.config`
 
@@ -661,11 +659,6 @@ _Showing 40 of 49; `--full` lists them all._
 - function workspaceRelative:228
 - type Grouping:10
 - type Scope:8
-
-`extensions.vscode.src.report`
-
-- function renderReport:20
-- interface ReportMeta:2
 
 </details>
 
