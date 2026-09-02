@@ -208,6 +208,9 @@ RULES = [
     },
     {
         "id": "GL002",
+        # Code shape, not embedded content: a match inside a string literal is
+        # documentation or a fixture, not the pattern. See _blank_strings.
+        "code_only": True,
         "langs": {
             ".py",
             ".js",
@@ -338,6 +341,9 @@ RULES = [
     },
     {
         "id": "GL012",
+        # Code shape, not embedded content: a match inside a string literal is
+        # documentation or a fixture, not the pattern. See _blank_strings.
+        "code_only": True,
         "langs": {".py"},
         "severity": "medium",
         "pattern": re.compile(r"for\s+\w+\s+in\s+[^:\n]+:\n[ \t]+\S*\.execute\(", re.MULTILINE),
@@ -405,6 +411,9 @@ RULES = [
     },
     {
         "id": "GL019",
+        # Code shape, not embedded content: a match inside a string literal is
+        # documentation or a fixture, not the pattern. See _blank_strings.
+        "code_only": True,
         "langs": {".py"},
         "severity": "medium",
         "pattern": re.compile(
@@ -416,6 +425,9 @@ RULES = [
     },
     {
         "id": "GL020",
+        # Code shape, not embedded content: a match inside a string literal is
+        # documentation or a fixture, not the pattern. See _blank_strings.
+        "code_only": True,
         "langs": {".py"},
         "severity": "low",
         "pattern": re.compile(
@@ -426,6 +438,9 @@ RULES = [
     },
     {
         "id": "GL021",
+        # Code shape, not embedded content: a match inside a string literal is
+        # documentation or a fixture, not the pattern. See _blank_strings.
+        "code_only": True,
         "langs": {".py"},
         "severity": "medium",
         "pattern": re.compile(r"\.iterrows\(\)|\.apply\([^)]*axis\s*=\s*1"),
@@ -434,6 +449,9 @@ RULES = [
     },
     {
         "id": "GL022",
+        # Code shape, not embedded content: a match inside a string literal is
+        # documentation or a fixture, not the pattern. See _blank_strings.
+        "code_only": True,
         "langs": {".py"},
         "severity": "low",
         "pattern": re.compile(
@@ -477,6 +495,9 @@ RULES = [
     },
     {
         "id": "GL027",
+        # Code shape, not embedded content: a match inside a string literal is
+        # documentation or a fixture, not the pattern. See _blank_strings.
+        "code_only": True,
         "langs": {".js", ".ts"},
         "severity": "low",
         "pattern": re.compile(r"express\.static\([^,)]*\)"),
@@ -485,6 +506,9 @@ RULES = [
     },
     {
         "id": "GL028",
+        # Code shape, not embedded content: a match inside a string literal is
+        # documentation or a fixture, not the pattern. See _blank_strings.
+        "code_only": True,
         "langs": {".py"},
         "severity": "low",
         "pattern": re.compile(r"^from\s+\S+\s+import\s+\*", re.MULTILINE),
@@ -517,6 +541,9 @@ RULES = [
     },
     {
         "id": "GL032",
+        # Code shape, not embedded content: a match inside a string literal is
+        # documentation or a fixture, not the pattern. See _blank_strings.
+        "code_only": True,
         "langs": {".c", ".h", ".cpp", ".cc", ".hpp"},
         "severity": "medium",
         "pattern": re.compile(
@@ -545,6 +572,9 @@ RULES = [
     },
     {
         "id": "GL035",
+        # Code shape, not embedded content: a match inside a string literal is
+        # documentation or a fixture, not the pattern. See _blank_strings.
+        "code_only": True,
         "langs": {".cs"},
         "severity": "low",
         "pattern": re.compile(r"\.Count\(\)\s*(?:==\s*0|!=\s*0|>\s*0)"),
@@ -553,6 +583,9 @@ RULES = [
     },
     {
         "id": "GL036",
+        # Code shape, not embedded content: a match inside a string literal is
+        # documentation or a fixture, not the pattern. See _blank_strings.
+        "code_only": True,
         "langs": {".rb"},
         "severity": "low",
         "pattern": re.compile(r"\.(?:keys|values)\.include\?\("),
@@ -561,6 +594,9 @@ RULES = [
     },
     {
         "id": "GL037",
+        # Code shape, not embedded content: a match inside a string literal is
+        # documentation or a fixture, not the pattern. See _blank_strings.
+        "code_only": True,
         "langs": {".rb"},
         "severity": "low",
         "pattern": re.compile(
@@ -572,6 +608,9 @@ RULES = [
     # --- C#: two rules was "barely checked" (see docs/rules.md coverage) ---
     {
         "id": "GL039",
+        # Code shape, not embedded content: a match inside a string literal is
+        # documentation or a fixture, not the pattern. See _blank_strings.
+        "code_only": True,
         "langs": {".cs"},
         "severity": "medium",
         "pattern": re.compile(r"\bnew\s+HttpClient\s*\("),
@@ -580,6 +619,9 @@ RULES = [
     },
     {
         "id": "GL040",
+        # Code shape, not embedded content: a match inside a string literal is
+        # documentation or a fixture, not the pattern. See _blank_strings.
+        "code_only": True,
         "langs": {".cs"},
         "severity": "medium",
         "pattern": re.compile(r"\.(?:Result\b|Wait\(\))"),
@@ -588,6 +630,9 @@ RULES = [
     },
     {
         "id": "GL041",
+        # Code shape, not embedded content: a match inside a string literal is
+        # documentation or a fixture, not the pattern. See _blank_strings.
+        "code_only": True,
         "langs": {".cs"},
         "severity": "low",
         # .*? rather than [^)]*: the collection expression usually contains
@@ -600,6 +645,9 @@ RULES = [
     # --- Kotlin ---
     {
         "id": "GL042",
+        # Code shape, not embedded content: a match inside a string literal is
+        # documentation or a fixture, not the pattern. See _blank_strings.
+        "code_only": True,
         "langs": {".kt"},
         "severity": "medium",
         "pattern": re.compile(r"\bGlobalScope\.(?:launch|async)\b"),
@@ -608,6 +656,9 @@ RULES = [
     },
     {
         "id": "GL043",
+        # Code shape, not embedded content: a match inside a string literal is
+        # documentation or a fixture, not the pattern. See _blank_strings.
+        "code_only": True,
         "langs": {".kt"},
         "severity": "low",
         "pattern": re.compile(r"\.filter\s*\{[^{}]*\}\s*\.map\s*\{"),
@@ -616,6 +667,9 @@ RULES = [
     },
     {
         "id": "GL044",
+        # Code shape, not embedded content: a match inside a string literal is
+        # documentation or a fixture, not the pattern. See _blank_strings.
+        "code_only": True,
         "langs": {".kt"},
         "severity": "medium",
         "pattern": re.compile(r"\brunBlocking\s*(?:\([^)]*\))?\s*\{"),
@@ -625,6 +679,9 @@ RULES = [
     # --- Swift ---
     {
         "id": "GL045",
+        # Code shape, not embedded content: a match inside a string literal is
+        # documentation or a fixture, not the pattern. See _blank_strings.
+        "code_only": True,
         "langs": {".swift"},
         "severity": "low",
         "pattern": re.compile(r"\.filter\s*\{[^{}]*\}\s*\.map\s*\{"),
@@ -633,6 +690,9 @@ RULES = [
     },
     {
         "id": "GL046",
+        # Code shape, not embedded content: a match inside a string literal is
+        # documentation or a fixture, not the pattern. See _blank_strings.
+        "code_only": True,
         "langs": {".swift"},
         "severity": "medium",
         "pattern": re.compile(r"DispatchQueue\.\w+\.sync\s*\{"),
@@ -641,6 +701,9 @@ RULES = [
     },
     {
         "id": "GL047",
+        # Code shape, not embedded content: a match inside a string literal is
+        # documentation or a fixture, not the pattern. See _blank_strings.
+        "code_only": True,
         "langs": {".swift"},
         "severity": "low",
         "pattern": re.compile(r"URLSession\(configuration:\s*\.default\)"),
@@ -650,6 +713,9 @@ RULES = [
     # --- Ruby ---
     {
         "id": "GL048",
+        # Code shape, not embedded content: a match inside a string literal is
+        # documentation or a fixture, not the pattern. See _blank_strings.
+        "code_only": True,
         "langs": {".rb"},
         "severity": "medium",
         # The += has to look like string building — a literal, an
@@ -664,6 +730,9 @@ RULES = [
     },
     {
         "id": "GL049",
+        # Code shape, not embedded content: a match inside a string literal is
+        # documentation or a fixture, not the pattern. See _blank_strings.
+        "code_only": True,
         "langs": {".rb"},
         "severity": "medium",
         "pattern": re.compile(
@@ -674,6 +743,9 @@ RULES = [
     },
     {
         "id": "GL050",
+        # Code shape, not embedded content: a match inside a string literal is
+        # documentation or a fixture, not the pattern. See _blank_strings.
+        "code_only": True,
         "langs": {".rb"},
         "severity": "low",
         "pattern": re.compile(r"\.map\s*(?:\(&:\w+[?!]?\)|\{[^{}]*\})\s*\.(?:flatten|compact)\b"),
@@ -682,6 +754,9 @@ RULES = [
     },
     {
         "id": "GL038",
+        # Code shape, not embedded content: a match inside a string literal is
+        # documentation or a fixture, not the pattern. See _blank_strings.
+        "code_only": True,
         "langs": {".jsx", ".tsx"},
         "severity": "low",
         "pattern": re.compile(r"\w+=\{(?:\(\)\s*=>|\{)"),
@@ -935,6 +1010,100 @@ def _blank_comments(text, path):
         spans.append((i, end))
         i = end
     return _blank_spans(text, spans)
+
+
+# Languages whose string literals are worth blanking before a code-structure
+# rule looks at them. Everything here uses C-style quoting; a language whose
+# quoting rules differ enough to need its own scanner is better served by
+# leaving its strings visible (a false negative) than by a scanner that
+# desynchronises (false positives everywhere after the first mistake).
+_STRING_LANGS = frozenset(
+    {
+        ".c",
+        ".cc",
+        ".cpp",
+        ".h",
+        ".hpp",
+        ".cs",
+        ".go",
+        ".java",
+        ".js",
+        ".jsx",
+        ".kt",
+        ".mjs",
+        ".cjs",
+        ".php",
+        ".py",
+        ".rb",
+        ".rs",
+        ".swift",
+        ".ts",
+        ".tsx",
+    }
+)
+
+# Opening a string, or the end of the line that resynchronises the scan.
+_STRING_OPEN = re.compile(r"[\"'`\n]")
+
+
+def _blank_strings(code, path):
+    """Return `code` with string-literal bodies replaced by spaces.
+
+    Offsets and newlines are preserved, exactly as `_blank_comments` preserves
+    them, so line numbers still point at the real file.
+
+    This is applied ONLY to rules marked `code_only` — those whose pattern
+    describes the shape of the code rather than something embedded in it. The
+    distinction is the whole point: `SELECT * FROM t` in a Go file is *always*
+    inside a string literal and is a real query, while `sleep(0.01)` inside a
+    string is documentation, a test fixture, or a code sample, and reporting it
+    is the false positive this exists to remove.
+
+    Quote state resets at every newline, like the comment scanner, so a
+    multi-line string keeps its contents visible to the rules. That is a false
+    negative, which is the safe direction — a linter that cries wolf gets
+    switched off, and this whole pass exists because of that.
+    """
+    if path.suffix not in _STRING_LANGS:
+        return code
+    # A file with no quote character in it has no strings to blank, and in a
+    # real tree that is a large share of them. Same reasoning as the comment
+    # scanner's substring pre-check.
+    if '"' not in code and "'" not in code and "`" not in code:
+        return code
+
+    spans = []
+    i, n = 0, len(code)
+    while i < n:
+        match = _STRING_OPEN.search(code, i)
+        if match is None:
+            break
+        i = match.start()
+        ch = code[i]
+        if ch == "\n":
+            i += 1
+            continue
+        # An apostrophe between two letters is a contraction, not an opening
+        # quote — the same trap `_blank_comments` documents. Getting this wrong
+        # opens a string that never closes and blanks the rest of the line.
+        if ch == "'" and 0 < i < n - 1 and code[i - 1].isalpha() and code[i + 1].isalpha():
+            i += 1
+            continue
+        start = i + 1
+        j = start
+        while j < n:
+            c = code[j]
+            if c == "\\" and j + 1 < n and code[j + 1] != "\n":
+                j += 2  # an escaped character, including \" and \'
+                continue
+            if c == "\n" or c == ch:
+                break
+            j += 1
+        if j > start:
+            spans.append((start, j))
+        # Past the closing quote, or onto the newline that resynchronises us.
+        i = j + 1 if j < n and code[j] == ch else j
+    return _blank_spans(code, spans)
 
 
 def _blank_python_docstrings(code, index):
@@ -1941,10 +2110,19 @@ def scan_file(path, disabled=frozenset(), text=None):
         "Dockerfile" if path.name == "Dockerfile" else path.suffix, ()
     )
     line_of = _line_indexer(code)
+    # Built once, and only if some enabled rule for this language actually wants
+    # it — blanking strings costs a pass over the file, and most languages have
+    # no code_only rule at all.
+    code_no_strings = None
     for rule in rules:
         if rule["id"] in disabled:
             continue
-        for m in rule["pattern"].finditer(code):
+        view = code
+        if rule.get("code_only"):
+            if code_no_strings is None:
+                code_no_strings = _blank_strings(code, path)
+            view = code_no_strings
+        for m in rule["pattern"].finditer(view):
             yield _finding(rule, path, line_of(m.start()))
 
 
