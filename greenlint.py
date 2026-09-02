@@ -1087,11 +1087,6 @@ def _parse_python(path, text):
         return None
 
 
-# The same boundaries `SCOPE_BOUNDARIES` names, as a set of exact types for the
-# indexing pass — which tests `type(node) in ...` rather than `isinstance`.
-_SCOPE_KINDS = frozenset((ast.FunctionDef, ast.AsyncFunctionDef, ast.Lambda, ast.ClassDef))
-
-
 class PythonIndex:
     """The nodes every Python AST rule needs, collected in one traversal.
 
@@ -1122,6 +1117,55 @@ class PythonIndex:
         self.loop_scopes = set()
 
 
+# One collector per node kind the index cares about, each returning the loop
+# stack and the scope its children are in. A nested def/class/lambda starts a
+# scope of its own, which is the boundary `_walk_own` respects and the one GL007
+# judges names against; everything else leaves both untouched, which is the
+# `collect is None` path in the walk below and by far the commonest one.
+
+
+def _collect_for(index, node, loops, scope):
+    index.fors.append((node, loops))
+    index.loop_scopes.add(scope)
+    return (*loops, node), scope
+
+
+def _collect_while(index, node, loops, scope):
+    index.whiles.append((node, loops))
+    index.loop_scopes.add(scope)
+    return (*loops, node), scope
+
+
+def _collect_try(index, node, loops, scope):
+    index.tries.append((node, loops))
+    return loops, scope
+
+
+def _collect_function(index, node, loops, scope):
+    index.functions.append(node)
+    return loops, node
+
+
+def _collect_class(index, node, loops, scope):
+    index.classes.append(node)
+    return loops, node
+
+
+def _collect_lambda(index, node, loops, scope):
+    return loops, node
+
+
+_COLLECTORS = {
+    ast.For: _collect_for,
+    ast.While: _collect_while,
+    ast.Try: _collect_try,
+    ast.FunctionDef: _collect_function,
+    ast.AsyncFunctionDef: _collect_function,
+    ast.ClassDef: _collect_class,
+    ast.Lambda: _collect_lambda,
+}
+
+
 def index_python(tree):
     """Build a `PythonIndex` from one breadth-first pass.
 
@@ -1130,10 +1174,11 @@ def index_python(tree):
     its nodes in the order it always did.
 
     The child walk is spelled out rather than left to `ast.iter_child_nodes`,
-    which is two nested generators and a `try/except` per node. This is the one
-    place in greenlint that runs tens of millions of times in a real scan — it
-    was 20 of 36 seconds on the standard library — and doing it by hand is ~1.7x
-    faster for the same nodes in the same order.
+    which is two nested generators and a `try/except` per node, and it stays
+    inline rather than becoming a helper: this is the one place in greenlint
+    that runs tens of millions of times in a real scan — it was 20 of 36 seconds
+    on the standard library — and a call plus a list per node costs 13% of a
+    stdlib scan (11.96 s → 13.54 s, five runs each, `make bench`).
     """
     index = PythonIndex(tree)
     queue = deque([(tree, (), tree)])
@@ -1141,29 +1186,16 @@ def index_python(tree):
     push = queue.append
     while queue:
         node, loops, scope = pop()
-        kind = type(node)
         # Exact types, not isinstance: `AsyncFor` and `TryStar` are siblings of
         # `For` and `Try` rather than subclasses, and the rules never matched
         # them. This keeps that true rather than quietly widening them.
-        if kind is ast.For:
-            index.fors.append((node, loops))
-            index.loop_scopes.add(scope)
-            loops = (*loops, node)
-        elif kind is ast.While:
-            index.whiles.append((node, loops))
-            index.loop_scopes.add(scope)
-            loops = (*loops, node)
-        elif kind is ast.Try:
-            index.tries.append((node, loops))
-        elif kind is ast.FunctionDef or kind is ast.AsyncFunctionDef:
-            index.functions.append(node)
-        elif kind is ast.ClassDef:
-            index.classes.append(node)
-        # A nested def/class/lambda starts a scope of its own, which is the
-        # boundary `_walk_own` respects and the one GL007 judges names against.
-        child_scope = node if kind in _SCOPE_KINDS else scope
+        collect = _COLLECTORS.get(type(node))
+        if collect is None:
+            child_scope = scope
+        else:
+            loops, child_scope = collect(index, node, loops, scope)
         # Expressions are not descended into: Python has no expression that can
-        # contain a statement, so none of the five kinds collected above can be
+        # contain a statement, so none of the kinds `_COLLECTORS` names can be
         # inside one. That is most of a syntax tree — every name, call, constant
         # and operator — skipped rather than queued and rejected.
         for name in node._fields:
