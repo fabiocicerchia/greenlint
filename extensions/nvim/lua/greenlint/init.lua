@@ -9,18 +9,17 @@ local commands = require('greenlint.commands')
 local config = require('greenlint.config')
 local core = require('greenlint.core')
 local log = require('greenlint.log')
+local store = require('greenlint.store')
+local triggers = require('greenlint.triggers')
 local ui = require('greenlint.ui')
 
 local M = {}
 
 local cfg = nil
---- absolute path -> findings
-local by_file = {}
 --- Scans in flight, so `:GreenlintCancel` has something to stop. A killed scan
 --- has no answer to give, so its entry carries the flag that keeps its callback
 --- quiet rather than letting it report the kill as a failure.
 local jobs = {}
-local timers = {}
 
 local log_line = log.add
 local notify = ui.notify
@@ -33,9 +32,7 @@ function M.config()
   return cfg
 end
 
-function M.log_text()
-  return log.lines()
-end
+M.log_text = log.lines
 
 function M.root()
   return vim.fs.root(0, { '.greenlint.toml', '.git', '.hg' }) or vim.uv.cwd()
@@ -129,16 +126,6 @@ local function finished(opts, ok)
   end
 end
 
-local function store(path, findings)
-  path = vim.fs.normalize(path)
-  if #findings == 0 then
-    by_file[path] = nil
-  else
-    by_file[path] = findings
-  end
-  ui.render(path, findings, cfg)
-end
-
 --- Scan one file on disk.
 function M.scan_file(path, opts)
   opts = opts or {}
@@ -161,7 +148,7 @@ function M.scan_file(path, opts)
         notify(vim.split(err or 'scan failed', '\n')[1], vim.log.levels.WARN)
       end
     else
-      store(path, findings)
+      store.put(path, findings, cfg)
       log_line('%s: %d finding(s)', relative(path), #findings)
     end
     finished(opts, findings ~= nil)
@@ -199,7 +186,7 @@ local function absorb_buffer_scan(out, buf, path, version)
   for _, finding in ipairs(findings) do
     finding.file = path
   end
-  store(path, findings)
+  store.put(path, findings, cfg)
   log_line('%s (buffer): %d finding(s)', relative(path), #findings)
   return true
 end
@@ -227,30 +214,6 @@ function M.scan_buffer(buf, opts)
   end)
 end
 
---- Everything known about the tree under `root` is now history: the walk that
---- just finished is the whole truth for it, so a file it reached and found
---- nothing in must lose its old findings too.
-local function forget_under(root)
-  for path in pairs(by_file) do
-    if path:sub(1, #root) == root then
-      by_file[path] = nil
-      ui.clear(path)
-    end
-  end
-end
-
---- The findings of a project scan, keyed by the normalised file they name.
-local function group_by_file(findings)
-  local grouped = {}
-  for _, finding in ipairs(findings) do
-    local path = vim.fs.normalize(finding.file)
-    finding.file = path
-    grouped[path] = grouped[path] or {}
-    table.insert(grouped[path], finding)
-  end
-  return grouped
-end
-
 --- Scan the whole project.
 function M.scan_project(opts)
   opts = opts or {}
@@ -268,10 +231,10 @@ function M.scan_project(opts)
       return finished(opts, false)
     end
 
-    forget_under(root)
-    local grouped = group_by_file(findings)
+    store.forget_under(root)
+    local grouped = store.group_by_file(findings)
     for path, list in pairs(grouped) do
-      store(path, list)
+      store.put(path, list, cfg)
     end
     log_line('project: %d finding(s) in %d file(s)', #findings, vim.tbl_count(grouped))
     finished(opts, true)
@@ -280,23 +243,9 @@ end
 
 -- --- what was found ----------------------------------------------------------
 
-function M.findings()
-  local out = {}
-  for _, list in pairs(by_file) do
-    for _, finding in ipairs(list) do
-      out[#out + 1] = finding
-    end
-  end
-  return core.sorted(out)
-end
-
-function M.findings_for(path)
-  return by_file[vim.fs.normalize(path or vim.api.nvim_buf_get_name(0))] or {}
-end
-
-function M.counts()
-  return core.count_by_severity(M.findings())
-end
+M.findings = store.all
+M.findings_for = store.for_path
+M.counts = store.counts
 
 --- A lualine component, or anything else that wants one string.
 function M.statusline()
@@ -309,75 +258,6 @@ function M.statusline()
     return ''
   end
   return string.format('󱄅 %d/%d/%d', counts.high, counts.medium, counts.low)
-end
-
--- --- triggers ----------------------------------------------------------------
-
-local function debounce(key, ms, fn)
-  if timers[key] then
-    timers[key]:stop()
-    timers[key]:close()
-  end
-  local timer = vim.uv.new_timer()
-  timers[key] = timer
-  timer:start(ms, 0, function()
-    timer:stop()
-    timer:close()
-    timers[key] = nil
-    vim.schedule(fn)
-  end)
-end
-
---- Automatic, as opposed to a command: 'manual' means only when asked.
-local function scans_by_itself()
-  return cfg.enabled and cfg.run ~= 'manual'
-end
-
-local function on_write(event)
-  if scans_by_itself() then
-    M.scan_file(event.match, {})
-  end
-end
-
---- A file coming into view: repaint what is already known about it, and scan
---- it only when nothing is.
-local function on_open(event)
-  local path = vim.fs.normalize(event.match)
-  local known = by_file[path]
-  if known then
-    vim.schedule(function()
-      ui.render(path, known, cfg)
-    end)
-  elseif scans_by_itself() and vim.uv.fs_stat(path) then
-    M.scan_file(path, {})
-  end
-end
-
-local function on_edit(event)
-  if not (cfg.enabled and cfg.run == 'on_type') then
-    return
-  end
-  debounce(event.buf, cfg.debounce_ms, function()
-    if vim.api.nvim_buf_is_valid(event.buf) then
-      M.scan_buffer(event.buf, {})
-    end
-  end)
-end
-
---- Which handler answers which events. Both on-type events share one entry:
---- editing in normal mode and editing in insert mode are the same trigger, and
---- two registrations is two places for the guard to drift.
-local TRIGGERS = {
-  { 'BufWritePost', on_write },
-  { { 'BufReadPost', 'BufEnter' }, on_open },
-  { { 'TextChanged', 'TextChangedI' }, on_edit },
-}
-
-local function attach_autocmds()
-  local group = vim.api.nvim_create_augroup('greenlint', { clear = true })
-  for _, trigger in ipairs(TRIGGERS) do
-    vim.api.nvim_create_autocmd(trigger[1], { group = group, callback = trigger[2] })
-  end
 end
 
 -- --- commands ----------------------------------------------------------------
@@ -434,13 +314,7 @@ function M.cancel()
     end
     stopped = stopped + 1
   end
-  local pending = 0
-  for key, timer in pairs(timers) do
-    timer:stop()
-    timer:close()
-    timers[key] = nil
-    pending = pending + 1
-  end
+  local pending = triggers.cancel_pending()
   log_line('cancelled %d scan(s), %d pending', stopped, pending)
   if stopped == 0 and pending == 0 then
     return notify('nothing running.')
@@ -456,7 +330,7 @@ function M.setup(opts)
     ui.clear_all()
     return
   end
-  attach_autocmds()
+  triggers.attach()
   if cfg.scan_project_on_startup then
     vim.schedule(function()
       M.scan_project({})
