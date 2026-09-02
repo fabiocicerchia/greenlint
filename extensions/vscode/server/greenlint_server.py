@@ -260,8 +260,18 @@ class ProjectScan:
     between them.
     """
 
-    __slots__ = ("batch", "counts", "findings", "id", "paths", "reported", "seen",
-                 "started", "stream", "summary")
+    __slots__ = (
+        "batch",
+        "counts",
+        "findings",
+        "id",
+        "paths",
+        "reported",
+        "seen",
+        "started",
+        "stream",
+        "summary",
+    )
 
     def __init__(self, request):
         root = request.get("root")
