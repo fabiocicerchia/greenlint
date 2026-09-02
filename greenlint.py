@@ -1384,6 +1384,32 @@ def _note_numeric(numeric, node):
         numeric.add(node.id)
 
 
+def _scalar_assign_targets(node):
+    """The targets of an assignment whose value is certainly numeric.
+
+    A name *assigned* arithmetic is as numeric as one used in it, and this is
+    the commoner shape: `day = start - (start % DAY)` then `day += DAY` in the
+    loop. Reading only operands left the target of the seed unclassified,
+    because it never appears beside an operator itself.
+    """
+    if not _is_scalar_expr(node.value):
+        return ()
+    return tuple(node.targets) if isinstance(node, ast.Assign) else (node.target,)
+
+
+def _numeric_operands(node):
+    """The sub-expressions this node proves are numeric, or `()` for none."""
+    if isinstance(node, ast.BinOp) and isinstance(node.op, NUMERIC_ONLY_OPS):
+        return (node.left, node.right)
+    if isinstance(node, ast.AugAssign) and isinstance(node.op, NUMERIC_ONLY_OPS):
+        return (node.target,)
+    if isinstance(node, ast.UnaryOp) and isinstance(node.op, (ast.USub, ast.UAdd)):
+        return (node.operand,)
+    if isinstance(node, (ast.Assign, ast.AnnAssign)):
+        return _scalar_assign_targets(node)
+    return ()
+
+
 def _names_used_as_numbers(nodes):
     """Names that arithmetic elsewhere in this scope proves are numeric.
 
@@ -1401,21 +1427,8 @@ def _names_used_as_numbers(nodes):
     """
     numeric = set()
     for node in nodes:
-        if isinstance(node, ast.BinOp) and isinstance(node.op, NUMERIC_ONLY_OPS):
-            _note_numeric(numeric, node.left)
-            _note_numeric(numeric, node.right)
-        elif isinstance(node, ast.AugAssign) and isinstance(node.op, NUMERIC_ONLY_OPS):
-            _note_numeric(numeric, node.target)
-        elif isinstance(node, ast.UnaryOp) and isinstance(node.op, (ast.USub, ast.UAdd)):
-            _note_numeric(numeric, node.operand)
-        # A name *assigned* arithmetic is as numeric as one used in it, and
-        # this is the commoner shape: `day = start - (start % DAY)` then
-        # `day += DAY` in the loop. Reading only operands left the target of
-        # the seed unclassified, because it never appears beside an operator
-        # itself.
-        elif isinstance(node, (ast.Assign, ast.AnnAssign)) and _is_scalar_expr(node.value):
-            for target in node.targets if isinstance(node, ast.Assign) else [node.target]:
-                _note_numeric(numeric, target)
+        for operand in _numeric_operands(node):
+            _note_numeric(numeric, operand)
     return numeric
 
 
@@ -1752,6 +1765,26 @@ NEEDS_FULL_HISTORY = re.compile(
 )
 
 
+def _job_starts(text, body_at):
+    """Offsets where each entry under `jobs:` begins, empty when unsegmentable."""
+    body = text[body_at:]
+    # The first key under `jobs:` sets the indent at which a sibling job starts.
+    first = re.search(r"^([ \t]+)[\w-]+:[ \t]*$", body, re.MULTILINE)
+    if not first:
+        return []
+    return [
+        body_at + m.start()
+        for m in re.finditer(rf"^{re.escape(first.group(1))}[\w-]+:[ \t]*$", body, re.MULTILINE)
+    ]
+
+
+def _bracketing(starts, pos, low, high):
+    """The two `starts` either side of `pos`, falling back to `low` and `high`."""
+    before = [s for s in starts if s <= pos]
+    after = [s for s in starts if s > pos]
+    return (before[-1] if before else low), (after[0] if after else high)
+
+
 def _job_span(text, pos):
     """(start, end) of the `jobs:` entry containing `pos`, or the whole file.
 
@@ -1763,18 +1796,10 @@ def _job_span(text, pos):
     jobs = re.search(r"^jobs:[ \t]*$", text, re.MULTILINE)
     if not jobs or pos < jobs.end():
         return 0, len(text)
-    body = text[jobs.end() :]
-    # The first key under `jobs:` sets the indent at which a sibling job starts.
-    first = re.search(r"^([ \t]+)[\w-]+:[ \t]*$", body, re.MULTILINE)
-    if not first:
+    starts = _job_starts(text, jobs.end())
+    if not starts:
         return 0, len(text)
-    starts = [
-        jobs.end() + m.start()
-        for m in re.finditer(rf"^{re.escape(first.group(1))}[\w-]+:[ \t]*$", body, re.MULTILINE)
-    ]
-    before = [s for s in starts if s <= pos]
-    after = [s for s in starts if s > pos]
-    return (before[-1] if before else jobs.end()), (after[0] if after else len(text))
+    return _bracketing(starts, pos, jobs.end(), len(text))
 
 
 def _fetch_depth_findings(path, text):
