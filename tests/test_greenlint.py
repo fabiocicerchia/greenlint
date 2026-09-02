@@ -5,7 +5,7 @@ from pathlib import Path
 import pytest
 
 import greenlint
-from greenlint import load_config, main, scan
+from greenlint import _blank_strings, load_config, main, scan, scan_file
 
 
 def write(tmp_path, name, content):
@@ -1806,3 +1806,84 @@ def test_a_file_no_rule_targets_is_not_even_read(tmp_path):
         assert list(greenlint.scan_file(f, text="SELECT * FROM t;\n")) == []
     finally:
         f.chmod(0o644)
+
+
+# --- string literals are not code (GL033 follow-up: the false positives) -----
+#
+# The rules are regex over text, and the largest remaining source of noise in
+# JS/Go/Rust was matching the *inside of a string literal*: a code sample in a
+# fixture, a message that quotes the pattern, a SQL string that happens to hold
+# a sleep call. Comments were already blanked; strings were not.
+
+
+def scan_source(tmp_path, name, source):
+    path = tmp_path / name
+    path.write_text(source)
+    return list(scan_file(path))
+
+
+def ids_for(tmp_path, name, source):
+    return sorted(f["rule"] for f in scan_source(tmp_path, name, source))
+
+
+def test_code_shaped_rule_ignores_a_match_inside_a_string(tmp_path):
+    # The pattern quoted in a fixture or an error message is not the pattern.
+    real = ids_for(tmp_path, "a.go", "func f() {\n\ttime.Sleep(10 * time.Millisecond)\n}\n")
+    assert "GL002" in real
+
+    quoted = ids_for(
+        tmp_path, "b.go", 'func f() {\n\tmsg := "time.Sleep(10 * time.Millisecond)"\n}\n'
+    )
+    assert "GL002" not in quoted
+
+
+def test_embedded_content_rules_still_match_inside_strings(tmp_path):
+    # The other half of the distinction, and the reason this is per-rule rather
+    # than a blanket pass: `SELECT * FROM t` in a Go file is ALWAYS inside a
+    # string literal, and it is a real query.
+    found = ids_for(tmp_path, "q.go", 'func f() {\n\tq := "SELECT * FROM users"\n}\n')
+    assert "GL005" in found
+
+
+def test_blank_strings_preserves_offsets_and_lines(tmp_path):
+    # Line numbers are computed against this view, so a byte lost here points
+    # every finding in the file at the wrong line.
+    src = 'a := "one"\nb := "two"\nc := 1\n'
+    out = _blank_strings(src, tmp_path / "x.go")
+    assert len(out) == len(src)
+    assert out.count("\n") == src.count("\n")
+    assert "one" not in out and "two" not in out
+    assert "a :=" in out and "c := 1" in out
+
+
+def test_blank_strings_handles_escaped_quotes(tmp_path):
+    # A mishandled escape closes the string early and leaves the rest of the
+    # line visible — which is the false positive coming straight back.
+    src = 's := "he said \\"sleep(1)\\" loudly"; time.Sleep(1)\n'
+    out = _blank_strings(src, tmp_path / "x.go")
+    assert "he said" not in out
+    assert "time.Sleep(1)" in out  # the real call survives
+
+
+def test_blank_strings_does_not_trip_on_an_apostrophe(tmp_path):
+    # The trap _blank_comments documents: `don't` opening a string that never
+    # closes would blank the rest of the line, hiding real findings.
+    src = "// it's fine\nx := 1; y := 2\n"
+    out = _blank_strings(src, tmp_path / "x.go")
+    assert "x := 1; y := 2" in out
+
+
+def test_blank_strings_leaves_a_language_it_does_not_know(tmp_path):
+    # Better a false negative than a scanner that desynchronises and produces
+    # false positives for the rest of the file.
+    src = 'key: "value"\n'
+    assert _blank_strings(src, tmp_path / "x.yml") == src
+
+
+def test_a_multiline_string_keeps_its_contents_visible(tmp_path):
+    # Quote state resets at the newline, so this is a known false negative —
+    # and it is the safe direction, since a linter that cries wolf is switched
+    # off entirely.
+    src = "s := `\n\ttime.Sleep(1 * time.Millisecond)\n`\n"
+    out = _blank_strings(src, tmp_path / "x.go")
+    assert "time.Sleep" in out

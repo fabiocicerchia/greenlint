@@ -35,6 +35,31 @@ real `sleep()` call reachable from inside the loop body, instead of a
 parser, so an AST-based JS rule would need a new runtime dependency, which
 conflicts with the dependency-free guardrail — still regex for now.
 
+What a parser would have bought the non-Python languages, mostly, is knowing
+which bytes are *code*. Comments were already blanked for that reason;
+`_blank_strings()` does the same for string literals, and rules opt into the
+stripped view with `"code_only": True`. The split is not cosmetic: a rule
+describes either code shape or embedded content, and the two want opposite
+answers inside a quote. `while (true)` in a docstring is documentation, so
+GL002 must not fire on it; `SELECT * FROM t` in a Go file is *always* inside a
+string literal and is a real query, so GL005 must. Roughly two rules in five
+are marked `code_only`; the rest deliberately still see string bodies.
+
+`_blank_strings()` is a small state machine, not a lexer: it tracks single,
+double and backtick quotes, honours backslash escapes, ignores an apostrophe
+between two letters (`don't` in a comment that survived), and resets at every
+newline so an unbalanced quote costs one line rather than the rest of the file.
+It replaces contents with spaces and keeps newlines, so offsets — and therefore
+reported line numbers — are unchanged, the same contract the comment blanker
+already had. Languages it does not know about are returned untouched rather
+than guessed at. It is computed lazily and once per file, so a scan with no
+`code_only` rule enabled pays nothing.
+
+This is emphatically not an AST. It does not know a raw string from a normal
+one, a Python triple-quote spans lines it will not follow, and a rule that
+wants scope or types still cannot have them. It removes one class of false
+positive — the largest one — at regex cost.
+
 A `RULES` entry may set `pattern: None` when the check needs whole-file or
 whole-resource-block context a single regex match can't express — mostly
 rules that look for the *absence* of a keyword (GL013/GL014/GL024/GL026/
