@@ -25,6 +25,10 @@ SERVER_PATH = (
 
 
 def load_server_module():
+    # Run as a script -- which is how the extension starts it -- the interpreter
+    # puts the server's directory on sys.path itself, so `greenlint_api` and its
+    # siblings resolve. Loading it by file path does not, so say it here.
+    sys.path.insert(0, str(SERVER_PATH.parent))
     spec = importlib.util.spec_from_file_location("greenlint_server", SERVER_PATH)
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
