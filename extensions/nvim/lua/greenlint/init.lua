@@ -114,6 +114,21 @@ local function decode(out)
   return value, nil
 end
 
+--- Argv for a scan of `paths`, with the project's config and baseline when it
+--- has them. Looked up per scan rather than at setup: either file can appear,
+--- change or go while the session is open.
+local function scan_argv_for(paths)
+  return core.scan_argv(cfg, paths, { config = config_path(), baseline = baseline_path() })
+end
+
+--- Tell the caller how it went, when it asked. Every scan ends here, so the
+--- callback cannot be forgotten on one branch and remembered on another.
+local function finished(opts, ok)
+  if opts.on_done then
+    opts.on_done(ok)
+  end
+end
+
 local function store(path, findings)
   path = vim.fs.normalize(path)
   if #findings == 0 then
@@ -135,13 +150,10 @@ function M.scan_file(path, opts)
   local stat = vim.uv.fs_stat(path)
   if stat and stat.size > cfg.max_file_bytes then
     log_line('%s: %d bytes, over the cap', relative(path), stat.size)
-    if opts.on_done then
-      opts.on_done(true)
-    end
-    return
+    return finished(opts, true)
   end
 
-  run(core.scan_argv(cfg, { path }, { config = config_path(), baseline = baseline_path() }), function(out)
+  run(scan_argv_for({ path }), function(out)
     local findings, err = decode(out)
     if not findings then
       log_line('%s: %s', relative(path), (err or ''):gsub('%s+$', ''))
@@ -152,9 +164,7 @@ function M.scan_file(path, opts)
       store(path, findings)
       log_line('%s: %d finding(s)', relative(path), #findings)
     end
-    if opts.on_done then
-      opts.on_done(findings ~= nil)
-    end
+    finished(opts, findings ~= nil)
   end)
 end
 
@@ -182,32 +192,24 @@ function M.scan_buffer(buf, opts)
   vim.fn.writefile(lines, temp)
 
   local version = vim.api.nvim_buf_get_var and vim.b[buf].changedtick or nil
-  run(core.scan_argv(cfg, { temp }, { config = config_path(), baseline = baseline_path() }), function(out)
+  run(scan_argv_for({ temp }), function(out)
     pcall(vim.fn.delete, dir, 'rf')
     local findings, err = decode(out)
     if not findings then
       log_line('%s (buffer): %s', relative(path), (err or ''):gsub('%s+$', ''))
-      if opts.on_done then
-        opts.on_done(false)
-      end
-      return
+      return finished(opts, false)
     end
     -- A newer edit landed while this was in flight; its scan is already
     -- scheduled and this answer describes text nobody is looking at.
     if vim.api.nvim_buf_is_valid(buf) and version and vim.b[buf].changedtick ~= version then
-      if opts.on_done then
-        opts.on_done(false)
-      end
-      return
+      return finished(opts, false)
     end
     for _, finding in ipairs(findings) do
       finding.file = path
     end
     store(path, findings)
     log_line('%s (buffer): %d finding(s)', relative(path), #findings)
-    if opts.on_done then
-      opts.on_done(true)
-    end
+    finished(opts, true)
   end)
 end
 
@@ -218,17 +220,14 @@ function M.scan_project(opts)
     return
   end
   local root = M.root()
-  run(core.scan_argv(cfg, { root }, { config = config_path(), baseline = baseline_path() }), function(out)
+  run(scan_argv_for({ root }), function(out)
     local findings, err = decode(out)
     if not findings then
       log_line('project: %s', (err or ''):gsub('%s+$', ''))
       if opts.notify then
         notify(vim.split(err or 'scan failed', '\n')[1], vim.log.levels.WARN)
       end
-      if opts.on_done then
-        opts.on_done(false)
-      end
-      return
+      return finished(opts, false)
     end
 
     -- A whole-project scan is the whole truth for the tree it walked, so files
@@ -250,9 +249,7 @@ function M.scan_project(opts)
       store(path, list)
     end
     log_line('project: %d finding(s) in %d file(s)', #findings, vim.tbl_count(grouped))
-    if opts.on_done then
-      opts.on_done(true)
-    end
+    finished(opts, true)
   end)
 end
 
