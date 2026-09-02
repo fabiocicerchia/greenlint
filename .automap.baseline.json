@@ -1,0 +1,28 @@
+{
+  "components": {
+    "examples": {
+      "fan_in": 0,
+      "fan_out": 0,
+      "modules": 1
+    },
+    "extensions": {
+      "fan_in": 0,
+      "fan_out": 1,
+      "modules": 11
+    },
+    "greenlint": {
+      "fan_in": 1,
+      "fan_out": 0,
+      "modules": 1
+    }
+  },
+  "cycles": [],
+  "edges": [
+    "extensions -> greenlint"
+  ],
+  "external": [
+    "vscode"
+  ],
+  "version": "2.0",
+  "violations": []
+}
