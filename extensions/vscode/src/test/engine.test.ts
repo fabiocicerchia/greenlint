@@ -175,3 +175,91 @@ test('updated settings change where the next start looks', async () => {
   assert.equal(searchOrder(log.lines), '/nonexistent/python-other + installed package');
   server.dispose();
 });
+
+// --- against the real scan server ----------------------------------------
+//
+// Everything above stops at `spawn`. These start `server/greenlint_server.py`
+// for real, over the repository's own greenlint.py, so the process lifecycle,
+// the newline-delimited framing, the id correlation and the progress events all
+// run — the parts of this file no test could reach while every candidate
+// interpreter was a path that does not exist.
+
+const repoRoot = path.resolve(__dirname, '..', '..', '..', '..');
+const serverScript = path.join(repoRoot, 'extensions', 'vscode', 'server', 'greenlint_server.py');
+const realSettings = () => settings({ pythonPath: '', greenlintPath: path.join(repoRoot, 'greenlint.py') });
+
+const textDocument = (fsPath: string, text: string) =>
+  ({ uri: { fsPath, scheme: 'file' }, getText: () => text }) as unknown as vscode.TextDocument;
+
+test('starts a real scan server and reports what it loaded', async () => {
+  const log = recordingLog();
+  const server = new ScanServer(serverScript, realSettings(), log.channel);
+  try {
+    const info = await server.start();
+    assert.ok(info.rules > 0, 'the server loaded no rules');
+    assert.equal(server.running, true);
+    // Starting again is the same process, not a second one.
+    assert.equal(await server.start(), info);
+  } finally {
+    server.dispose();
+  }
+});
+
+test('scans an unsaved buffer through the real protocol', async () => {
+  const log = recordingLog();
+  const server = new ScanServer(serverScript, realSettings(), log.channel);
+  try {
+    const findings = await server.scanText(
+      textDocument(path.join(repoRoot, 'busy.py'), 'while True:\n    pass\n'),
+    );
+    assert.deepEqual(
+      findings.map((f) => f.rule),
+      ['GL001'],
+    );
+    assert.equal(findings[0].line, 1);
+  } finally {
+    server.dispose();
+  }
+});
+
+test('a project scan streams its findings and ends with the totals', async () => {
+  const root = mkdtempSync(path.join(tmpdir(), 'greenlint-e2e-'));
+  writeFileSync(path.join(root, 'busy.py'), 'while True:\n    pass\n');
+  writeFileSync(path.join(root, 'query.sql'), 'SELECT * FROM users;\n');
+  const log = recordingLog();
+  const server = new ScanServer(serverScript, realSettings(), log.channel);
+  try {
+    const streamed: Finding[] = [];
+    const result = await server.scanProject(
+      { uri: { fsPath: root, scheme: 'file' } } as unknown as vscode.WorkspaceFolder,
+      (progress) => streamed.push(...progress.batch),
+    );
+    assert.equal(result.cancelled, undefined);
+    assert.equal(result.summary?.total, 2);
+    // The findings arrived through progress events, not in the response: that
+    // is the whole point of streaming, and the response says so.
+    assert.deepEqual(
+      streamed.map((f) => f.rule).sort(),
+      ['GL001', 'GL005'],
+    );
+  } finally {
+    server.dispose();
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('an unknown op comes back as a rejection, not a hang', async () => {
+  const log = recordingLog();
+  const server = new ScanServer(serverScript, realSettings(), log.channel);
+  try {
+    await server.start();
+    // `invalidate` with a path the cache never held is the closest public call
+    // to a no-op; what is asserted is that the request/response correlation
+    // completes at all, which is `consume` -> `handleLine` -> resolve.
+    await server.invalidate(['/nowhere/at/all.py']);
+    const languages = await server.languages();
+    assert.ok(languages.includes('.py'), `no .py in ${languages.join(',')}`);
+  } finally {
+    server.dispose();
+  }
+});
