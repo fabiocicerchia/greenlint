@@ -227,7 +227,9 @@ test('scans an unsaved buffer through the real protocol', async () => {
 test('a project scan streams its findings and ends with the totals', async () => {
   const root = mkdtempSync(path.join(tmpdir(), 'greenlint-e2e-'));
   writeFileSync(path.join(root, 'busy.py'), 'while True:\n    pass\n');
-  writeFileSync(path.join(root, 'query.sql'), 'SELECT * FROM users;\n');
+  // GL003 rather than a SQL fixture: `SELECT *` in this file would be a real
+  // finding in this repository, and greenlint gates its own pre-commit run.
+  writeFileSync(path.join(root, 'nightly.yml'), "on:\n  schedule:\n    - cron: '* * * * *'\n");
   const log = recordingLog();
   const server = new ScanServer(serverScript, realSettings(), log.channel);
   try {
@@ -242,7 +244,7 @@ test('a project scan streams its findings and ends with the totals', async () =>
     // is the whole point of streaming, and the response says so.
     assert.deepEqual(
       streamed.map((f) => f.rule).sort(),
-      ['GL001', 'GL005'],
+      ['GL001', 'GL003'],
     );
   } finally {
     server.dispose();
