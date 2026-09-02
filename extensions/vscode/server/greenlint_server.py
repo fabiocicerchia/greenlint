@@ -50,6 +50,7 @@ import time
 from collections import OrderedDict
 from importlib import metadata
 from pathlib import Path
+from typing import ClassVar
 
 PROTOCOL_VERSION = 1
 DEFAULT_CACHE_ENTRIES = 4096
@@ -623,7 +624,7 @@ class Server:
 
     # The protocol's operations, in the order the docs list them. One method per
     # op with the same signature, so adding one is a method and a row here.
-    OPS = {
+    OPS: ClassVar[dict] = {
         "ping": op_ping,
         "languages": op_languages,
         "scanText": op_scan_text,
