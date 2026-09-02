@@ -850,6 +850,60 @@ def _comment_scanners(line_tok, block):
     return outside, inside
 
 
+def _step_in_string(text, i, quote, inside):
+    """Advance past the next character that can close the string open at `i`.
+
+    Returns the offset to resume from and the quote still open — None once the
+    string closed — or `(None, None)` when nothing can close it before EOF.
+    """
+    match = inside[quote].search(text, i)
+    if match is None:
+        return None, None
+    i = match.start()
+    ch = text[i]
+    if ch == "\\":
+        # A trailing backslash is a line continuation, not an escape of the
+        # newline we use to resynchronise.
+        if i + 1 < len(text) and text[i + 1] != "\n":
+            i += 1
+        return i + 1, quote
+    # A newline resets the tracking; anything else here is the closing quote.
+    return i + 1, None
+
+
+def _is_apostrophe(text, i):
+    """True for the `'` in don't / it's / won't — a letter either side of it."""
+    return 0 < i < len(text) - 1 and text[i - 1].isalpha() and text[i + 1].isalpha()
+
+
+def _step_outside_string(text, i, outside, line_tok, block):
+    """Advance to the next string opener or comment at or after `i`.
+
+    Returns the offset to resume from, the quote now open (None when the stop
+    was a comment) and the comment's span to blank (None when it was a quote).
+    `(None, None, None)` means nothing interesting is left in the file.
+    """
+    n = len(text)
+    while True:
+        match = outside.search(text, i)
+        if match is None:
+            return None, None, None
+        i = match.start()
+        ch = text[i]
+        if ch in "\"'":
+            if ch == "'" and _is_apostrophe(text, i):
+                i += 1
+                continue
+            return i + 1, ch, None
+        if text.startswith(line_tok, i):
+            end = text.find("\n", i)
+            end = n if end == -1 else end
+            return end, None, (i, end)
+        end = text.find(block[1], i + len(block[0]))
+        end = n if end == -1 else end + len(block[1])
+        return end, None, (i, end)
+
+
 def _blank_comments(text, path):
     """Return `text` with comment bodies replaced by spaces.
 
@@ -896,44 +950,13 @@ def _blank_comments(text, path):
     i, n, quote = 0, len(text), None
     while i < n:
         if quote:
-            match = inside[quote].search(text, i)
-            if match is None:
-                break
-            i = match.start()
-            ch = text[i]
-            if ch == "\n":
-                quote = None
-            elif ch == "\\":
-                # A trailing backslash is a line continuation, not an escape of
-                # the newline we use to resynchronise.
-                if i + 1 < n and text[i + 1] != "\n":
-                    i += 1
-            else:  # the closing quote
-                quote = None
-            i += 1
-            continue
-        match = outside.search(text, i)
-        if match is None:
+            i, quote = _step_in_string(text, i, quote, inside)
+        else:
+            i, quote, span = _step_outside_string(text, i, outside, line_tok, block)
+            if span is not None:
+                spans.append(span)
+        if i is None:
             break
-        i = match.start()
-        ch = text[i]
-        if ch in "\"'":
-            if ch == "'" and 0 < i < n - 1 and text[i - 1].isalpha() and text[i + 1].isalpha():
-                i += 1  # don't / it's / won't
-                continue
-            quote = ch
-            i += 1
-            continue
-        if text.startswith(line_tok, i):
-            end = text.find("\n", i)
-            end = n if end == -1 else end
-            spans.append((i, end))
-            i = end
-            continue
-        end = text.find(block[1], i + len(block[0]))
-        end = n if end == -1 else end + len(block[1])
-        spans.append((i, end))
-        i = end
     return _blank_spans(text, spans)
 
 
