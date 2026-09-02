@@ -489,86 +489,117 @@ class Server:
 
     # --- dispatch --------------------------------------------------------
 
-    def handle(self, request):
-        op = request.get("op")
-        if op == "ping":
-            return {
-                "protocol": PROTOCOL_VERSION,
-                "version": greenlint_version(self.gl),
-                "rules": len(self.gl.RULES),
-                "python": sys.version.split()[0],
-                "module": getattr(self.gl, "__file__", None),
-                # The client merges findings from several scans and has to sort
-                # the merged list itself. The *order* is greenlint's to decide,
-                # so it is published rather than reinvented over there — and a
-                # severity added here needs no change in the extension.
-                "severityOrder": dict(self.gl.SEVERITY_ORDER),
-            }
-        if op == "languages":
-            # Just the extensions, not the rule table: the client uses this to
-            # avoid sending a buffer no rule would look at, and nothing else.
-            return {
-                "extensions": sorted({lang for rule in self.gl.RULES for lang in rule["langs"]})
-            }
-        if op == "scanText":
-            config = self.config_for(request.get("root"))
-            path = Path(request["path"])
-            findings = self.scan_text(path, request.get("text", ""), config)
-            return {"findings": self.accepted(findings, config)}
-        if op == "scanFile":
-            config = self.config_for(request.get("root"))
-            max_bytes = request.get("maxFileBytes", DEFAULT_MAX_FILE_BYTES)
-            found, how = self.scan_path(Path(request["path"]), config, max_bytes)
-            return {"findings": self.accepted(found, config), "source": how}
-        if op == "scanProject":
-            return self.scan_project(request)
-        if op == "configure":
-            ignore = [str(pattern) for pattern in request.get("ignore") or []]
-            if ignore != self.extra_ignore:
-                self.extra_ignore = ignore
-                self.ignore_generation += 1
-                self.configs.clear()
-                self.cache.clear()
-            return {"ignore": self.extra_ignore}
-        if op == "writeBaseline":
-            root = request.get("root")
-            config = self.config_for(root)
-            # Scanned rather than taken from the client: the baseline has to
-            # describe the tree, not whatever the panel happens to be showing,
-            # and the cache makes this nearly free straight after a scan.
-            findings = []
-            for path in self.gl.iter_files([root], config):
-                found, _ = self.scan_path(path, config, DEFAULT_MAX_FILE_BYTES)
-                findings.extend(found)
-            target = Path(root) / self.gl.BASELINE_FILENAME
-            count = self.gl.write_baseline(target, findings, target.parent)
+    def op_ping(self, request):
+        """Protocol and build identity, and the ordering the client sorts by."""
+        return {
+            "protocol": PROTOCOL_VERSION,
+            "version": greenlint_version(self.gl),
+            "rules": len(self.gl.RULES),
+            "python": sys.version.split()[0],
+            "module": getattr(self.gl, "__file__", None),
+            # The client merges findings from several scans and has to sort
+            # the merged list itself. The *order* is greenlint's to decide,
+            # so it is published rather than reinvented over there — and a
+            # severity added here needs no change in the extension.
+            "severityOrder": dict(self.gl.SEVERITY_ORDER),
+        }
+
+    def op_languages(self, request):
+        """The suffixes some rule targets, so the client can skip the rest."""
+        # Just the extensions, not the rule table: the client uses this to
+        # avoid sending a buffer no rule would look at, and nothing else.
+        return {"extensions": sorted({lang for rule in self.gl.RULES for lang in rule["langs"]})}
+
+    def op_scan_text(self, request):
+        """Scan a buffer the editor holds, saved or not."""
+        config = self.config_for(request.get("root"))
+        path = Path(request["path"])
+        findings = self.scan_text(path, request.get("text", ""), config)
+        return {"findings": self.accepted(findings, config)}
+
+    def op_scan_file(self, request):
+        """Scan one file on disk, answering from the cache where it can."""
+        config = self.config_for(request.get("root"))
+        max_bytes = request.get("maxFileBytes", DEFAULT_MAX_FILE_BYTES)
+        found, how = self.scan_path(Path(request["path"]), config, max_bytes)
+        return {"findings": self.accepted(found, config), "source": how}
+
+    def op_configure(self, request):
+        """Take the client's ignore globs; a change invalidates every cache."""
+        ignore = [str(pattern) for pattern in request.get("ignore") or []]
+        if ignore != self.extra_ignore:
+            self.extra_ignore = ignore
+            self.ignore_generation += 1
             self.configs.clear()
-            return {"path": str(target), "accepted": count}
-        if op == "invalidate":
-            paths = request.get("paths")
-            if paths:
-                for path in paths:
-                    self.cache.drop(str(path))
-            else:
-                self.cache.clear()
-                self.configs.clear()
-            return {"cache": self.cache.stats()}
-        if op == "cancel":
-            target = request.get("cancel")
-            if target is None:
-                return {"cancelling": False}
-            self.cancelled.add(target)
-            # A scan can be cancelled while it is still queued — `pump` defers
-            # one project scan behind another — so this cannot be limited to the
-            # running one. What it can do is forget the ids that name no scan at
-            # all, which is what a cancel arriving just after its scan finished
-            # leaves behind.
-            pending = {d.get("id") for d in self.deferred if d.get("id") is not None}
-            if self.active_scan is not None:
-                pending.add(self.active_scan)
-            self.cancelled &= pending
-            return {"cancelling": target in self.cancelled}
-        raise ValueError(f"unknown op: {op!r}")
+            self.cache.clear()
+        return {"ignore": self.extra_ignore}
+
+    def op_write_baseline(self, request):
+        """Accept every finding in the tree into `.greenlint-baseline.json`."""
+        root = request.get("root")
+        config = self.config_for(root)
+        # Scanned rather than taken from the client: the baseline has to
+        # describe the tree, not whatever the panel happens to be showing,
+        # and the cache makes this nearly free straight after a scan.
+        findings = []
+        for path in self.gl.iter_files([root], config):
+            found, _ = self.scan_path(path, config, DEFAULT_MAX_FILE_BYTES)
+            findings.extend(found)
+        target = Path(root) / self.gl.BASELINE_FILENAME
+        count = self.gl.write_baseline(target, findings, target.parent)
+        self.configs.clear()
+        return {"path": str(target), "accepted": count}
+
+    def op_invalidate(self, request):
+        """Drop the named paths from the cache, or the whole of it."""
+        paths = request.get("paths")
+        if paths:
+            for path in paths:
+                self.cache.drop(str(path))
+        else:
+            self.cache.clear()
+            self.configs.clear()
+        return {"cache": self.cache.stats()}
+
+    def op_cancel(self, request):
+        """Mark a scan cancelled, whether it is running or still queued."""
+        target = request.get("cancel")
+        if target is None:
+            return {"cancelling": False}
+        self.cancelled.add(target)
+        # A scan can be cancelled while it is still queued — `pump` defers
+        # one project scan behind another — so this cannot be limited to the
+        # running one. What it can do is forget the ids that name no scan at
+        # all, which is what a cancel arriving just after its scan finished
+        # leaves behind.
+        pending = {d.get("id") for d in self.deferred if d.get("id") is not None}
+        if self.active_scan is not None:
+            pending.add(self.active_scan)
+        self.cancelled &= pending
+        return {"cancelling": target in self.cancelled}
+
+    # The protocol's operations, in the order the docs list them. One method per
+    # op with the same signature, so adding one is a method and a row here.
+    OPS = {
+        "ping": op_ping,
+        "languages": op_languages,
+        "scanText": op_scan_text,
+        "scanFile": op_scan_file,
+        "scanProject": scan_project,
+        "configure": op_configure,
+        "writeBaseline": op_write_baseline,
+        "invalidate": op_invalidate,
+        "cancel": op_cancel,
+    }
+
+    def handle(self, request):
+        """Run the method implementing this request's `op`."""
+        op = request.get("op")
+        try:
+            handler = self.OPS[op]
+        except (KeyError, TypeError):  # missing, misspelled, or not a string
+            raise ValueError(f"unknown op: {op!r}") from None
+        return handler(self, request)
 
     def parse(self, line):
         try:
