@@ -143,6 +143,16 @@ def digest(text):
     return hashlib.blake2b(text.encode("utf-8", "replace"), digest_size=16).hexdigest()
 
 
+def mtime(path):
+    """A path's modification stamp, or None when there is nothing to stat."""
+    if path is None:
+        return None
+    try:
+        return path.stat().st_mtime_ns
+    except OSError:
+        return None
+
+
 class FindingCache:
     """Bounded LRU of per-file scan results.
 
@@ -241,6 +251,61 @@ class RunningSummary:
         }
 
 
+class ProjectScan:
+    """One walk in progress: what has been seen, found and reused so far.
+
+    A record rather than locals so the walk, the progress event and the final
+    response can each be their own function without passing eight arguments
+    between them.
+    """
+
+    __slots__ = ("batch", "counts", "findings", "id", "paths", "reported", "seen",
+                 "started", "stream", "summary")
+
+    def __init__(self, request):
+        root = request.get("root")
+        self.id = request.get("id")
+        self.paths = request.get("paths") or ([root] if root else ["."])
+        self.stream = bool(request.get("stream"))
+        self.started = time.perf_counter()
+        self.reported = self.started
+        self.seen = 0
+        self.counts = {"stat": 0, "hash": 0, "scan": 0, "skip": 0}
+        self.batch = []
+        # Kept only when the client is not streaming. A streamed scan has
+        # already handed every finding over, so holding a second copy of a large
+        # tree's findings here — and sorting it — is work for a list nobody
+        # reads. The summary is accumulated instead.
+        self.findings = []
+        self.summary = RunningSummary()
+
+    def add(self, found):
+        if not found:
+            return
+        self.summary.add(found)
+        if not self.stream:
+            self.findings.extend(found)
+        self.batch.extend(found)
+
+    def result(self, cache_stats):
+        return {
+            # Streaming already delivered these one batch at a time; sending
+            # them again would double the cost of the thing being optimised.
+            "findings": self.findings,
+            "streamed": self.stream,
+            "summary": self.summary.result(),
+            "stats": {
+                "files": self.seen,
+                "reusedFromStat": self.counts["stat"],
+                "reusedFromHash": self.counts["hash"],
+                "scanned": self.counts["scan"],
+                "skipped": self.counts["skip"],
+                "ms": round((time.perf_counter() - self.started) * 1000),
+                "cache": cache_stats,
+            },
+        }
+
+
 class Server:
     def __init__(self, gl, out, cache_entries=DEFAULT_CACHE_ENTRIES):
         self.gl = gl
@@ -296,34 +361,40 @@ class Server:
         """
         cfg_path = Path(root) / self.gl.CONFIG_FILENAME if root else None
         base_path = Path(root) / self.gl.BASELINE_FILENAME if root else None
-        try:
-            stamp = cfg_path.stat().st_mtime_ns if cfg_path else None
-        except OSError:
-            stamp = None
-        try:
-            base_stamp = base_path.stat().st_mtime_ns if base_path else None
-        except OSError:
-            base_stamp = None
+        stamp = mtime(cfg_path)
+        key = (stamp, mtime(base_path), self.ignore_generation)
         cached = self.configs.get(root)
-        if cached is not None and cached[0] == (stamp, base_stamp, self.ignore_generation):
+        if cached is not None and cached[0] == key:
             return cached[1]
+        config = self.merged_config(cfg_path, stamp, base_path)
+        self.drop_cache_if_rules_moved(config)
+        self.configs[root] = (key, config)
+        return config
+
+    def merged_config(self, cfg_path, stamp, base_path):
+        """`.greenlint.toml` plus the client's excludes, plus the baseline.
+
+        The client's excludes are merged in rather than applied separately, so
+        every path that consults `ignore` — the walk's directory pruning, a
+        single buffer scan — honours them without knowing they came from
+        somewhere else.
+        """
         if cfg_path is not None and stamp is not None:
             config = self.gl.load_config(str(cfg_path))
         else:
             config = {"disable": set(), "ignore": []}
-        # The client's excludes are merged in rather than applied separately,
-        # so every path that consults `ignore` — the walk's directory pruning,
-        # a single buffer scan — honours them without knowing they came from
-        # somewhere else.
-        config = {
+        return {
             "disable": config["disable"],
             "ignore": [*config["ignore"], *self.extra_ignore],
-            # Not part of the cache fingerprint below: findings are cached
-            # unfiltered and the baseline is applied on the way out, so
-            # accepting a finding costs a repaint rather than a rescan.
+            # Not part of the fingerprint below: findings are cached unfiltered
+            # and the baseline is applied on the way out, so accepting a
+            # finding costs a repaint rather than a rescan.
             "baseline": self.gl.load_baseline(base_path) if base_path else set(),
             "baseline_root": base_path.parent if base_path else None,
         }
+
+    def drop_cache_if_rules_moved(self, config):
+        """Empty the finding cache when what a scan would report has changed."""
         fingerprint = digest(
             json.dumps(
                 {"disable": sorted(config["disable"]), "ignore": list(config["ignore"])},
@@ -333,8 +404,6 @@ class Server:
         if fingerprint != self.config_fingerprint:
             self.cache.clear()
             self.config_fingerprint = fingerprint
-        self.configs[root] = ((stamp, base_stamp, self.ignore_generation), config)
-        return config
 
     # --- scanning --------------------------------------------------------
 
@@ -397,6 +466,43 @@ class Server:
         self.cache.put(key, content_hash, findings, stat_stamp=stamp)
         return findings, "scan"
 
+    def report_progress(self, scan):
+        """Say how far the walk has got, and hand over the batch when streaming.
+
+        Not just for the progress bar: silence is the difference between a
+        client waiting on a scan and a client waiting on nothing, which look
+        identical from outside until one of them times out.
+        """
+        self.send(
+            {
+                "id": scan.id,
+                "event": "progress",
+                "files": scan.seen,
+                "found": scan.summary.total,
+                "batch": scan.batch if scan.stream else [],
+            }
+        )
+        scan.batch.clear()
+
+    def walk(self, scan, config, max_bytes):
+        """Scan every file under the request's paths. True if it was cancelled."""
+        for path in self.gl.iter_files(scan.paths, config):
+            scan.seen += 1
+            if scan.seen % INTERLEAVE_EVERY == 0:
+                # A full scan must not hold the editor hostage: buffer scans
+                # and cancellations are answered between batches of files.
+                self.pump()
+                if scan.id in self.cancelled:
+                    return True
+                now = time.perf_counter()
+                if now - scan.reported >= PROGRESS_INTERVAL_S:
+                    scan.reported = now
+                    self.report_progress(scan)
+            found, how = self.scan_path(path, config, max_bytes)
+            scan.counts[how] += 1
+            scan.add(self.accepted(found, config))
+        return False
+
     def scan_project(self, request):
         """Walk the tree, reporting findings as they are made.
 
@@ -406,86 +512,23 @@ class Server:
         the end. The final response then carries the totals and not the findings
         again — a large scan should cross the pipe once, not twice.
         """
-        root = request.get("root")
-        paths = request.get("paths") or ([root] if root else ["."])
-        max_bytes = request.get("maxFileBytes", DEFAULT_MAX_FILE_BYTES)
-        stream = bool(request.get("stream"))
-        config = self.config_for(root)
-        started = time.perf_counter()
-        # Kept only when the client is not streaming. A streamed scan has
-        # already handed every finding over, so holding a second copy of a large
-        # tree's findings here — and sorting it — is work for a list nobody
-        # reads. The summary is accumulated instead.
-        findings = []
-        summary = RunningSummary()
-        batch = []
-        counts = {"stat": 0, "hash": 0, "scan": 0, "skip": 0}
-        seen = 0
-        reported = started
-
-        def report():
-            # Not just for the progress bar: silence is the difference between
-            # a client waiting on a scan and a client waiting on nothing, which
-            # look identical from outside until one of them times out.
-            self.send(
-                {
-                    "id": request.get("id"),
-                    "event": "progress",
-                    "files": seen,
-                    "found": summary.total,
-                    "batch": batch if stream else [],
-                }
-            )
-            batch.clear()
-
-        scan_id = request.get("id")
-        self.active_scan = scan_id
+        config = self.config_for(request.get("root"))
+        scan = ProjectScan(request)
+        self.active_scan = scan.id
         try:
             # Cancelled while it was still queued behind another scan.
-            if scan_id in self.cancelled:
-                return {"cancelled": True, "findings": []}
-            for path in self.gl.iter_files(paths, config):
-                seen += 1
-                if seen % INTERLEAVE_EVERY == 0:
-                    # A full scan must not hold the editor hostage: buffer scans
-                    # and cancellations are answered between batches of files.
-                    self.pump()
-                    if scan_id in self.cancelled:
-                        return {"cancelled": True, "findings": []}
-                    now = time.perf_counter()
-                    if now - reported >= PROGRESS_INTERVAL_S:
-                        reported = now
-                        report()
-                found, how = self.scan_path(path, config, max_bytes)
-                counts[how] += 1
-                found = self.accepted(found, config)
-                if found:
-                    summary.add(found)
-                    if not stream:
-                        findings.extend(found)
-                    batch.extend(found)
+            cancelled = scan.id in self.cancelled or self.walk(
+                scan, config, request.get("maxFileBytes", DEFAULT_MAX_FILE_BYTES)
+            )
         finally:
             self.active_scan = None
-            self.cancelled.discard(scan_id)
-        if stream and batch:
-            report()  # whatever the last interval did not cover
-        findings.sort(key=self.gl.finding_sort_key)
-        return {
-            # Streaming already delivered these one batch at a time; sending
-            # them again would double the cost of the thing being optimised.
-            "findings": findings,
-            "streamed": stream,
-            "summary": summary.result(),
-            "stats": {
-                "files": seen,
-                "reusedFromStat": counts["stat"],
-                "reusedFromHash": counts["hash"],
-                "scanned": counts["scan"],
-                "skipped": counts["skip"],
-                "ms": round((time.perf_counter() - started) * 1000),
-                "cache": self.cache.stats(),
-            },
-        }
+            self.cancelled.discard(scan.id)
+        if cancelled:
+            return {"cancelled": True, "findings": []}
+        if scan.stream and scan.batch:
+            self.report_progress(scan)  # whatever the last interval did not cover
+        scan.findings.sort(key=self.gl.finding_sort_key)
+        return scan.result(self.cache.stats())
 
     # --- dispatch --------------------------------------------------------
 
