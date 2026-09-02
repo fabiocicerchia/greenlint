@@ -1069,6 +1069,60 @@ _STRING_LANGS = frozenset(
 _STRING_OPEN = re.compile(r"[\"'`\n]")
 
 
+def _no_strings_to_blank(code, path):
+    """True when this file cannot gain from blanking its strings.
+
+    Either its language has no C-style quoting, or it holds no quote character
+    at all — in a real tree that is a large share of the files. Same reasoning
+    as the comment scanner's substring pre-check.
+    """
+    return path.suffix not in _STRING_LANGS or (
+        '"' not in code and "'" not in code and "`" not in code
+    )
+
+
+def _string_end(code, i, quote):
+    """Offset of the character that ends the literal whose body starts at `i`.
+
+    A backslash escapes the next character; a newline ends the scan without
+    closing the literal, which is what stops one mistake desynchronising the
+    rest of the file.
+    """
+    n = len(code)
+    while i < n:
+        ch = code[i]
+        if ch == "\\" and i + 1 < n and code[i + 1] != "\n":
+            i += 2  # an escaped character, including \" and \'
+            continue
+        if ch == "\n" or ch == quote:
+            break
+        i += 1
+    return i
+
+
+def _step_to_string_end(code, i):
+    """Advance past the next string literal at or after `i`.
+
+    Returns where to resume and the span to blank — `(None, None)` when nothing
+    is left, and `(next_i, None)` for a character that opens no literal.
+    """
+    match = _STRING_OPEN.search(code, i)
+    if match is None:
+        return None, None
+    i = match.start()
+    quote = code[i]
+    # A newline only resynchronises the scan, and an apostrophe between two
+    # letters is a contraction rather than an opening quote — the same trap
+    # `_blank_comments` documents. Getting either wrong opens a string that
+    # never closes and blanks the rest of the line.
+    if quote == "\n" or (quote == "'" and _is_apostrophe(code, i)):
+        return i + 1, None
+    end = _string_end(code, i + 1, quote)
+    # Past the closing quote, or onto the newline that resynchronises us.
+    resume = end + 1 if end < len(code) and code[end] == quote else end
+    return resume, (i + 1, end) if end > i + 1 else None
+
+
 def _blank_strings(code, path):
     """Return `code` with string-literal bodies replaced by spaces.
 
@@ -1087,45 +1141,16 @@ def _blank_strings(code, path):
     negative, which is the safe direction — a linter that cries wolf gets
     switched off, and this whole pass exists because of that.
     """
-    if path.suffix not in _STRING_LANGS:
+    if _no_strings_to_blank(code, path):
         return code
-    # A file with no quote character in it has no strings to blank, and in a
-    # real tree that is a large share of them. Same reasoning as the comment
-    # scanner's substring pre-check.
-    if '"' not in code and "'" not in code and "`" not in code:
-        return code
-
     spans = []
     i, n = 0, len(code)
     while i < n:
-        match = _STRING_OPEN.search(code, i)
-        if match is None:
+        i, span = _step_to_string_end(code, i)
+        if i is None:
             break
-        i = match.start()
-        ch = code[i]
-        if ch == "\n":
-            i += 1
-            continue
-        # An apostrophe between two letters is a contraction, not an opening
-        # quote — the same trap `_blank_comments` documents. Getting this wrong
-        # opens a string that never closes and blanks the rest of the line.
-        if ch == "'" and 0 < i < n - 1 and code[i - 1].isalpha() and code[i + 1].isalpha():
-            i += 1
-            continue
-        start = i + 1
-        j = start
-        while j < n:
-            c = code[j]
-            if c == "\\" and j + 1 < n and code[j + 1] != "\n":
-                j += 2  # an escaped character, including \" and \'
-                continue
-            if c == "\n" or c == ch:
-                break
-            j += 1
-        if j > start:
-            spans.append((start, j))
-        # Past the closing quote, or onto the newline that resynchronises us.
-        i = j + 1 if j < n and code[j] == ch else j
+        if span is not None:
+            spans.append(span)
     return _blank_spans(code, spans)
 
 
