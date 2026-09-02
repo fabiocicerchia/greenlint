@@ -38,6 +38,13 @@ greenlint = "greenlint:main"
 [tool.setuptools]
 py-modules = ["greenlint"]
 
+[tool.pytest.ini_options]
+# `import greenlint` from tests/ finds whatever is installed before it finds the
+# checkout — an editable install points at another clone, a wheel at
+# site-packages — so the suite silently graded a different tree. The repo root
+# goes first on sys.path so `pytest` tests the files you just edited.
+pythonpath = ["."]
+
 [tool.ruff]
 line-length = 100
 # examples/ holds deliberately wasteful sample code for greenlint to flag.
