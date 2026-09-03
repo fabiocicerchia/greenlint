@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.9.0](https://github.com/fabiocicerchia/greenlint/compare/v0.8.3...v0.9.0) (2026-09-03)
+
+
+### Features
+
+* stop code-shape rules matching inside string literals ([#81](https://github.com/fabiocicerchia/greenlint/issues/81)) ([9e9db03](https://github.com/fabiocicerchia/greenlint/commit/9e9db036c5140d7e44d2cbdc5666daeba72d27cc))
+
 ## [0.8.3](https://github.com/fabiocicerchia/greenlint/compare/v0.8.2...v0.8.3) (2026-08-29)
 
 
