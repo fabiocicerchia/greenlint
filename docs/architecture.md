@@ -2,6 +2,11 @@
 
 greenlint is a single module (`greenlint.py`) with no runtime dependencies.
 
+`ARCHITECTURE.md` at the repository root is a different document: a map derived
+from the source by `automap`, regenerated rather than written. `automap check`
+compares the tree against `.automap.baseline.json` beside it; nothing in CI runs
+it yet. This page is the one with the reasons in it.
+
 ## Overview
 
 A scan walks the target paths, matches each file's extension against the
@@ -13,11 +18,16 @@ message, and energy-saving suggestion.
 
 - **`RULES`** — the rule table: `id`, `langs`, `severity`, compiled `pattern`,
   `message`, `suggestion`. This list *is* the product; it grows over time.
-- **Scanner** — walks paths, filters files by extension, applies matching
-  rules, collects findings.
-- **Reporters** — human-readable (default), JSON (`--format json`), and GitHub
-  workflow annotations (`--format github`).
-- **CLI** (`main`) — argument parsing, `--list-rules`, `--fail-on-findings`.
+- **Scanner** — `scan_file()` reads and prepares a file once, then runs two
+  passes over it: `_context_findings()` for the checks that need whole-file or
+  whole-block context (the AST rules in `AST_FINDERS`, the per-format ones in
+  `BLOCK_FINDERS`), and `_pattern_findings()` for the single-regex rules
+  indexed by language.
+- **Reporters** — `_print_text()` (default), `json.dump` (`--format json`) and
+  `_print_github()` (workflow annotations).
+- **CLI** (`main`) — `_build_parser()` declares the flags; `main` loads the
+  config, runs the scan and picks a reporter. `--list-rules` prints the table
+  and exits, `--fail-on-findings` turns findings into exit 1.
 
 ## Data flow
 
@@ -63,9 +73,11 @@ positive — the largest one — at regex cost.
 A `RULES` entry may set `pattern: None` when the check needs whole-file or
 whole-resource-block context a single regex match can't express — mostly
 rules that look for the *absence* of a keyword (GL013/GL014/GL024/GL026/
-GL029/GL033/GL034). These are wired into `scan_file` as small generator
-functions, same shape as the GL001 AST check, rather than growing the regex
-engine to do double duty. `_tf_resource_blocks()` factors out the shared
+GL029/GL033/GL034). These are small generator functions, same shape as the
+GL001 AST check, rather than growing the regex engine to do double duty; the
+`BLOCK_FINDERS` table maps the file tag that selects them — a suffix, or the
+name `Dockerfile` — to the ones that apply, the way `PATTERN_RULES_BY_LANG`
+does for the regex rules. `_tf_resource_blocks()` factors out the shared
 "find this Terraform resource type's block and hand back its body text"
 logic so GL013/GL024/GL026 don't each re-implement block extraction.
 

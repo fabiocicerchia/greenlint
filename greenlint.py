@@ -925,6 +925,60 @@ def _comment_scanners(line_tok, block):
     return outside, inside
 
 
+def _step_in_string(text, i, quote, inside):
+    """Advance past the next character that can close the string open at `i`.
+
+    Returns the offset to resume from and the quote still open — None once the
+    string closed — or `(None, None)` when nothing can close it before EOF.
+    """
+    match = inside[quote].search(text, i)
+    if match is None:
+        return None, None
+    i = match.start()
+    ch = text[i]
+    if ch == "\\":
+        # A trailing backslash is a line continuation, not an escape of the
+        # newline we use to resynchronise.
+        if i + 1 < len(text) and text[i + 1] != "\n":
+            i += 1
+        return i + 1, quote
+    # A newline resets the tracking; anything else here is the closing quote.
+    return i + 1, None
+
+
+def _is_apostrophe(text, i):
+    """True for the `'` in don't / it's / won't — a letter either side of it."""
+    return 0 < i < len(text) - 1 and text[i - 1].isalpha() and text[i + 1].isalpha()
+
+
+def _step_outside_string(text, i, outside, line_tok, block):
+    """Advance to the next string opener or comment at or after `i`.
+
+    Returns the offset to resume from, the quote now open (None when the stop
+    was a comment) and the comment's span to blank (None when it was a quote).
+    `(None, None, None)` means nothing interesting is left in the file.
+    """
+    n = len(text)
+    while True:
+        match = outside.search(text, i)
+        if match is None:
+            return None, None, None
+        i = match.start()
+        ch = text[i]
+        if ch in "\"'":
+            if ch == "'" and _is_apostrophe(text, i):
+                i += 1
+                continue
+            return i + 1, ch, None
+        if text.startswith(line_tok, i):
+            end = text.find("\n", i)
+            end = n if end == -1 else end
+            return end, None, (i, end)
+        end = text.find(block[1], i + len(block[0]))
+        end = n if end == -1 else end + len(block[1])
+        return end, None, (i, end)
+
+
 def _blank_comments(text, path):
     """Return `text` with comment bodies replaced by spaces.
 
@@ -971,44 +1025,13 @@ def _blank_comments(text, path):
     i, n, quote = 0, len(text), None
     while i < n:
         if quote:
-            match = inside[quote].search(text, i)
-            if match is None:
-                break
-            i = match.start()
-            ch = text[i]
-            if ch == "\n":
-                quote = None
-            elif ch == "\\":
-                # A trailing backslash is a line continuation, not an escape of
-                # the newline we use to resynchronise.
-                if i + 1 < n and text[i + 1] != "\n":
-                    i += 1
-            else:  # the closing quote
-                quote = None
-            i += 1
-            continue
-        match = outside.search(text, i)
-        if match is None:
+            i, quote = _step_in_string(text, i, quote, inside)
+        else:
+            i, quote, span = _step_outside_string(text, i, outside, line_tok, block)
+            if span is not None:
+                spans.append(span)
+        if i is None:
             break
-        i = match.start()
-        ch = text[i]
-        if ch in "\"'":
-            if ch == "'" and 0 < i < n - 1 and text[i - 1].isalpha() and text[i + 1].isalpha():
-                i += 1  # don't / it's / won't
-                continue
-            quote = ch
-            i += 1
-            continue
-        if text.startswith(line_tok, i):
-            end = text.find("\n", i)
-            end = n if end == -1 else end
-            spans.append((i, end))
-            i = end
-            continue
-        end = text.find(block[1], i + len(block[0]))
-        end = n if end == -1 else end + len(block[1])
-        spans.append((i, end))
-        i = end
     return _blank_spans(text, spans)
 
 
@@ -1046,6 +1069,60 @@ _STRING_LANGS = frozenset(
 _STRING_OPEN = re.compile(r"[\"'`\n]")
 
 
+def _no_strings_to_blank(code, path):
+    """True when this file cannot gain from blanking its strings.
+
+    Either its language has no C-style quoting, or it holds no quote character
+    at all — in a real tree that is a large share of the files. Same reasoning
+    as the comment scanner's substring pre-check.
+    """
+    return path.suffix not in _STRING_LANGS or (
+        '"' not in code and "'" not in code and "`" not in code
+    )
+
+
+def _string_end(code, i, quote):
+    """Offset of the character that ends the literal whose body starts at `i`.
+
+    A backslash escapes the next character; a newline ends the scan without
+    closing the literal, which is what stops one mistake desynchronising the
+    rest of the file.
+    """
+    n = len(code)
+    while i < n:
+        ch = code[i]
+        if ch == "\\" and i + 1 < n and code[i + 1] != "\n":
+            i += 2  # an escaped character, including \" and \'
+            continue
+        if ch == "\n" or ch == quote:
+            break
+        i += 1
+    return i
+
+
+def _step_to_string_end(code, i):
+    """Advance past the next string literal at or after `i`.
+
+    Returns where to resume and the span to blank — `(None, None)` when nothing
+    is left, and `(next_i, None)` for a character that opens no literal.
+    """
+    match = _STRING_OPEN.search(code, i)
+    if match is None:
+        return None, None
+    i = match.start()
+    quote = code[i]
+    # A newline only resynchronises the scan, and an apostrophe between two
+    # letters is a contraction rather than an opening quote — the same trap
+    # `_blank_comments` documents. Getting either wrong opens a string that
+    # never closes and blanks the rest of the line.
+    if quote == "\n" or (quote == "'" and _is_apostrophe(code, i)):
+        return i + 1, None
+    end = _string_end(code, i + 1, quote)
+    # Past the closing quote, or onto the newline that resynchronises us.
+    resume = end + 1 if end < len(code) and code[end] == quote else end
+    return resume, (i + 1, end) if end > i + 1 else None
+
+
 def _blank_strings(code, path):
     """Return `code` with string-literal bodies replaced by spaces.
 
@@ -1064,45 +1141,16 @@ def _blank_strings(code, path):
     negative, which is the safe direction — a linter that cries wolf gets
     switched off, and this whole pass exists because of that.
     """
-    if path.suffix not in _STRING_LANGS:
+    if _no_strings_to_blank(code, path):
         return code
-    # A file with no quote character in it has no strings to blank, and in a
-    # real tree that is a large share of them. Same reasoning as the comment
-    # scanner's substring pre-check.
-    if '"' not in code and "'" not in code and "`" not in code:
-        return code
-
     spans = []
     i, n = 0, len(code)
     while i < n:
-        match = _STRING_OPEN.search(code, i)
-        if match is None:
+        i, span = _step_to_string_end(code, i)
+        if i is None:
             break
-        i = match.start()
-        ch = code[i]
-        if ch == "\n":
-            i += 1
-            continue
-        # An apostrophe between two letters is a contraction, not an opening
-        # quote — the same trap `_blank_comments` documents. Getting this wrong
-        # opens a string that never closes and blanks the rest of the line.
-        if ch == "'" and 0 < i < n - 1 and code[i - 1].isalpha() and code[i + 1].isalpha():
-            i += 1
-            continue
-        start = i + 1
-        j = start
-        while j < n:
-            c = code[j]
-            if c == "\\" and j + 1 < n and code[j + 1] != "\n":
-                j += 2  # an escaped character, including \" and \'
-                continue
-            if c == "\n" or c == ch:
-                break
-            j += 1
-        if j > start:
-            spans.append((start, j))
-        # Past the closing quote, or onto the newline that resynchronises us.
-        i = j + 1 if j < n and code[j] == ch else j
+        if span is not None:
+            spans.append(span)
     return _blank_spans(code, spans)
 
 
@@ -1172,30 +1220,33 @@ def _is_test_file(path):
     return any(part.lower() in ("test", "tests", "spec", "specs") for part in path.parts[:-1])
 
 
-def _line_indexer(text):
-    """Return offset -> 1-based line number, over an index built at most once.
+class _LineIndex:
+    """`line_of(offset)` -> 1-based line number, over an index built at most once.
 
     `text.count("\\n", 0, offset)` per match rescans the file from the top, so a
     file the same rule matches a thousand times was read a thousand times over —
     quadratic, and the files that hit it (generated SQL, bundled JS) are exactly
-    the large ones. The index is built on the first match, so the overwhelming
+    the large ones. The index is built on the first call, so the overwhelming
     majority of files, which match nothing, pay nothing for it.
     """
-    starts = None
 
-    def line_of(offset):
-        nonlocal starts
-        if starts is None:
+    __slots__ = ("_starts", "_text")
+
+    def __init__(self, text):
+        self._text = text
+        self._starts = None
+
+    def line_of(self, offset):
+        if self._starts is None:
             starts = []
-            pos = text.find("\n")
+            pos = self._text.find("\n")
             while pos != -1:
                 starts.append(pos)
-                pos = text.find("\n", pos + 1)
+                pos = self._text.find("\n", pos + 1)
+            self._starts = starts
         # bisect_left: newlines strictly before the offset, which is what
         # `count` reported for a match starting on the newline itself.
-        return bisect.bisect_left(starts, offset) + 1
-
-    return line_of
+        return bisect.bisect_left(self._starts, offset) + 1
 
 
 def _finding(rule, path, line):
@@ -1230,11 +1281,6 @@ def _parse_python(path, text):
         return None
 
 
-# The same boundaries `SCOPE_BOUNDARIES` names, as a set of exact types for the
-# indexing pass — which tests `type(node) in ...` rather than `isinstance`.
-_SCOPE_KINDS = frozenset((ast.FunctionDef, ast.AsyncFunctionDef, ast.Lambda, ast.ClassDef))
-
-
 class PythonIndex:
     """The nodes every Python AST rule needs, collected in one traversal.
 
@@ -1265,6 +1311,55 @@ class PythonIndex:
         self.loop_scopes = set()
 
 
+# One collector per node kind the index cares about, each returning the loop
+# stack and the scope its children are in. A nested def/class/lambda starts a
+# scope of its own, which is the boundary `_walk_own` respects and the one GL007
+# judges names against; everything else leaves both untouched, which is the
+# `collect is None` path in the walk below and by far the commonest one.
+
+
+def _collect_for(index, node, loops, scope):
+    index.fors.append((node, loops))
+    index.loop_scopes.add(scope)
+    return (*loops, node), scope
+
+
+def _collect_while(index, node, loops, scope):
+    index.whiles.append((node, loops))
+    index.loop_scopes.add(scope)
+    return (*loops, node), scope
+
+
+def _collect_try(index, node, loops, scope):
+    index.tries.append((node, loops))
+    return loops, scope
+
+
+def _collect_function(index, node, loops, scope):
+    index.functions.append(node)
+    return loops, node
+
+
+def _collect_class(index, node, loops, scope):
+    index.classes.append(node)
+    return loops, node
+
+
+def _collect_lambda(index, node, loops, scope):
+    return loops, node
+
+
+_COLLECTORS = {
+    ast.For: _collect_for,
+    ast.While: _collect_while,
+    ast.Try: _collect_try,
+    ast.FunctionDef: _collect_function,
+    ast.AsyncFunctionDef: _collect_function,
+    ast.ClassDef: _collect_class,
+    ast.Lambda: _collect_lambda,
+}
+
+
 def index_python(tree):
     """Build a `PythonIndex` from one breadth-first pass.
 
@@ -1273,10 +1368,11 @@ def index_python(tree):
     its nodes in the order it always did.
 
     The child walk is spelled out rather than left to `ast.iter_child_nodes`,
-    which is two nested generators and a `try/except` per node. This is the one
-    place in greenlint that runs tens of millions of times in a real scan — it
-    was 20 of 36 seconds on the standard library — and doing it by hand is ~1.7x
-    faster for the same nodes in the same order.
+    which is two nested generators and a `try/except` per node, and it stays
+    inline rather than becoming a helper: this is the one place in greenlint
+    that runs tens of millions of times in a real scan — it was 20 of 36 seconds
+    on the standard library — and a call plus a list per node costs 13% of a
+    stdlib scan (11.96 s → 13.54 s, five runs each, `make bench`).
     """
     index = PythonIndex(tree)
     queue = deque([(tree, (), tree)])
@@ -1284,29 +1380,16 @@ def index_python(tree):
     push = queue.append
     while queue:
         node, loops, scope = pop()
-        kind = type(node)
         # Exact types, not isinstance: `AsyncFor` and `TryStar` are siblings of
         # `For` and `Try` rather than subclasses, and the rules never matched
         # them. This keeps that true rather than quietly widening them.
-        if kind is ast.For:
-            index.fors.append((node, loops))
-            index.loop_scopes.add(scope)
-            loops = (*loops, node)
-        elif kind is ast.While:
-            index.whiles.append((node, loops))
-            index.loop_scopes.add(scope)
-            loops = (*loops, node)
-        elif kind is ast.Try:
-            index.tries.append((node, loops))
-        elif kind is ast.FunctionDef or kind is ast.AsyncFunctionDef:
-            index.functions.append(node)
-        elif kind is ast.ClassDef:
-            index.classes.append(node)
-        # A nested def/class/lambda starts a scope of its own, which is the
-        # boundary `_walk_own` respects and the one GL007 judges names against.
-        child_scope = node if kind in _SCOPE_KINDS else scope
+        collect = _COLLECTORS.get(type(node))
+        if collect is None:
+            child_scope = scope
+        else:
+            loops, child_scope = collect(index, node, loops, scope)
         # Expressions are not descended into: Python has no expression that can
-        # contain a statement, so none of the five kinds collected above can be
+        # contain a statement, so none of the kinds `_COLLECTORS` names can be
         # inside one. That is most of a syntax tree — every name, call, constant
         # and operator — skipped rather than queued and rejected.
         for name in node._fields:
@@ -1405,6 +1488,16 @@ def _nearest_loop(root, target):
 # ------------------------------------------------------ python AST rules ---
 
 
+def _calls_sleep(node):
+    """True when `node` is a call to something named `sleep` — `time.sleep(x)`,
+    `asyncio.sleep(x)` or a bare `sleep(x)` pulled in by `from time import`.
+    """
+    return isinstance(node, ast.Call) and (
+        (isinstance(node.func, ast.Attribute) and node.func.attr == "sleep")
+        or (isinstance(node.func, ast.Name) and node.func.id == "sleep")
+    )
+
+
 def _ast_busy_loop_findings(path, index):
     """AST-based replacement for GL001 on Python: the regex version flags
     `while True:` unless "sleep" appears *anywhere* in the file, which both
@@ -1416,15 +1509,7 @@ def _ast_busy_loop_findings(path, index):
     for node, _ in index.whiles:
         if not (isinstance(node.test, ast.Constant) and node.test.value is True):
             continue
-        sleeps = any(
-            isinstance(n, ast.Call)
-            and (
-                (isinstance(n.func, ast.Attribute) and n.func.attr == "sleep")
-                or (isinstance(n.func, ast.Name) and n.func.id == "sleep")
-            )
-            for body_node in node.body
-            for n in ast.walk(body_node)
-        )
+        sleeps = any(_calls_sleep(n) for body_node in node.body for n in ast.walk(body_node))
         if sleeps or _loop_can_exit(node):
             continue
         yield _finding(rule, path, node.lineno)
@@ -1519,6 +1604,38 @@ SCALAR_OPS = (ast.Div, ast.FloorDiv, ast.Sub, ast.Mod, ast.Pow)
 NUMERIC_ONLY_OPS = (ast.Sub, ast.Div, ast.FloorDiv, ast.Pow, ast.MatMult)
 
 
+def _note_numeric(numeric, node):
+    """Record `node`'s name in `numeric`, when `node` is a plain name."""
+    if isinstance(node, ast.Name):
+        numeric.add(node.id)
+
+
+def _scalar_assign_targets(node):
+    """The targets of an assignment whose value is certainly numeric.
+
+    A name *assigned* arithmetic is as numeric as one used in it, and this is
+    the commoner shape: `day = start - (start % DAY)` then `day += DAY` in the
+    loop. Reading only operands left the target of the seed unclassified,
+    because it never appears beside an operator itself.
+    """
+    if not _is_scalar_expr(node.value):
+        return ()
+    return tuple(node.targets) if isinstance(node, ast.Assign) else (node.target,)
+
+
+def _numeric_operands(node):
+    """The sub-expressions this node proves are numeric, or `()` for none."""
+    if isinstance(node, ast.BinOp) and isinstance(node.op, NUMERIC_ONLY_OPS):
+        return (node.left, node.right)
+    if isinstance(node, ast.AugAssign) and isinstance(node.op, NUMERIC_ONLY_OPS):
+        return (node.target,)
+    if isinstance(node, ast.UnaryOp) and isinstance(node.op, (ast.USub, ast.UAdd)):
+        return (node.operand,)
+    if isinstance(node, (ast.Assign, ast.AnnAssign)):
+        return _scalar_assign_targets(node)
+    return ()
+
+
 def _names_used_as_numbers(nodes):
     """Names that arithmetic elsewhere in this scope proves are numeric.
 
@@ -1535,27 +1652,9 @@ def _names_used_as_numbers(nodes):
     that GL007 exists to catch is a TypeError, so no genuine rebuild is hidden.
     """
     numeric = set()
-
-    def note(node):
-        if isinstance(node, ast.Name):
-            numeric.add(node.id)
-
     for node in nodes:
-        if isinstance(node, ast.BinOp) and isinstance(node.op, NUMERIC_ONLY_OPS):
-            note(node.left)
-            note(node.right)
-        elif isinstance(node, ast.AugAssign) and isinstance(node.op, NUMERIC_ONLY_OPS):
-            note(node.target)
-        elif isinstance(node, ast.UnaryOp) and isinstance(node.op, (ast.USub, ast.UAdd)):
-            note(node.operand)
-        # A name *assigned* arithmetic is as numeric as one used in it, and
-        # this is the commoner shape: `day = start - (start % DAY)` then
-        # `day += DAY` in the loop. Reading only operands left the target of
-        # the seed unclassified, because it never appears beside an operator
-        # itself.
-        elif isinstance(node, (ast.Assign, ast.AnnAssign)) and _is_scalar_expr(node.value):
-            for target in node.targets if isinstance(node, ast.Assign) else [node.target]:
-                note(target)
+        for operand in _numeric_operands(node):
+            _note_numeric(numeric, operand)
     return numeric
 
 
@@ -1579,6 +1678,29 @@ def _is_scalar_expr(node):
     return False
 
 
+def _classify_binding(target, value, lists, scalars):
+    """Record `target` in `lists` or `scalars`, judged from the shape of `value`."""
+    # Unpacking binds each name to its own initialiser, so pair the sides
+    # up rather than judging the tuple as a whole: `mwh, grams = 0.0, 0.0`
+    # is two counters, and reading only single-name targets left both
+    # unclassified — which flagged `mwh += r` as a rebuild.
+    if isinstance(target, (ast.Tuple, ast.List)) and isinstance(value, (ast.Tuple, ast.List)):
+        if len(target.elts) == len(value.elts):
+            for element, initialiser in zip(target.elts, value.elts, strict=True):
+                _classify_binding(element, initialiser, lists, scalars)
+        return
+    if not isinstance(target, ast.Name):
+        return
+    if isinstance(value, (ast.List, ast.ListComp)):
+        lists.add(target.id)
+    elif (
+        isinstance(value, ast.Constant)
+        and isinstance(value.value, (int, float))
+        and not isinstance(value.value, bool)
+    ):
+        scalars.add(target.id)
+
+
 def _names_bound_to_lists(nodes):
     """(list_names, scalar_names) — names seen initialised to a list, and names
     seen initialised to a number, among `nodes`.
@@ -1596,35 +1718,57 @@ def _names_bound_to_lists(nodes):
     is the difference between `errors += e` being a counter and a rebuild.
     """
     lists, scalars = set(), set()
-
-    def classify(target, value):
-        # Unpacking binds each name to its own initialiser, so pair the sides
-        # up rather than judging the tuple as a whole: `mwh, grams = 0.0, 0.0`
-        # is two counters, and reading only single-name targets left both
-        # unclassified — which flagged `mwh += r` as a rebuild.
-        if isinstance(target, (ast.Tuple, ast.List)) and isinstance(value, (ast.Tuple, ast.List)):
-            if len(target.elts) == len(value.elts):
-                for t, v in zip(target.elts, value.elts, strict=True):
-                    classify(t, v)
-            return
-        if not isinstance(target, ast.Name):
-            return
-        if isinstance(value, (ast.List, ast.ListComp)):
-            lists.add(target.id)
-        elif (
-            isinstance(value, ast.Constant)
-            and isinstance(value.value, (int, float))
-            and not isinstance(value.value, bool)
-        ):
-            scalars.add(target.id)
-
     for node in nodes:
         if not isinstance(node, (ast.Assign, ast.AnnAssign)):
             continue
         targets = node.targets if isinstance(node, ast.Assign) else [node.target]
         for target in targets:
-            classify(target, node.value)
+            _classify_binding(target, node.value, lists, scalars)
     return lists, scalars
+
+
+def _accumulating_add(stmt):
+    """(target, value) when `stmt` accumulates onto a plain name with `+`/`+=`,
+    else (None, None).
+
+    Only `x += <expr>` and `x = x + <expr>`: `x = y + z` rebinds rather than
+    accumulates, and a non-name target (`d[k] += …`) is not a name to track.
+    """
+    if isinstance(stmt, ast.AugAssign) and isinstance(stmt.op, ast.Add):
+        target, value = stmt.target, stmt.value
+    elif (
+        isinstance(stmt, ast.Assign)
+        and len(stmt.targets) == 1
+        and isinstance(stmt.value, ast.BinOp)
+        and isinstance(stmt.value.op, ast.Add)
+    ):
+        target, value = stmt.targets[0], stmt.value
+        left = stmt.value.left
+        if not (isinstance(left, ast.Name) and left.id == getattr(target, "id", None)):
+            return None, None
+    else:
+        return None, None
+    return (target, value) if isinstance(target, ast.Name) else (None, None)
+
+
+def _is_sequence_rebuild(stmt, list_names, scalar_names):
+    """True when `stmt` copies the whole sequence built so far — the O(n^2) shape."""
+    target, value = _accumulating_add(stmt)
+    if target is None:
+        return False
+    # A numeric counter (`total += 1`, `seen += len(chunk)`, `kwh +=
+    # watts * hours / 1000`) accumulates in O(1) — not a rebuild.
+    if _is_scalar_expr(value) or target.id in scalar_names:
+        return False
+    # `xs += ...` is `list.extend` when xs is a list: in place, O(k), no copy.
+    # Either the list literal on the right proves it (`+=` a list is a
+    # TypeError for str/bytes/tuple), or the name was seen being initialised to
+    # one. Only the rebinding form (`xs = xs + [a]`) copies everything
+    # accumulated so far.
+    return not (
+        isinstance(stmt, ast.AugAssign)
+        and (isinstance(value, (ast.List, ast.ListComp)) or target.id in list_names)
+    )
 
 
 def _ast_quadratic_rebuild_findings(path, index):
@@ -1656,38 +1800,9 @@ def _ast_quadratic_rebuild_findings(path, index):
                 continue
             if not isinstance(stmt, (ast.AugAssign, ast.Assign)) or stmt.lineno in seen:
                 continue
-            target = value = None
-            if isinstance(stmt, ast.AugAssign) and isinstance(stmt.op, ast.Add):
-                target, value = stmt.target, stmt.value
-            elif (
-                isinstance(stmt, ast.Assign)
-                and len(stmt.targets) == 1
-                and isinstance(stmt.value, ast.BinOp)
-                and isinstance(stmt.value.op, ast.Add)
-            ):
-                target, value = stmt.targets[0], stmt.value
-            if not isinstance(target, ast.Name):
-                continue
-            # `x = x + ...` only — `x = y + z` rebinds, not accumulates.
-            if isinstance(stmt, ast.Assign):
-                left = stmt.value.left
-                if not (isinstance(left, ast.Name) and left.id == target.id):
-                    continue
-            # A numeric counter (`total += 1`, `seen += len(chunk)`, `kwh +=
-            # watts * hours / 1000`) accumulates in O(1) — not a rebuild.
-            if _is_scalar_expr(value) or target.id in scalar_names:
-                continue
-            # `xs += ...` is `list.extend` when xs is a list: in place,
-            # O(k), no copy. Either the list literal on the right proves it
-            # (`+=` a list is a TypeError for str/bytes/tuple), or the name
-            # was seen being initialised to one. Only the rebinding form
-            # (`xs = xs + [a]`) copies everything accumulated so far.
-            if isinstance(stmt, ast.AugAssign) and (
-                isinstance(value, (ast.List, ast.ListComp)) or target.id in list_names
-            ):
-                continue
-            seen.add(stmt.lineno)
-            yield _finding(rule, path, stmt.lineno)
+            if _is_sequence_rebuild(stmt, list_names, scalar_names):
+                seen.add(stmt.lineno)
+                yield _finding(rule, path, stmt.lineno)
 
 
 # Conversions whose failure is routinely used as a type test, where a
@@ -1876,6 +1991,26 @@ NEEDS_FULL_HISTORY = re.compile(
 )
 
 
+def _job_starts(text, body_at):
+    """Offsets where each entry under `jobs:` begins, empty when unsegmentable."""
+    body = text[body_at:]
+    # The first key under `jobs:` sets the indent at which a sibling job starts.
+    first = re.search(r"^([ \t]+)[\w-]+:[ \t]*$", body, re.MULTILINE)
+    if not first:
+        return []
+    return [
+        body_at + m.start()
+        for m in re.finditer(rf"^{re.escape(first.group(1))}[\w-]+:[ \t]*$", body, re.MULTILINE)
+    ]
+
+
+def _bracketing(starts, pos, low, high):
+    """The two `starts` either side of `pos`, falling back to `low` and `high`."""
+    before = [s for s in starts if s <= pos]
+    after = [s for s in starts if s > pos]
+    return (before[-1] if before else low), (after[0] if after else high)
+
+
 def _job_span(text, pos):
     """(start, end) of the `jobs:` entry containing `pos`, or the whole file.
 
@@ -1887,18 +2022,10 @@ def _job_span(text, pos):
     jobs = re.search(r"^jobs:[ \t]*$", text, re.MULTILINE)
     if not jobs or pos < jobs.end():
         return 0, len(text)
-    body = text[jobs.end() :]
-    # The first key under `jobs:` sets the indent at which a sibling job starts.
-    first = re.search(r"^([ \t]+)[\w-]+:[ \t]*$", body, re.MULTILINE)
-    if not first:
+    starts = _job_starts(text, jobs.end())
+    if not starts:
         return 0, len(text)
-    starts = [
-        jobs.end() + m.start()
-        for m in re.finditer(rf"^{re.escape(first.group(1))}[\w-]+:[ \t]*$", body, re.MULTILINE)
-    ]
-    before = [s for s in starts if s <= pos]
-    after = [s for s in starts if s > pos]
-    return (before[-1] if before else jobs.end()), (after[0] if after else len(text))
+    return _bracketing(starts, pos, jobs.end(), len(text))
 
 
 def _fetch_depth_findings(path, text):
@@ -2035,6 +2162,82 @@ def scannable(path):
     )
 
 
+# The AST rules, in the order their findings come out, wired to the ids
+# `AST_RULE_IDS` names. Each takes the shared per-file index, never its own walk.
+AST_FINDERS = (
+    ("GL001", _ast_busy_loop_findings),
+    ("GL007", _ast_quadratic_rebuild_findings),
+    ("GL018", _ast_nested_loop_findings),
+    ("GL023", _ast_bubble_sort_findings),
+    ("GL030", _ast_dict_iterator_findings),
+    ("GL031", _ast_try_in_loop_findings),
+)
+
+# The rules that need a whole resource block rather than one match, keyed the
+# way `PATTERN_RULES_BY_LANG` is: the suffix, or `Dockerfile` by name. Tags that
+# mean the same format share one tuple, the way the pattern index aliases them.
+BLOCK_FINDERS = {
+    ".tf": (
+        ("GL013", _tf_s3_lifecycle_findings),
+        ("GL024", _tf_asg_static_size_findings),
+        ("GL026", _tf_log_retention_findings),
+    ),
+    ".yml": (
+        ("GL014", _k8s_resources_findings),
+        ("GL033", _k8s_hpa_static_findings),
+        ("GL034", _compose_resources_findings),
+    ),
+    "Dockerfile": (("GL029", _dockerfile_layer_bloat_findings),),
+}
+BLOCK_FINDERS[".tofu"] = BLOCK_FINDERS[".tf"]
+BLOCK_FINDERS[".yaml"] = BLOCK_FINDERS[".yml"]
+BLOCK_FINDERS[".dockerfile"] = BLOCK_FINDERS["Dockerfile"]
+
+
+def _lang_key(path):
+    """The tag the rule indexes are keyed by: the suffix, or `Dockerfile` by name."""
+    return "Dockerfile" if path.name == "Dockerfile" else path.suffix
+
+
+def _context_findings(path, text, code, index, disabled):
+    """Findings from the checks that read whole-file or whole-block context
+    instead of matching one regex — the AST rules, and the per-format ones that
+    look for the *absence* of a key.
+    """
+    if index is not None and not AST_RULE_IDS <= disabled:
+        for rule_id, finder in AST_FINDERS:
+            if rule_id not in disabled:
+                yield from finder(path, index)
+    # GL004 takes `text`, not `code`: it reads comments deliberately, to tell a
+    # real `fetch-depth: 0` from one being discussed in a comment above it.
+    if path.suffix in (".yml", ".yaml") and "GL004" not in disabled:
+        yield from _fetch_depth_findings(path, text)
+    for rule_id, finder in BLOCK_FINDERS.get(_lang_key(path), ()):
+        if rule_id not in disabled:
+            yield from finder(path, code)
+
+
+def _pattern_findings(path, code, disabled):
+    """Findings from the single-regex rules tagged for this file's language,
+    looked up rather than filtered — see `_pattern_rules_by_lang`.
+    """
+    line_of = _LineIndex(code).line_of
+    # Built once, and only if some enabled rule for this language actually wants
+    # it — blanking strings costs a pass over the file, and most languages have
+    # no code_only rule at all.
+    code_no_strings = None
+    for rule in PATTERN_RULES_BY_LANG.get(_lang_key(path), ()):
+        if rule["id"] in disabled:
+            continue
+        view = code
+        if rule.get("code_only"):
+            if code_no_strings is None:
+                code_no_strings = _blank_strings(code, path)
+            view = code_no_strings
+        for m in rule["pattern"].finditer(view):
+            yield _finding(rule, path, line_of(m.start()))
+
+
 def scan_file(path, disabled=frozenset(), text=None):
     """Yield findings for every enabled rule that matches the file's contents.
 
@@ -2073,57 +2276,8 @@ def scan_file(path, disabled=frozenset(), text=None):
     # noise: a test's tight wait is bounded by the test run and is the point.
     if _is_test_file(path):
         disabled = disabled | {"GL001", "GL002", "GL007"}
-    if index is not None and not AST_RULE_IDS <= disabled:
-        if "GL001" not in disabled:
-            yield from _ast_busy_loop_findings(path, index)
-        if "GL007" not in disabled:
-            yield from _ast_quadratic_rebuild_findings(path, index)
-        if "GL018" not in disabled:
-            yield from _ast_nested_loop_findings(path, index)
-        if "GL023" not in disabled:
-            yield from _ast_bubble_sort_findings(path, index)
-        if "GL030" not in disabled:
-            yield from _ast_dict_iterator_findings(path, index)
-        if "GL031" not in disabled:
-            yield from _ast_try_in_loop_findings(path, index)
-    if path.suffix in (".tf", ".tofu"):
-        if "GL013" not in disabled:
-            yield from _tf_s3_lifecycle_findings(path, code)
-        if "GL024" not in disabled:
-            yield from _tf_asg_static_size_findings(path, code)
-        if "GL026" not in disabled:
-            yield from _tf_log_retention_findings(path, code)
-    if path.suffix in (".yml", ".yaml"):
-        if "GL004" not in disabled:
-            yield from _fetch_depth_findings(path, text)
-        if "GL014" not in disabled:
-            yield from _k8s_resources_findings(path, code)
-        if "GL033" not in disabled:
-            yield from _k8s_hpa_static_findings(path, code)
-        if "GL034" not in disabled:
-            yield from _compose_resources_findings(path, code)
-    if (path.suffix == ".dockerfile" or path.name == "Dockerfile") and "GL029" not in disabled:
-        yield from _dockerfile_layer_bloat_findings(path, code)
-    # Only the rules tagged for this file's language, looked up rather than
-    # filtered — see `_pattern_rules_by_lang`.
-    rules = PATTERN_RULES_BY_LANG.get(
-        "Dockerfile" if path.name == "Dockerfile" else path.suffix, ()
-    )
-    line_of = _line_indexer(code)
-    # Built once, and only if some enabled rule for this language actually wants
-    # it — blanking strings costs a pass over the file, and most languages have
-    # no code_only rule at all.
-    code_no_strings = None
-    for rule in rules:
-        if rule["id"] in disabled:
-            continue
-        view = code
-        if rule.get("code_only"):
-            if code_no_strings is None:
-                code_no_strings = _blank_strings(code, path)
-            view = code_no_strings
-        for m in rule["pattern"].finditer(view):
-            yield _finding(rule, path, line_of(m.start()))
+    yield from _context_findings(path, text, code, index, disabled)
+    yield from _pattern_findings(path, code, disabled)
 
 
 # -------------------------------------------------------- file discovery ---
@@ -2301,8 +2455,8 @@ def scan(paths, config=None):
 # ------------------------------------------------------------------- cli ---
 
 
-def main(argv=None):
-    """CLI entry point; returns the process exit code."""
+def _build_parser():
+    """The command-line surface: every flag greenlint accepts, and its help."""
     p = argparse.ArgumentParser(
         prog="greenlint",
         description=__doc__,
@@ -2351,13 +2505,55 @@ def main(argv=None):
         metavar="FILE",
         help="record every current finding as accepted and exit",
     )
-    args = p.parse_args(argv)
+    return p
+
+
+def _print_rules():
+    """`--list-rules`: every rule, with the language tags it targets."""
+    for r in RULES:
+        print(f"{r['id']} [{r['severity']:6s}] ({', '.join(sorted(r['langs']))}): {r['message']}")
+
+
+def _print_github(findings):
+    """`--format github`: one workflow annotation per finding."""
+    # https://docs.github.com/actions/using-workflows/workflow-commands-for-github-actions#setting-a-notice-message
+    level = {"high": "error", "medium": "warning", "low": "notice"}
+    for f in findings:
+        print(
+            f"::{level[f['severity']]} file={f['file']},line={f['line']},"
+            f"title=greenlint {f['rule']}::{f['message']} — {f['suggestion']}"
+        )
+
+
+def _print_text(findings, accepted, baseline_path):
+    """`--format text`: the human report, and the count a reader looks for."""
+    for f in findings:
+        print(f"{f['file']}:{f['line']}: [{f['rule']}/{f['severity']}] {f['message']}")
+        print(f"    ↳ {f['suggestion']}")
+        if f["co2e_estimate"]:
+            print(f"    ~ {f['co2e_estimate']}")
+    accepted_note = f" ({accepted} accepted by {baseline_path})" if accepted else ""
+    print(f"\ngreenlint: {len(findings)} finding(s){accepted_note}")
+
+
+def _resolve_baseline(explicit):
+    """The baseline file to honour, from `--baseline` or the default name.
+
+    An explicit `--baseline` must exist; the default one is used when it happens
+    to be there. A typo in a flag should be an error, not a silent no-op.
+    """
+    path = Path(explicit) if explicit else Path(BASELINE_FILENAME)
+    if explicit and not path.is_file():
+        raise SystemExit(f"greenlint: no such baseline: {path}")
+    return path
+
+
+def main(argv=None):
+    """CLI entry point; returns the process exit code."""
+    args = _build_parser().parse_args(argv)
 
     if args.list_rules:
-        for r in RULES:
-            print(
-                f"{r['id']} [{r['severity']:6s}] ({', '.join(sorted(r['langs']))}): {r['message']}"
-            )
+        _print_rules()
         return 0
 
     config = load_config(args.config)
@@ -2371,32 +2567,15 @@ def main(argv=None):
         print(f"greenlint: {count} finding(s) accepted in {path}")
         return 0
 
-    # An explicit --baseline must exist; the default one is used when it happens
-    # to be there. A typo in a flag should be an error, not a silent no-op.
-    baseline_path = Path(args.baseline) if args.baseline else Path(BASELINE_FILENAME)
-    if args.baseline and not baseline_path.is_file():
-        raise SystemExit(f"greenlint: no such baseline: {baseline_path}")
+    baseline_path = _resolve_baseline(args.baseline)
     before = len(findings)
     findings = apply_baseline(findings, load_baseline(baseline_path), baseline_path.parent)
-    accepted = before - len(findings)
     if args.format == "json":
         json.dump(findings, sys.stdout, indent=2)
     elif args.format == "github":
-        # https://docs.github.com/actions/using-workflows/workflow-commands-for-github-actions#setting-a-notice-message
-        level = {"high": "error", "medium": "warning", "low": "notice"}
-        for f in findings:
-            print(
-                f"::{level[f['severity']]} file={f['file']},line={f['line']},"
-                f"title=greenlint {f['rule']}::{f['message']} — {f['suggestion']}"
-            )
+        _print_github(findings)
     else:
-        for f in findings:
-            print(f"{f['file']}:{f['line']}: [{f['rule']}/{f['severity']}] {f['message']}")
-            print(f"    ↳ {f['suggestion']}")
-            if f["co2e_estimate"]:
-                print(f"    ~ {f['co2e_estimate']}")
-        accepted_note = f" ({accepted} accepted by {baseline_path})" if accepted else ""
-        print(f"\ngreenlint: {len(findings)} finding(s){accepted_note}")
+        _print_text(findings, before - len(findings), baseline_path)
     return 1 if findings and args.fail_on_findings else 0
 
 

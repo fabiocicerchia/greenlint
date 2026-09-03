@@ -7,10 +7,49 @@ local M = {}
 local NS = vim.api.nvim_create_namespace('greenlint')
 M.namespace = NS
 
---- Publish one file's findings, if it is open.
+--- Everything the plugin says to the user, prefixed once.
+function M.notify(message, level)
+  vim.notify('greenlint: ' .. message, level or vim.log.levels.INFO)
+end
+
+--- One finding as a diagnostic spanning the code on `text`.
 ---
 --- The squiggle starts at the first non-whitespace character, so it traces the
 --- code rather than the indentation.
+local function to_diagnostic(finding, lnum, text, severity)
+  local indent = text:match('^%s*') or ''
+  local col = text:match('%S') and #indent or 0
+  return {
+    lnum = lnum,
+    col = col,
+    end_lnum = lnum,
+    end_col = math.max(col, #text),
+    severity = severity,
+    source = 'greenlint',
+    code = finding.rule,
+    message = core.summarise(finding),
+  }
+end
+
+--- The findings that have a place in this buffer, worst first.
+---
+--- greenlint scanned the file on disk and the buffer may be shorter, so a
+--- finding past the end is dropped rather than clamped onto the wrong line.
+local function build_diagnostics(buf, findings, cfg)
+  local line_count = vim.api.nvim_buf_line_count(buf)
+  local diagnostics = {}
+  for _, finding in ipairs(core.sorted(findings)) do
+    local severity = cfg.diagnostics.severity[finding.severity]
+    local lnum = math.max(0, (finding.line or 1) - 1)
+    if severity and lnum < line_count then
+      local text = vim.api.nvim_buf_get_lines(buf, lnum, lnum + 1, false)[1] or ''
+      diagnostics[#diagnostics + 1] = to_diagnostic(finding, lnum, text, severity)
+    end
+  end
+  return diagnostics
+end
+
+--- Publish one file's findings, if it is open.
 function M.render(path, findings, cfg)
   if not cfg.diagnostics.enabled then
     return
@@ -19,29 +58,7 @@ function M.render(path, findings, cfg)
   if buf == -1 or not vim.api.nvim_buf_is_loaded(buf) then
     return
   end
-
-  local line_count = vim.api.nvim_buf_line_count(buf)
-  local diagnostics = {}
-  for _, finding in ipairs(core.sorted(findings)) do
-    local severity = cfg.diagnostics.severity[finding.severity]
-    local lnum = math.max(0, (finding.line or 1) - 1)
-    if severity and lnum < line_count then
-      local text = vim.api.nvim_buf_get_lines(buf, lnum, lnum + 1, false)[1] or ''
-      local indent = text:match('^%s*') or ''
-      local col = text:match('%S') and #indent or 0
-      diagnostics[#diagnostics + 1] = {
-        lnum = lnum,
-        col = col,
-        end_lnum = lnum,
-        end_col = math.max(col, #text),
-        severity = severity,
-        source = 'greenlint',
-        code = finding.rule,
-        message = core.summarise(finding),
-      }
-    end
-  end
-  vim.diagnostic.set(NS, buf, diagnostics)
+  vim.diagnostic.set(NS, buf, build_diagnostics(buf, findings, cfg))
 end
 
 function M.clear(path)

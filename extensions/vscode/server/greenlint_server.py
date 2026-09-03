@@ -38,207 +38,36 @@ Ops:
 """
 
 import argparse
-import hashlib
-import importlib.util
-import inspect
 import json
 import os
 import queue
 import sys
 import threading
 import time
-from collections import OrderedDict
-from importlib import metadata
 from pathlib import Path
+from typing import ClassVar
 
-PROTOCOL_VERSION = 1
-DEFAULT_CACHE_ENTRIES = 4096
-DEFAULT_MAX_FILE_BYTES = 1_000_000
+from greenlint_api import greenlint_version, load_greenlint, missing_api
+from scan_cache import DEFAULT_CACHE_ENTRIES, FindingCache, ProjectScan, digest, mtime
+from server_ops import (
+    DEFAULT_MAX_FILE_BYTES,
+    PROTOCOL_VERSION,
+    op_cancel,
+    op_configure,
+    op_invalidate,
+    op_languages,
+    op_ping,
+    op_scan_file,
+    op_scan_text,
+    op_write_baseline,
+)
+
 # How often a project scan looks up from the files to answer the editor. Small
 # enough that typing stays responsive during a full scan, large enough that the
 # queue poll is not itself the workload.
 INTERLEAVE_EVERY = 16
 # How often a long project scan says it is still going.
 PROGRESS_INTERVAL_S = 0.5
-
-
-def load_greenlint(module_path=None):
-    """Import greenlint, preferring an explicit path over the installed copy.
-
-    The extension points this at the greenlint.py in the open workspace when
-    there is one, so contributors editing rules see their own rules fire.
-    """
-    if module_path:
-        path = Path(module_path)
-        if path.is_dir():
-            path = path / "greenlint.py"
-        spec = importlib.util.spec_from_file_location("greenlint", path)
-        if spec is None or spec.loader is None:
-            raise ImportError(f"cannot load greenlint from {path}")
-        module = importlib.util.module_from_spec(spec)
-        # Registered before exec so a module that imports itself finds it.
-        sys.modules["greenlint"] = module
-        spec.loader.exec_module(module)
-        return module
-    import greenlint
-
-    return greenlint
-
-
-# The module surface this server calls. Checked at startup rather than
-# discovered when a scan fails: an older greenlint imports perfectly and then
-# raises `has no attribute 'iter_files'` on the first project scan, which
-# reads like a bug in the extension rather than a version to upgrade. Checking
-# capabilities rather than a version number means this stays correct without
-# anyone remembering to bump a floor.
-REQUIRED_API = (
-    "BASELINE_FILENAME",
-    "CONFIG_FILENAME",
-    "CO2E_HINTS",
-    "RULES",
-    "finding_sort_key",
-    "is_ignored",
-    "iter_files",
-    "SEVERITY_ORDER",
-    "apply_baseline",
-    "load_baseline",
-    "load_config",
-    "scan_file",
-    "scannable",
-    "write_baseline",
-)
-
-
-def missing_api(gl):
-    """Names this server needs that the loaded greenlint does not have."""
-    missing = [name for name in REQUIRED_API if not hasattr(gl, name)]
-    # Present but older: the buffer scan depends on the keyword, not just on
-    # the function existing.
-    if "scan_file" not in missing and "text" not in inspect.signature(gl.scan_file).parameters:
-        missing.append("scan_file(text=)")
-    return missing
-
-
-def greenlint_version(gl):
-    """Best-effort version string.
-
-    greenlint carries no `__version__` — the number lives in pyproject.toml — so
-    this falls back to the installed distribution's metadata, and to "unknown"
-    when there is no installed distribution to ask. Which module actually got
-    loaded is a separate question, answered by `module` in the ping response.
-    """
-    version = getattr(gl, "__version__", None)
-    if version:
-        return str(version)
-    try:
-        return metadata.version("greenlint")
-    except metadata.PackageNotFoundError:
-        return "unknown"
-
-
-def digest(text):
-    """Content fingerprint. blake2b at 16 bytes: shorter and faster than sha256,
-    and this only ever answers "same bytes as last time?" — not a security claim.
-    """
-    return hashlib.blake2b(text.encode("utf-8", "replace"), digest_size=16).hexdigest()
-
-
-class FindingCache:
-    """Bounded LRU of per-file scan results.
-
-    Each entry holds both stamps a lookup can present: the stat tuple (cheap,
-    but wrong after a no-op write) and the content hash (exact, but costs a
-    read). A hit on either returns the findings; a hit on the hash alone also
-    repairs the stat stamp, so the next lookup is free again.
-    """
-
-    def __init__(self, limit=DEFAULT_CACHE_ENTRIES):
-        self.limit = limit
-        self.entries = OrderedDict()
-        self.stat_hits = 0
-        self.hash_hits = 0
-        self.misses = 0
-
-    def _touch(self, key):
-        self.entries.move_to_end(key)
-
-    def by_stat(self, key, stat_stamp):
-        entry = self.entries.get(key)
-        if entry is not None and entry["stat"] == stat_stamp:
-            self._touch(key)
-            self.stat_hits += 1
-            return entry["findings"]
-        return None
-
-    def by_hash(self, key, content_hash, stat_stamp=None):
-        entry = self.entries.get(key)
-        if entry is not None and entry["hash"] == content_hash:
-            if stat_stamp is not None:
-                entry["stat"] = stat_stamp
-            self._touch(key)
-            self.hash_hits += 1
-            return entry["findings"]
-        return None
-
-    def put(self, key, content_hash, findings, stat_stamp=None):
-        self.misses += 1
-        self.entries[key] = {"hash": content_hash, "stat": stat_stamp, "findings": findings}
-        self._touch(key)
-        while len(self.entries) > self.limit:
-            self.entries.popitem(last=False)
-
-    def drop(self, key):
-        self.entries.pop(key, None)
-
-    def clear(self):
-        self.entries.clear()
-
-    def stats(self):
-        return {
-            "entries": len(self.entries),
-            "statHits": self.stat_hits,
-            "hashHits": self.hash_hits,
-            "misses": self.misses,
-        }
-
-
-class RunningSummary:
-    """The end-of-scan totals, accumulated as the walk goes.
-
-    Counted on the way past rather than from a list at the end, so a streaming
-    scan need not keep every finding alive purely to count it — the whole point
-    of streaming is that the client already has them.
-
-    Deliberately counts and nothing else. The CO2e hints are prose about
-    different physical quantities — grams per GB, grams per instance-day,
-    "negligible per call" — so adding them up would produce a number with no
-    unit and a false air of precision, which is the one thing this tool is
-    careful not to do.
-    """
-
-    __slots__ = ("by_rule", "by_severity", "files", "total")
-
-    def __init__(self):
-        self.total = 0
-        self.by_severity = {"high": 0, "medium": 0, "low": 0}
-        self.by_rule = {}
-        self.files = set()
-
-    def add(self, findings):
-        for finding in findings:
-            self.total += 1
-            severity = finding["severity"]
-            self.by_severity[severity] = self.by_severity.get(severity, 0) + 1
-            self.by_rule[finding["rule"]] = self.by_rule.get(finding["rule"], 0) + 1
-            self.files.add(finding["file"])
-
-    def result(self):
-        return {
-            "total": self.total,
-            "bySeverity": self.by_severity,
-            "byRule": dict(sorted(self.by_rule.items(), key=lambda kv: (-kv[1], kv[0]))),
-            "files": len(self.files),
-        }
 
 
 class Server:
@@ -296,34 +125,40 @@ class Server:
         """
         cfg_path = Path(root) / self.gl.CONFIG_FILENAME if root else None
         base_path = Path(root) / self.gl.BASELINE_FILENAME if root else None
-        try:
-            stamp = cfg_path.stat().st_mtime_ns if cfg_path else None
-        except OSError:
-            stamp = None
-        try:
-            base_stamp = base_path.stat().st_mtime_ns if base_path else None
-        except OSError:
-            base_stamp = None
+        stamp = mtime(cfg_path)
+        key = (stamp, mtime(base_path), self.ignore_generation)
         cached = self.configs.get(root)
-        if cached is not None and cached[0] == (stamp, base_stamp, self.ignore_generation):
+        if cached is not None and cached[0] == key:
             return cached[1]
+        config = self.merged_config(cfg_path, stamp, base_path)
+        self.drop_cache_if_rules_moved(config)
+        self.configs[root] = (key, config)
+        return config
+
+    def merged_config(self, cfg_path, stamp, base_path):
+        """`.greenlint.toml` plus the client's excludes, plus the baseline.
+
+        The client's excludes are merged in rather than applied separately, so
+        every path that consults `ignore` — the walk's directory pruning, a
+        single buffer scan — honours them without knowing they came from
+        somewhere else.
+        """
         if cfg_path is not None and stamp is not None:
             config = self.gl.load_config(str(cfg_path))
         else:
             config = {"disable": set(), "ignore": []}
-        # The client's excludes are merged in rather than applied separately,
-        # so every path that consults `ignore` — the walk's directory pruning,
-        # a single buffer scan — honours them without knowing they came from
-        # somewhere else.
-        config = {
+        return {
             "disable": config["disable"],
             "ignore": [*config["ignore"], *self.extra_ignore],
-            # Not part of the cache fingerprint below: findings are cached
-            # unfiltered and the baseline is applied on the way out, so
-            # accepting a finding costs a repaint rather than a rescan.
+            # Not part of the fingerprint below: findings are cached unfiltered
+            # and the baseline is applied on the way out, so accepting a
+            # finding costs a repaint rather than a rescan.
             "baseline": self.gl.load_baseline(base_path) if base_path else set(),
             "baseline_root": base_path.parent if base_path else None,
         }
+
+    def drop_cache_if_rules_moved(self, config):
+        """Empty the finding cache when what a scan would report has changed."""
         fingerprint = digest(
             json.dumps(
                 {"disable": sorted(config["disable"]), "ignore": list(config["ignore"])},
@@ -333,8 +168,6 @@ class Server:
         if fingerprint != self.config_fingerprint:
             self.cache.clear()
             self.config_fingerprint = fingerprint
-        self.configs[root] = ((stamp, base_stamp, self.ignore_generation), config)
-        return config
 
     # --- scanning --------------------------------------------------------
 
@@ -397,6 +230,43 @@ class Server:
         self.cache.put(key, content_hash, findings, stat_stamp=stamp)
         return findings, "scan"
 
+    def report_progress(self, scan):
+        """Say how far the walk has got, and hand over the batch when streaming.
+
+        Not just for the progress bar: silence is the difference between a
+        client waiting on a scan and a client waiting on nothing, which look
+        identical from outside until one of them times out.
+        """
+        self.send(
+            {
+                "id": scan.id,
+                "event": "progress",
+                "files": scan.seen,
+                "found": scan.summary.total,
+                "batch": scan.batch if scan.stream else [],
+            }
+        )
+        scan.batch.clear()
+
+    def walk(self, scan, config, max_bytes):
+        """Scan every file under the request's paths. True if it was cancelled."""
+        for path in self.gl.iter_files(scan.paths, config):
+            scan.seen += 1
+            if scan.seen % INTERLEAVE_EVERY == 0:
+                # A full scan must not hold the editor hostage: buffer scans
+                # and cancellations are answered between batches of files.
+                self.pump()
+                if scan.id in self.cancelled:
+                    return True
+                now = time.perf_counter()
+                if now - scan.reported >= PROGRESS_INTERVAL_S:
+                    scan.reported = now
+                    self.report_progress(scan)
+            found, how = self.scan_path(path, config, max_bytes)
+            scan.counts[how] += 1
+            scan.add(self.accepted(found, config))
+        return False
+
     def scan_project(self, request):
         """Walk the tree, reporting findings as they are made.
 
@@ -406,169 +276,49 @@ class Server:
         the end. The final response then carries the totals and not the findings
         again — a large scan should cross the pipe once, not twice.
         """
-        root = request.get("root")
-        paths = request.get("paths") or ([root] if root else ["."])
-        max_bytes = request.get("maxFileBytes", DEFAULT_MAX_FILE_BYTES)
-        stream = bool(request.get("stream"))
-        config = self.config_for(root)
-        started = time.perf_counter()
-        # Kept only when the client is not streaming. A streamed scan has
-        # already handed every finding over, so holding a second copy of a large
-        # tree's findings here — and sorting it — is work for a list nobody
-        # reads. The summary is accumulated instead.
-        findings = []
-        summary = RunningSummary()
-        batch = []
-        counts = {"stat": 0, "hash": 0, "scan": 0, "skip": 0}
-        seen = 0
-        reported = started
-
-        def report():
-            # Not just for the progress bar: silence is the difference between
-            # a client waiting on a scan and a client waiting on nothing, which
-            # look identical from outside until one of them times out.
-            self.send(
-                {
-                    "id": request.get("id"),
-                    "event": "progress",
-                    "files": seen,
-                    "found": summary.total,
-                    "batch": batch if stream else [],
-                }
-            )
-            batch.clear()
-
-        scan_id = request.get("id")
-        self.active_scan = scan_id
+        config = self.config_for(request.get("root"))
+        scan = ProjectScan(request)
+        self.active_scan = scan.id
         try:
             # Cancelled while it was still queued behind another scan.
-            if scan_id in self.cancelled:
-                return {"cancelled": True, "findings": []}
-            for path in self.gl.iter_files(paths, config):
-                seen += 1
-                if seen % INTERLEAVE_EVERY == 0:
-                    # A full scan must not hold the editor hostage: buffer scans
-                    # and cancellations are answered between batches of files.
-                    self.pump()
-                    if scan_id in self.cancelled:
-                        return {"cancelled": True, "findings": []}
-                    now = time.perf_counter()
-                    if now - reported >= PROGRESS_INTERVAL_S:
-                        reported = now
-                        report()
-                found, how = self.scan_path(path, config, max_bytes)
-                counts[how] += 1
-                found = self.accepted(found, config)
-                if found:
-                    summary.add(found)
-                    if not stream:
-                        findings.extend(found)
-                    batch.extend(found)
+            cancelled = scan.id in self.cancelled or self.walk(
+                scan, config, request.get("maxFileBytes", DEFAULT_MAX_FILE_BYTES)
+            )
         finally:
             self.active_scan = None
-            self.cancelled.discard(scan_id)
-        if stream and batch:
-            report()  # whatever the last interval did not cover
-        findings.sort(key=self.gl.finding_sort_key)
-        return {
-            # Streaming already delivered these one batch at a time; sending
-            # them again would double the cost of the thing being optimised.
-            "findings": findings,
-            "streamed": stream,
-            "summary": summary.result(),
-            "stats": {
-                "files": seen,
-                "reusedFromStat": counts["stat"],
-                "reusedFromHash": counts["hash"],
-                "scanned": counts["scan"],
-                "skipped": counts["skip"],
-                "ms": round((time.perf_counter() - started) * 1000),
-                "cache": self.cache.stats(),
-            },
-        }
+            self.cancelled.discard(scan.id)
+        if cancelled:
+            return {"cancelled": True, "findings": []}
+        if scan.stream and scan.batch:
+            self.report_progress(scan)  # whatever the last interval did not cover
+        scan.findings.sort(key=self.gl.finding_sort_key)
+        return scan.result(self.cache.stats())
 
-    # --- dispatch --------------------------------------------------------
+    # The protocol's operations, in the order the docs list them. One callable
+    # per op, all with the same `(server, request)` signature, so adding one is
+    # a function in `server_ops` and a row here. `scanProject` is the method
+    # above rather than an import: it drives the cache, the walk and the
+    # progress events, which is the server itself and not an operation on it.
+    OPS: ClassVar[dict] = {
+        "ping": op_ping,
+        "languages": op_languages,
+        "scanText": op_scan_text,
+        "scanFile": op_scan_file,
+        "scanProject": scan_project,
+        "configure": op_configure,
+        "writeBaseline": op_write_baseline,
+        "invalidate": op_invalidate,
+        "cancel": op_cancel,
+    }
 
     def handle(self, request):
+        """Run the callable implementing this request's `op`."""
         op = request.get("op")
-        if op == "ping":
-            return {
-                "protocol": PROTOCOL_VERSION,
-                "version": greenlint_version(self.gl),
-                "rules": len(self.gl.RULES),
-                "python": sys.version.split()[0],
-                "module": getattr(self.gl, "__file__", None),
-                # The client merges findings from several scans and has to sort
-                # the merged list itself. The *order* is greenlint's to decide,
-                # so it is published rather than reinvented over there — and a
-                # severity added here needs no change in the extension.
-                "severityOrder": dict(self.gl.SEVERITY_ORDER),
-            }
-        if op == "languages":
-            # Just the extensions, not the rule table: the client uses this to
-            # avoid sending a buffer no rule would look at, and nothing else.
-            return {
-                "extensions": sorted({lang for rule in self.gl.RULES for lang in rule["langs"]})
-            }
-        if op == "scanText":
-            config = self.config_for(request.get("root"))
-            path = Path(request["path"])
-            findings = self.scan_text(path, request.get("text", ""), config)
-            return {"findings": self.accepted(findings, config)}
-        if op == "scanFile":
-            config = self.config_for(request.get("root"))
-            max_bytes = request.get("maxFileBytes", DEFAULT_MAX_FILE_BYTES)
-            found, how = self.scan_path(Path(request["path"]), config, max_bytes)
-            return {"findings": self.accepted(found, config), "source": how}
-        if op == "scanProject":
-            return self.scan_project(request)
-        if op == "configure":
-            ignore = [str(pattern) for pattern in request.get("ignore") or []]
-            if ignore != self.extra_ignore:
-                self.extra_ignore = ignore
-                self.ignore_generation += 1
-                self.configs.clear()
-                self.cache.clear()
-            return {"ignore": self.extra_ignore}
-        if op == "writeBaseline":
-            root = request.get("root")
-            config = self.config_for(root)
-            # Scanned rather than taken from the client: the baseline has to
-            # describe the tree, not whatever the panel happens to be showing,
-            # and the cache makes this nearly free straight after a scan.
-            findings = []
-            for path in self.gl.iter_files([root], config):
-                found, _ = self.scan_path(path, config, DEFAULT_MAX_FILE_BYTES)
-                findings.extend(found)
-            target = Path(root) / self.gl.BASELINE_FILENAME
-            count = self.gl.write_baseline(target, findings, target.parent)
-            self.configs.clear()
-            return {"path": str(target), "accepted": count}
-        if op == "invalidate":
-            paths = request.get("paths")
-            if paths:
-                for path in paths:
-                    self.cache.drop(str(path))
-            else:
-                self.cache.clear()
-                self.configs.clear()
-            return {"cache": self.cache.stats()}
-        if op == "cancel":
-            target = request.get("cancel")
-            if target is None:
-                return {"cancelling": False}
-            self.cancelled.add(target)
-            # A scan can be cancelled while it is still queued — `pump` defers
-            # one project scan behind another — so this cannot be limited to the
-            # running one. What it can do is forget the ids that name no scan at
-            # all, which is what a cancel arriving just after its scan finished
-            # leaves behind.
-            pending = {d.get("id") for d in self.deferred if d.get("id") is not None}
-            if self.active_scan is not None:
-                pending.add(self.active_scan)
-            self.cancelled &= pending
-            return {"cancelling": target in self.cancelled}
-        raise ValueError(f"unknown op: {op!r}")
+        try:
+            handler = self.OPS[op]
+        except (KeyError, TypeError):  # missing, misspelled, or not a string
+            raise ValueError(f"unknown op: {op!r}") from None
+        return handler(self, request)
 
     def parse(self, line):
         try:

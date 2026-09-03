@@ -4,7 +4,8 @@ import * as vscode from 'vscode';
 
 import { readSettings, requiresRestart } from './config';
 import { GreenlintHoverProvider, SOURCE, toDiagnostics } from './diagnostics';
-import { ScanServer, ScanServerError } from './engine';
+import { ScanServer } from './engine';
+import { ScanServerError } from './protocol';
 import { editorExcludeGlobs } from './excludes';
 import {
   countBySeverity,
@@ -129,12 +130,20 @@ class Controller implements vscode.Disposable {
   // --- registration -----------------------------------------------------
 
   private register(): void {
-    const watcher = vscode.workspace.createFileSystemWatcher('**/*');
-    const config = vscode.workspace.createFileSystemWatcher('**/.greenlint.toml');
+    this.disposables.push(
+      ...this.commands(),
+      ...this.viewWiring(),
+      ...this.documentListeners(),
+      ...this.watchers(),
+    );
+  }
+
+  /** One entry per `contributes.commands` id in package.json. */
+  private commands(): vscode.Disposable[] {
     const command = (name: string, run: () => unknown) =>
       vscode.commands.registerCommand(name, run);
 
-    this.disposables.push(
+    return [
       command('greenlint.scanFile', () => {
         const editor = vscode.window.activeTextEditor;
         if (!editor) {
@@ -162,16 +171,26 @@ class Controller implements vscode.Disposable {
         this.scannedVersion.clear();
         await this.scanProject();
       }),
+    ];
+  }
 
+  /** What turns findings into things on screen: hovers, squiggles, the panel. */
+  private viewWiring(): vscode.Disposable[] {
+    return [
       vscode.languages.registerHoverProvider(
         { scheme: 'file' },
         new GreenlintHoverProvider(this.store),
       ),
-
       this.store.onDidChange((files) => {
         this.publishDiagnostics(files);
         this.repaint();
       }),
+    ];
+  }
+
+  /** The editor telling us what the user is doing. */
+  private documentListeners(): vscode.Disposable[] {
+    return [
       vscode.workspace.onDidChangeConfiguration((event) => {
         if (
           event.affectsConfiguration('greenlint') ||
@@ -217,7 +236,15 @@ class Controller implements vscode.Disposable {
           this.schedule(editor.document, 0);
         }
       }),
+    ];
+  }
 
+  /** The disk telling us what everything else is doing. */
+  private watchers(): vscode.Disposable[] {
+    const watcher = vscode.workspace.createFileSystemWatcher('**/*');
+    const config = vscode.workspace.createFileSystemWatcher('**/.greenlint.toml');
+
+    return [
       watcher,
       config,
       watcher.onDidChange((uri) => this.queueExternal(uri)),
@@ -233,7 +260,7 @@ class Controller implements vscode.Disposable {
           void this.reconfigure(),
         ),
       ),
-    );
+    ];
   }
 
   // --- scheduling -------------------------------------------------------

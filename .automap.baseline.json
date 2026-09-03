@@ -1,0 +1,31 @@
+{
+  "components": {
+    "examples": {
+      "fan_in": 0,
+      "fan_out": 0,
+      "modules": 1
+    },
+    "extensions": {
+      "fan_in": 0,
+      "fan_out": 1,
+      "modules": 17
+    },
+    "greenlint": {
+      "fan_in": 1,
+      "fan_out": 0,
+      "modules": 1
+    }
+  },
+  "cycles": [],
+  "edges": [
+    "extensions -> greenlint"
+  ],
+  "external": [
+    "greenlint_api",
+    "scan_cache",
+    "server_ops",
+    "vscode"
+  ],
+  "version": "2.0",
+  "violations": []
+}
