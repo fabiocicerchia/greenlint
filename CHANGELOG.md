@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.9.1](https://github.com/fabiocicerchia/greenlint/compare/v0.9.0...v0.9.1) (2026-09-04)
+
+
+### Bug Fixes
+
+* **ci:** pin the editorconfig-checker binary version ([#96](https://github.com/fabiocicerchia/greenlint/issues/96)) ([5905fc5](https://github.com/fabiocicerchia/greenlint/commit/5905fc52ed6ec29a919bf3fa5c51bd2de72128ef))
+
 ## [0.9.0](https://github.com/fabiocicerchia/greenlint/compare/v0.8.3...v0.9.0) (2026-09-03)
 
 
