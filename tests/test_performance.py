@@ -21,6 +21,8 @@ changing something and want to know which way it moved.
 import time
 from pathlib import Path
 
+import pytest
+
 import greenlint
 
 # The line GL005 fires on, as a plain literal rather than something built per
@@ -29,7 +31,7 @@ import greenlint
 QUERY = "SELECT * FROM t;\n"
 
 
-def write(tmp_path, name, content):
+def write(tmp_path: Path, name, content):
     f = tmp_path / name
     f.parent.mkdir(parents=True, exist_ok=True)
     f.write_text(content)
@@ -51,7 +53,7 @@ def best_of(fn, runs=3):
 # --- work not done ----------------------------------------------------------
 
 
-def test_only_files_a_rule_targets_are_opened(tmp_path, monkeypatch):
+def test_only_files_a_rule_targets_are_opened(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """A checkout is mostly images, lock files and bundles. Reading one to match
     it against no rules is the cheapest work to remove: don't do it."""
     opened = []
@@ -71,7 +73,9 @@ def test_only_files_a_rule_targets_are_opened(tmp_path, monkeypatch):
     assert sorted(opened) == ["app.py", "q.sql"]
 
 
-def test_the_ignore_list_costs_the_same_at_five_globs_and_at_250(tmp_path, monkeypatch):
+def test_the_ignore_list_costs_the_same_at_five_globs_and_at_250(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     """Matching is per path, not per path per glob.
 
     The editor hands greenlint its own `files.exclude` and `search.exclude`,
@@ -106,7 +110,7 @@ def test_the_ignore_list_costs_the_same_at_five_globs_and_at_250(tmp_path, monke
     assert counts[0] == counts[1], "matching cost grew with the number of globs"
 
 
-def test_the_ignore_list_is_compiled_once_for_a_whole_walk(tmp_path):
+def test_the_ignore_list_is_compiled_once_for_a_whole_walk(tmp_path: Path) -> None:
     """Once for the files and once for the directory prune bases — not per file,
     and not per file per glob."""
     for index in range(40):
@@ -120,7 +124,7 @@ def test_the_ignore_list_is_compiled_once_for_a_whole_walk(tmp_path):
 # --- shape of the curve -----------------------------------------------------
 
 
-def test_a_file_the_same_rule_matches_many_times_stays_linear(tmp_path):
+def test_a_file_the_same_rule_matches_many_times_stays_linear(tmp_path: Path) -> None:
     """Line numbers used to come from counting newlines from the top of the file
     per match, which reads the file once per finding. On a generated SQL dump
     that is quadratic, and generated files are the large ones.
@@ -132,7 +136,7 @@ def test_a_file_the_same_rule_matches_many_times_stays_linear(tmp_path):
         path = write(tmp_path, f"dump{matches}.sql", QUERY * matches)
         found = None
 
-        def run():
+        def run() -> None:
             nonlocal found
             found = list(greenlint.scan_file(path))
 
@@ -153,7 +157,7 @@ def test_a_file_the_same_rule_matches_many_times_stays_linear(tmp_path):
 # --- benchmark --------------------------------------------------------------
 
 
-def _benchmark(target):  # pragma: no cover - a tool, not a test
+def _benchmark(target) -> None:  # pragma: no cover - a tool, not a test
     import tempfile
 
     print(f"corpus: {target}")
@@ -161,7 +165,7 @@ def _benchmark(target):  # pragma: no cover - a tool, not a test
     files = list(greenlint.iter_files([target], config))
     findings = None
 
-    def run():
+    def run() -> None:
         nonlocal findings
         findings = greenlint.scan([target], config)
 
@@ -181,9 +185,7 @@ def _benchmark(target):  # pragma: no cover - a tool, not a test
     assets.mkdir(exist_ok=True)
     for index in range(200):
         (assets / f"asset{index}.png").write_text("x" * 200_000)
-    print(
-        f"  200 assets    {1000 * best_of(lambda: greenlint.scan([str(assets)], config)):8.1f} ms"
-    )
+    print(f"  200 assets    {1000 * best_of(lambda: greenlint.scan([str(assets)], config)):8.1f} ms")
 
     for index in range(500):
         path = scratch / "tree" / f"pkg{index % 20}" / f"m{index}.py"
