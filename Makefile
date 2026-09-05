@@ -15,7 +15,7 @@ VSIX := $(EXT_DIR)/greenlint-$(EXT_VERSION).vsix
 
 ##@ General
 
-.PHONY: help
+.PHONY: help setup build install test lint run format analyze
 help: ## Show this help
 	awk 'BEGIN {FS = ":.*## "} \
 		/^##@/ { printf "\n\033[1m%s\033[0m\n", substr($$0, 5) } \
@@ -39,8 +39,8 @@ install: ## Install the package
 ##@ Quality
 
 .PHONY: lint
-lint: ## Run ruff
-	ruff check .
+lint: ## Run the whole gate — every hook, every file
+	pre-commit run --all-files
 
 .PHONY: test
 test: ## Run tests
@@ -91,3 +91,12 @@ ext-install: ext-package ## Build the VS Code extension and install it
 ext-publish: ext-package ## Publish the .vsix to both marketplaces
 	cd $(EXT_DIR) && npm run publish -- --packagePath "$(notdir $(VSIX))"
 	cd $(EXT_DIR) && npx --yes ovsx@1.1.1 publish "$(notdir $(VSIX))" -p "$$OVSX_PAT"
+
+run: ## Run greenlint
+	greenlint --help
+
+format: ## Rewrite the sources to canonical form
+	ruff format .
+
+analyze: ## Type-check the package
+	basedpyright
