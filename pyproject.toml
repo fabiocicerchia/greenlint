@@ -46,6 +46,36 @@ py-modules = ["greenlint"]
 pythonpath = ["."]
 
 [tool.ruff]
-line-length = 100
+line-length = 120
 # examples/ holds deliberately wasteful sample code for greenlint to flag.
 extend-exclude = ["examples"]
+
+[tool.ruff.lint]
+select = [
+  "E", "W", "F", "I", "N", "UP", "ANN", "ASYNC", "S", "B", "A", "C4", "DTZ",
+  "T20", "PT", "RET", "SIM", "PTH", "ERA", "TD", "FIX", "PLR2004", "TRY", "PL", "RUF",
+]
+ignore = [
+  "ANN401",      # Any in *args/**kwargs — FC-GEN-016's comment rule covers it
+  "TRY003",      # long messages inline; FC-GEN-022 wants them descriptive
+]
+
+[tool.ruff.lint.flake8-annotations]
+mypy-init-return = true
+
+[tool.ruff.lint.per-file-ignores]
+# `assert` is what a test is, and an expected value is the literal it compares
+# against -- naming it moves the assertion one step from the thing asserted.
+"tests/**" = [
+  "S101",     # `assert` is what a test is
+  "PLR2004",  # an expected value is the literal it compares against
+  "ANN001",   # a fixture or a fake's argument, named by the test that builds it
+  "ANN002",   # a fake's *args exist to swallow whatever the real call passes
+  "ANN003",   # ditto **kwargs
+  "ANN201",   # a test helper's return is whatever the assertions read
+  "ANN202",
+  "PLC0415",  # a test that imports inside itself is controlling import order,
+              # which is the thing under test in the module-loading cases
+  "T201",     # a test that prints is reporting its own measurement
+  "S603",     # a test that launches the language server is launching it
+]
