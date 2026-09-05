@@ -10,9 +10,10 @@ import inspect
 import sys
 from importlib import metadata
 from pathlib import Path
+from typing import Any
 
 
-def load_greenlint(module_path=None):
+def load_greenlint(module_path: str | None = None) -> Any:
     """Import greenlint, preferring an explicit path over the installed copy.
 
     The extension points this at the greenlint.py in the open workspace when
@@ -30,7 +31,9 @@ def load_greenlint(module_path=None):
         sys.modules["greenlint"] = module
         spec.loader.exec_module(module)
         return module
-    import greenlint
+    # Imported here, not at the top: the point of this function is to find
+    # greenlint wherever the extension was installed alongside it.
+    import greenlint  # noqa: PLC0415
 
     return greenlint
 
@@ -59,7 +62,7 @@ REQUIRED_API = (
 )
 
 
-def missing_api(gl):
+def missing_api(gl: Any) -> list[str]:
     """Names this server needs that the loaded greenlint does not have."""
     missing = [name for name in REQUIRED_API if not hasattr(gl, name)]
     # Present but older: the buffer scan depends on the keyword, not just on
@@ -69,7 +72,7 @@ def missing_api(gl):
     return missing
 
 
-def greenlint_version(gl):
+def greenlint_version(gl: Any) -> str:
     """Best-effort version string.
 
     greenlint carries no `__version__` — the number lives in pyproject.toml — so

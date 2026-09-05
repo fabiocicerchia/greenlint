@@ -11,6 +11,10 @@ and what to do instead.
   greenlint . --exclude '*/vendor/*' --exclude '*/dist/*'
 """
 
+# Annotations are evaluated lazily: several helpers are typed against
+# PythonIndex, which is defined further down beside the traversal it holds.
+from __future__ import annotations
+
 import argparse
 import ast
 import bisect
@@ -23,7 +27,17 @@ import re
 import sys
 import tomllib
 from collections import deque
+from collections.abc import Iterator
 from pathlib import Path, PurePath
+from typing import Any
+
+# A rule as the RULES table declares it, and a finding as the reporters consume
+# it. Both are dicts because the table is written as literals and every reader
+# does a `.get` on the optional keys.
+Rule = dict[str, Any]
+Finding = dict[str, Any]
+# A parsed `.greenlint.toml`: {"disable": set[str], "ignore": list[str]}.
+Config = dict[str, Any]
 
 CONFIG_FILENAME = ".greenlint.toml"
 BASELINE_FILENAME = ".greenlint-baseline.json"
@@ -89,13 +103,16 @@ BASELINE_FILENAME = ".greenlint-baseline.json"
 #     hyperscale PUE and no safety margin. It is measuring a known machine; we
 #     are bounding an unknown one. Do not port its constant here, or ours
 #     there. See its docs/assumptions.md, "Reconciling with greenlint".
+# A swap and a two-name unpack are both exactly two targets.
+PAIR = 2
+
 GRID_INTENSITY_G_PER_KWH = 480.0
 BUSY_CORE_WATTS = 15.0
 KWH_PER_GB_TRANSFERRED = 0.03
 G_CO2E_PER_GB = KWH_PER_GB_TRANSFERRED * GRID_INTENSITY_G_PER_KWH  # 14.4, quoted as ~15
 
 
-def core_seconds_per_gram(grid_g_per_kwh=GRID_INTENSITY_G_PER_KWH, watts=BUSY_CORE_WATTS):
+def core_seconds_per_gram(grid_g_per_kwh: float = GRID_INTENSITY_G_PER_KWH, watts: float = BUSY_CORE_WATTS) -> float:
     """Seconds of one busy CPU core that add up to 1 gCO2e.
 
     The sanity check behind every hint below: at 480 gCO2e/kWh a gram is 7.5 kJ,
@@ -130,7 +147,7 @@ CO2E_HINTS = {
     # One extra node is one extra 8-32 vCPU VM idling: 13-51 W x 24 h.
     "GL014": "~150-600 gCO2e/day if it forces one extra node; nothing if the cluster has slack",
     # 0.4 x a 4-16 vCPU instance at ~50% load (4.6 W/vCPU) x 24 h. AWS publishes
-    # "up to 60% less energy for the same performance"
+    # Quoting the vendor: "up to 60% less energy for the same performance".
     # (https://aws.amazon.com/ec2/graviton/); independent benchmarks land nearer
     # 45-50%, so 40% is the conservative end.
     "GL016": "~80-350 gCO2e/day per instance (ARM draws roughly 40% less for equal work)",
@@ -291,9 +308,7 @@ RULES = [
         "id": "GL006",
         "langs": {".dockerfile", "Dockerfile"},
         "severity": "medium",
-        "pattern": re.compile(
-            r"^FROM\s+(?:ubuntu|debian)(?::|\s|$)(?!.*slim)", re.MULTILINE | re.IGNORECASE
-        ),
+        "pattern": re.compile(r"^FROM\s+(?:ubuntu|debian)(?::|\s|$)(?!.*slim)", re.MULTILINE | re.IGNORECASE),
         "message": "full-fat base image",
         "suggestion": "prefer -slim/alpine/distroless: smaller pulls, less storage, faster cold starts",
     },
@@ -303,7 +318,11 @@ RULES = [
         "severity": "low",
         "pattern": None,  # whole-file check; see _ast_quadratic_rebuild_findings
         "message": "quadratic rebuild in a loop (whole sequence copied each iteration)",
-        "suggestion": "`x = x + [i]` / `x += [i]` on a list, or `s += t` on a string, copies everything accumulated so far on every pass — O(n^2) allocation. Use list.append() (amortised O(1)) or collect the parts and ''.join() them once",
+        "suggestion": (
+            "`x = x + [i]` / `x += [i]` on a list, or `s += t` on a string, copies everything accumulated so far on "
+            "every pass — O(n^2) allocation. Use list.append() (amortised O(1)) or collect the parts and ''.join() "
+            "them once"
+        ),
     },
     {
         "id": "GL008",
@@ -317,11 +336,11 @@ RULES = [
         "id": "GL009",
         "langs": {".dockerfile", "Dockerfile"},
         "severity": "low",
-        "pattern": re.compile(
-            r"apt-get\s+install(?!.*--no-install-recommends)[^\n]*", re.IGNORECASE
-        ),
+        "pattern": re.compile(r"apt-get\s+install(?!.*--no-install-recommends)[^\n]*", re.IGNORECASE),
         "message": "apt-get install without --no-install-recommends",
-        "suggestion": "recommended/suggested packages bloat the image; skip them to cut pull, transfer, and storage energy",
+        "suggestion": (
+            "recommended/suggested packages bloat the image; skip them to cut pull, transfer, and storage energy"
+        ),
     },
     {
         "id": "GL010",
@@ -348,7 +367,10 @@ RULES = [
         "severity": "medium",
         "pattern": re.compile(r"for\s+\w+\s+in\s+[^:\n]+:\n[ \t]+\S*\.execute\(", re.MULTILINE),
         "message": "database query executed inside a loop (N+1 pattern)",
-        "suggestion": "batch into one query (e.g. WHERE id IN (...)) instead of one round-trip per item; cuts DB CPU and network energy",
+        "suggestion": (
+            "batch into one query (e.g. WHERE id IN (...)) instead of one round-trip per item; cuts DB CPU and network "
+            "energy"
+        ),
     },
     {
         "id": "GL013",
@@ -356,7 +378,10 @@ RULES = [
         "severity": "low",
         "pattern": None,  # whole-resource-block check; see _tf_s3_lifecycle_findings
         "message": "S3 bucket without a lifecycle policy",
-        "suggestion": "stale objects sit in hot storage forever; add a lifecycle_rule (or aws_s3_bucket_lifecycle_configuration) to tier or expire old data",
+        "suggestion": (
+            "stale objects sit in hot storage forever; add a lifecycle_rule (or aws_s3_bucket_lifecycle_configuration) "
+            "to tier or expire old data"
+        ),
     },
     {
         "id": "GL014",
@@ -364,7 +389,10 @@ RULES = [
         "severity": "medium",
         "pattern": None,  # whole-file check; see _k8s_resources_findings
         "message": "Kubernetes workload without CPU/memory requests or limits",
-        "suggestion": "unbounded containers get scheduled without guardrails, encouraging over-provisioned, underutilised nodes; set resources.requests/limits to right-size",
+        "suggestion": (
+            "unbounded containers get scheduled without guardrails, encouraging over-provisioned, underutilised nodes; "
+            "set resources.requests/limits to right-size"
+        ),
     },
     {
         "id": "GL015",
@@ -379,27 +407,32 @@ RULES = [
             re.MULTILINE | re.IGNORECASE,
         ),
         "message": "base image pinned to an end-of-life runtime/OS version",
-        "suggestion": "older runtimes lack the perf/efficiency work in newer releases and pull more security-patch layers over time; move to a current stable version",
+        "suggestion": (
+            "older runtimes lack the perf/efficiency work in newer releases and pull more security-patch layers over "
+            "time; move to a current stable version"
+        ),
     },
     {
         "id": "GL016",
         "langs": {".tf", ".tofu"},
         "severity": "low",
-        "pattern": re.compile(
-            r'instance_type\s*=\s*"(?:t2|t3|m4|m5|c4|c5|r4|r5)\.[a-z0-9]+"', re.IGNORECASE
-        ),
+        "pattern": re.compile(r'instance_type\s*=\s*"(?:t2|t3|m4|m5|c4|c5|r4|r5)\.[a-z0-9]+"', re.IGNORECASE),
         "message": "x86 instance family with an ARM/Graviton equivalent available",
-        "suggestion": "ARM-based instances (t4g/m6g/c6g/r6g) draw roughly 40% less for equal work; AWS publishes 'up to 60% less energy', independent benchmarks land nearer 45-50%, so 40% is the conservative end",
+        "suggestion": (
+            "ARM-based instances (t4g/m6g/c6g/r6g) draw roughly 40% less for equal work; AWS publishes 'up to 60% less "
+            "energy', independent benchmarks land nearer 45-50%, so 40% is the conservative end"
+        ),
     },
     {
         "id": "GL017",
         "langs": {".html", ".css"},
         "severity": "low",
-        "pattern": re.compile(
-            r"""(?:<img\b[^>]*\bsrc\s*=\s*["']|url\(\s*["']?)[^"'\)\s]+\.gif\b""", re.IGNORECASE
-        ),
+        "pattern": re.compile(r"""(?:<img\b[^>]*\bsrc\s*=\s*["']|url\(\s*["']?)[^"'\)\s]+\.gif\b""", re.IGNORECASE),
         "message": "GIF referenced for image/animation",
-        "suggestion": "GIFs are an obsolete, inefficient animation format; MP4/WebP/AVIF (or SVG/CSS animation) give smaller files and less energy per view",
+        "suggestion": (
+            "GIFs are an obsolete, inefficient animation format; MP4/WebP/AVIF (or SVG/CSS animation) give smaller "
+            "files and less energy per view"
+        ),
     },
     {
         "id": "GL018",
@@ -407,7 +440,10 @@ RULES = [
         "severity": "low",
         "pattern": None,  # AST check; see _ast_nested_loop_findings
         "message": "nested loop iterating over the same collection (possible O(n²) pattern)",
-        "suggestion": "a manual all-pairs scan over the same list costs O(n²); use a set/dict for membership tests or itertools.combinations instead",
+        "suggestion": (
+            "a manual all-pairs scan over the same list costs O(n²); use a set/dict for membership tests or "
+            "itertools.combinations instead"
+        ),
     },
     {
         "id": "GL019",
@@ -421,7 +457,10 @@ RULES = [
             re.MULTILINE,
         ),
         "message": "HTTP request executed inside a loop (N+1-style network calls)",
-        "suggestion": "batch the calls, reuse a requests.Session, or gather them concurrently instead of one request per iteration; cuts round-trips and idle-wait energy",
+        "suggestion": (
+            "batch the calls, reuse a requests.Session, or gather them concurrently instead of one request per "
+            "iteration; cuts round-trips and idle-wait energy"
+        ),
     },
     {
         "id": "GL020",
@@ -430,11 +469,12 @@ RULES = [
         "code_only": True,
         "langs": {".py"},
         "severity": "low",
-        "pattern": re.compile(
-            r"""logging\.(?:debug|info)\(\s*(?:f['"]|['"][^'"]*['"]\s*\.\s*format\()"""
-        ),
+        "pattern": re.compile(r"""logging\.(?:debug|info)\(\s*(?:f['"]|['"][^'"]*['"]\s*\.\s*format\()"""),
         "message": "logging call built eagerly with an f-string or .format()",
-        "suggestion": "the interpolation runs even when the log level is disabled; use logging.debug('x=%s', x) for lazy formatting",
+        "suggestion": (
+            "the interpolation runs even when the log level is disabled; use logging.debug('x=%s', x) for lazy "
+            "formatting"
+        ),
     },
     {
         "id": "GL021",
@@ -445,7 +485,10 @@ RULES = [
         "severity": "medium",
         "pattern": re.compile(r"\.iterrows\(\)|\.apply\([^)]*axis\s*=\s*1"),
         "message": "row-wise pandas iteration (iterrows/apply(axis=1))",
-        "suggestion": "row-wise pandas ops run one Python-level call per row; use vectorised column operations for 10-100x fewer CPU cycles",
+        "suggestion": (
+            "row-wise pandas ops run one Python-level call per row; use vectorised column operations for 10-100x fewer "
+            "CPU cycles"
+        ),
     },
     {
         "id": "GL022",
@@ -459,7 +502,10 @@ RULES = [
             re.MULTILINE,
         ),
         "message": "file opened/read inside a loop",
-        "suggestion": "repeated opens/reads add a syscall and parse pass per iteration; load once outside the loop or read in chunks",
+        "suggestion": (
+            "repeated opens/reads add a syscall and parse pass per iteration; load once outside the loop or read in "
+            "chunks"
+        ),
     },
     {
         "id": "GL023",
@@ -467,7 +513,10 @@ RULES = [
         "severity": "medium",
         "pattern": None,  # AST check; see _ast_bubble_sort_findings
         "message": "nested loop with an element swap (manual O(n²) sort)",
-        "suggestion": "built-in sorted()/list.sort() use Timsort (O(n log n), implemented in C); replace the manual swap-based sort",
+        "suggestion": (
+            "built-in sorted()/list.sort() use Timsort (O(n log n), implemented in C); replace the manual swap-based "
+            "sort"
+        ),
     },
     {
         "id": "GL024",
@@ -475,7 +524,10 @@ RULES = [
         "severity": "medium",
         "pattern": None,  # whole-resource-block check; see _tf_asg_static_size_findings
         "message": "autoscaling group with min_size == max_size",
-        "suggestion": "a fixed-size 'autoscaling' group is provisioned for peak load 24/7; widen the range so it can actually scale down under low demand",
+        "suggestion": (
+            "a fixed-size 'autoscaling' group is provisioned for peak load 24/7; widen the range so it can actually "
+            "scale down under low demand"
+        ),
     },
     {
         "id": "GL025",
@@ -483,7 +535,10 @@ RULES = [
         "severity": "low",
         "pattern": re.compile(r'volume_type\s*=\s*"gp2"'),
         "message": "EBS volume using gp2 instead of gp3",
-        "suggestion": "gp3 gives the same baseline performance at lower cost and power draw per IOP than gp2; migrate unless you need gp2's specific burst behaviour",
+        "suggestion": (
+            "gp3 gives the same baseline performance at lower cost and power draw per IOP than gp2; migrate unless you "
+            "need gp2's specific burst behaviour"
+        ),
     },
     {
         "id": "GL026",
@@ -491,7 +546,10 @@ RULES = [
         "severity": "medium",
         "pattern": None,  # whole-resource-block check; see _tf_log_retention_findings
         "message": "CloudWatch log group without a retention period",
-        "suggestion": "logs are kept forever by default, growing storage and its energy footprint indefinitely; set retention_in_days",
+        "suggestion": (
+            "logs are kept forever by default, growing storage and its energy footprint indefinitely; set "
+            "retention_in_days"
+        ),
     },
     {
         "id": "GL027",
@@ -502,7 +560,10 @@ RULES = [
         "severity": "low",
         "pattern": re.compile(r"express\.static\([^,)]*\)"),
         "message": "static assets served without a cache duration (Express)",
-        "suggestion": "express.static() without maxAge sends no Cache-Control, so browsers re-fetch unchanged files every visit; set { maxAge: '1y', immutable: true } for hashed assets",
+        "suggestion": (
+            "express.static() without maxAge sends no Cache-Control, so browsers re-fetch unchanged files every visit; "
+            "set { maxAge: '1y', immutable: true } for hashed assets"
+        ),
     },
     {
         "id": "GL028",
@@ -513,7 +574,10 @@ RULES = [
         "severity": "low",
         "pattern": re.compile(r"^from\s+\S+\s+import\s+\*", re.MULTILINE),
         "message": "wildcard import",
-        "suggestion": "star imports bind every public name in the module, bloating the namespace and import time; import only the names you use",
+        "suggestion": (
+            "star imports bind every public name in the module, bloating the namespace and import time; import only "
+            "the names you use"
+        ),
     },
     {
         "id": "GL029",
@@ -521,7 +585,10 @@ RULES = [
         "severity": "low",
         "pattern": None,  # whole-file count check; see _dockerfile_layer_bloat_findings
         "message": "separate RUN install layer (image layer bloat)",
-        "suggestion": "each RUN install creates a new image layer that must be pulled and stored; chain installs with && into one RUN to shrink transfer/storage footprint",
+        "suggestion": (
+            "each RUN install creates a new image layer that must be pulled and stored; chain installs with && into "
+            "one RUN to shrink transfer/storage footprint"
+        ),
     },
     {
         "id": "GL030",
@@ -529,7 +596,10 @@ RULES = [
         "severity": "low",
         "pattern": None,  # AST check; see _ast_dict_iterator_findings
         "message": "dict .items() iteration discards the key or value",
-        "suggestion": "use .keys() or .values() directly instead of .items() when only one side is needed; skips building/unpacking the discarded half",
+        "suggestion": (
+            "use .keys() or .values() directly instead of .items() when only one side is needed; skips "
+            "building/unpacking the discarded half"
+        ),
     },
     {
         "id": "GL031",
@@ -537,7 +607,10 @@ RULES = [
         "severity": "low",
         "pattern": None,  # AST check; see _ast_try_in_loop_findings
         "message": "exception swallowed every iteration (exceptions as control flow)",
-        "suggestion": "a handler that just passes/continues means the raise fires on ordinary input; raising and unwinding costs far more than an if-check. Test the condition instead of catching it",
+        "suggestion": (
+            "a handler that just passes/continues means the raise fires on ordinary input; raising and unwinding costs "
+            "far more than an if-check. Test the condition instead of catching it"
+        ),
     },
     {
         "id": "GL032",
@@ -552,7 +625,10 @@ RULES = [
             re.MULTILINE,
         ),
         "message": "heap allocation inside a loop",
-        "suggestion": "malloc/calloc/realloc/new repeats allocator overhead every iteration; allocate once before the loop and reuse the buffer (or reserve()/resize() for containers)",
+        "suggestion": (
+            "malloc/calloc/realloc/new repeats allocator overhead every iteration; allocate once before the loop and "
+            "reuse the buffer (or reserve()/resize() for containers)"
+        ),
     },
     {
         "id": "GL033",
@@ -560,7 +636,10 @@ RULES = [
         "severity": "medium",
         "pattern": None,  # whole-file check; see _k8s_hpa_static_findings
         "message": "HorizontalPodAutoscaler with minReplicas == maxReplicas",
-        "suggestion": "a fixed-range HPA can't scale down under low demand; widen minReplicas/maxReplicas so it actually elasticity-scales",
+        "suggestion": (
+            "a fixed-range HPA can't scale down under low demand; widen minReplicas/maxReplicas so it actually "
+            "elasticity-scales"
+        ),
     },
     {
         "id": "GL034",
@@ -568,7 +647,10 @@ RULES = [
         "severity": "medium",
         "pattern": None,  # whole-file check; see _compose_resources_findings
         "message": "docker-compose service(s) without resource limits",
-        "suggestion": "unbounded containers can consume a whole host's CPU/RAM; set deploy.resources.limits (Swarm) or mem_limit/cpus (Compose v2) to right-size",
+        "suggestion": (
+            "unbounded containers can consume a whole host's CPU/RAM; set deploy.resources.limits (Swarm) or "
+            "mem_limit/cpus (Compose v2) to right-size"
+        ),
     },
     {
         "id": "GL035",
@@ -579,7 +661,10 @@ RULES = [
         "severity": "low",
         "pattern": re.compile(r"\.Count\(\)\s*(?:==\s*0|!=\s*0|>\s*0)"),
         "message": "LINQ .Count() used just to check emptiness",
-        "suggestion": "Count() enumerates the whole sequence; use .Any() (or !sequence.Any()) which short-circuits on the first element",
+        "suggestion": (
+            "Count() enumerates the whole sequence; use .Any() (or !sequence.Any()) which short-circuits on the first "
+            "element"
+        ),
     },
     {
         "id": "GL036",
@@ -590,7 +675,9 @@ RULES = [
         "severity": "low",
         "pattern": re.compile(r"\.(?:keys|values)\.include\?\("),
         "message": "Hash membership check via keys/values.include?",
-        "suggestion": "materialises the whole keys/values array for an O(n) scan; use .key?/.value? for an O(1) hash lookup",
+        "suggestion": (
+            "materialises the whole keys/values array for an O(n) scan; use .key?/.value? for an O(1) hash lookup"
+        ),
     },
     {
         "id": "GL037",
@@ -599,13 +686,11 @@ RULES = [
         "code_only": True,
         "langs": {".rb"},
         "severity": "low",
-        "pattern": re.compile(
-            r"\.select\s*(?:\(&:\w+[?!]?\)|\{[^{}]*\})\s*\.map\s*(?:\(&:\w+[?!]?\)|\{[^{}]*\})"
-        ),
+        "pattern": re.compile(r"\.select\s*(?:\(&:\w+[?!]?\)|\{[^{}]*\})\s*\.map\s*(?:\(&:\w+[?!]?\)|\{[^{}]*\})"),
         "message": "select().map() chain (two passes over the collection)",
         "suggestion": "use filter_map to select and transform in a single pass instead of two full iterations",
     },
-    # --- C#: two rules was "barely checked" (see docs/rules.md coverage) ---
+    # C# section. Two rules was "barely checked" -- see docs/rules.md coverage.
     {
         "id": "GL039",
         # Code shape, not embedded content: a match inside a string literal is
@@ -615,7 +700,10 @@ RULES = [
         "severity": "medium",
         "pattern": re.compile(r"\bnew\s+HttpClient\s*\("),
         "message": "new HttpClient per call",
-        "suggestion": "reuse one client (IHttpClientFactory or a static instance); each new client opens a fresh connection and repeats the TLS handshake, which is CPU on both ends",
+        "suggestion": (
+            "reuse one client (IHttpClientFactory or a static instance); each new client opens a fresh connection and "
+            "repeats the TLS handshake, which is CPU on both ends"
+        ),
     },
     {
         "id": "GL040",
@@ -626,7 +714,10 @@ RULES = [
         "severity": "medium",
         "pattern": re.compile(r"\.(?:Result\b|Wait\(\))"),
         "message": "blocking on a Task (.Result / .Wait())",
-        "suggestion": "await it; blocking a pool thread makes the pool grow, and the extra threads cost memory and context switches for work that was already asynchronous",
+        "suggestion": (
+            "await it; blocking a pool thread makes the pool grow, and the extra threads cost memory and context "
+            "switches for work that was already asynchronous"
+        ),
     },
     {
         "id": "GL041",
@@ -640,7 +731,10 @@ RULES = [
         # cross.
         "pattern": re.compile(r"foreach\s*\(.*?\bin\b.*?\.ToList\(\)"),
         "message": "ToList() materialised just to iterate it once",
-        "suggestion": "iterate the sequence directly; ToList() allocates the whole collection to walk it once and then throws it away",
+        "suggestion": (
+            "iterate the sequence directly; ToList() allocates the whole collection to walk it once and then throws it "
+            "away"
+        ),
     },
     # --- Kotlin ---
     {
@@ -652,7 +746,10 @@ RULES = [
         "severity": "medium",
         "pattern": re.compile(r"\bGlobalScope\.(?:launch|async)\b"),
         "message": "GlobalScope coroutine",
-        "suggestion": "use a scoped CoroutineScope; a GlobalScope coroutine is never cancelled with its caller, so work continues after nobody wants the result",
+        "suggestion": (
+            "use a scoped CoroutineScope; a GlobalScope coroutine is never cancelled with its caller, so work "
+            "continues after nobody wants the result"
+        ),
     },
     {
         "id": "GL043",
@@ -663,7 +760,10 @@ RULES = [
         "severity": "low",
         "pattern": re.compile(r"\.filter\s*\{[^{}]*\}\s*\.map\s*\{"),
         "message": "filter{}.map{} chain (two passes over the collection)",
-        "suggestion": "use mapNotNull, or asSequence() before the chain, so the collection is walked once and no intermediate list is allocated",
+        "suggestion": (
+            "use mapNotNull, or asSequence() before the chain, so the collection is walked once and no intermediate "
+            "list is allocated"
+        ),
     },
     {
         "id": "GL044",
@@ -674,7 +774,10 @@ RULES = [
         "severity": "medium",
         "pattern": re.compile(r"\brunBlocking\s*(?:\([^)]*\))?\s*\{"),
         "message": "runBlocking",
-        "suggestion": "runBlocking parks a real thread until the coroutine finishes; suspend the caller instead, outside of main() and tests where it is the entry point",
+        "suggestion": (
+            "runBlocking parks a real thread until the coroutine finishes; suspend the caller instead, outside of "
+            "main() and tests where it is the entry point"
+        ),
     },
     # --- Swift ---
     {
@@ -686,7 +789,9 @@ RULES = [
         "severity": "low",
         "pattern": re.compile(r"\.filter\s*\{[^{}]*\}\s*\.map\s*\{"),
         "message": "filter{}.map{} chain (two passes over the collection)",
-        "suggestion": "use compactMap, or .lazy before the chain, so the sequence is walked once without an intermediate array",
+        "suggestion": (
+            "use compactMap, or .lazy before the chain, so the sequence is walked once without an intermediate array"
+        ),
     },
     {
         "id": "GL046",
@@ -697,7 +802,10 @@ RULES = [
         "severity": "medium",
         "pattern": re.compile(r"DispatchQueue\.\w+\.sync\s*\{"),
         "message": "DispatchQueue.sync",
-        "suggestion": "blocks the calling thread until the block returns, so a thread sits idle burning its stack and scheduler slot; use async with a completion or async/await",
+        "suggestion": (
+            "blocks the calling thread until the block returns, so a thread sits idle burning its stack and scheduler "
+            "slot; use async with a completion or async/await"
+        ),
     },
     {
         "id": "GL047",
@@ -708,7 +816,10 @@ RULES = [
         "severity": "low",
         "pattern": re.compile(r"URLSession\(configuration:\s*\.default\)"),
         "message": "a new URLSession per request",
-        "suggestion": "reuse URLSession.shared or one stored session; a fresh session drops the connection pool, so every request pays a new handshake",
+        "suggestion": (
+            "reuse URLSession.shared or one stored session; a fresh session drops the connection pool, so every "
+            "request pays a new handshake"
+        ),
     },
     # --- Ruby ---
     {
@@ -726,7 +837,10 @@ RULES = [
             r"(?:[^\n]*\n){0,4}?[^\n]*\b\w+\s*\+=\s*[^\n]*(?:[\"']|to_s\b|#\{)"
         ),
         "message": "string built with += inside a loop",
-        "suggestion": "use << or an array joined at the end; += allocates a new string each iteration, so the loop is quadratic in the length it builds",
+        "suggestion": (
+            "use << or an array joined at the end; += allocates a new string each iteration, so the loop is quadratic "
+            "in the length it builds"
+        ),
     },
     {
         "id": "GL049",
@@ -739,7 +853,10 @@ RULES = [
             r"\.(?:where|find_by|find)\([^)]*\)[^\n]*\n(?:[^\n]*\n){0,3}?[^\n]*\.each\b|\.each\s*(?:do\s*\|[^|]*\||\{\s*\|[^|]*\|)[^\n]{0,80}\n[^\n]*\.(?:where|find_by)\("
         ),
         "message": "query inside an each loop (N+1)",
-        "suggestion": "load the association up front with includes/preload; one query per row is one network round trip and one remote query plan per row",
+        "suggestion": (
+            "load the association up front with includes/preload; one query per row is one network round trip and one "
+            "remote query plan per row"
+        ),
     },
     {
         "id": "GL050",
@@ -750,7 +867,9 @@ RULES = [
         "severity": "low",
         "pattern": re.compile(r"\.map\s*(?:\(&:\w+[?!]?\)|\{[^{}]*\})\s*\.(?:flatten|compact)\b"),
         "message": "map().flatten() / map().compact() (an intermediate array)",
-        "suggestion": "use flat_map or filter_map; the intermediate array is allocated and walked only to be thrown away",
+        "suggestion": (
+            "use flat_map or filter_map; the intermediate array is allocated and walked only to be thrown away"
+        ),
     },
     {
         "id": "GL038",
@@ -761,7 +880,10 @@ RULES = [
         "severity": "low",
         "pattern": re.compile(r"\w+=\{(?:\(\)\s*=>|\{)"),
         "message": "inline function or object literal passed as a JSX prop",
-        "suggestion": "a new function/object is allocated every render, defeating memo/PureComponent; hoist it with useCallback/useMemo or move it outside the component",
+        "suggestion": (
+            "a new function/object is allocated every render, defeating memo/PureComponent; hoist it with "
+            "useCallback/useMemo or move it outside the component"
+        ),
     },
 ]
 
@@ -771,7 +893,7 @@ RULES_BY_ID = {r["id"]: r for r in RULES}
 AST_RULE_IDS = frozenset({"GL001", "GL007", "GL018", "GL023", "GL030", "GL031"})
 
 
-def _pattern_rules_by_lang():
+def _pattern_rules_by_lang() -> dict[str, list[Rule]]:
     """Pattern rules bucketed by the language tag they target.
 
     Built once, because the alternative is asking every rule whether it applies
@@ -797,7 +919,7 @@ SCANNABLE_LANGS = frozenset(lang for rule in RULES for lang in rule["langs"])
 # --------------------------------------------------------- configuration ---
 
 
-def _as_list(value, key):
+def _as_list(value: Any, key: str) -> list[str]:
     """Coerce a config value to a list of strings, refusing a bare string.
 
     `disable = "GL005"` is the easy typo, and `set("GL005")` is the set of five
@@ -809,13 +931,12 @@ def _as_list(value, key):
         return []
     if isinstance(value, str):
         raise SystemExit(
-            f"greenlint: {CONFIG_FILENAME}: `{key}` must be a list, not a string — "
-            f'write `{key} = ["{value}"]`'
+            f'greenlint: {CONFIG_FILENAME}: `{key}` must be a list, not a string — write `{key} = ["{value}"]`'
         )
     return [str(v) for v in value]
 
 
-def load_config(path=None):
+def load_config(path: str | None = None) -> Config:
     """Load `.greenlint.toml` (rule disable list + ignore globs). Missing
     file → no-op config. `path` overrides the default cwd lookup.
 
@@ -885,7 +1006,7 @@ COMMENT_SYNTAX = {
 _NOT_NEWLINE = re.compile(r"[^\n]")
 
 
-def _blank_spans(text, spans):
+def _blank_spans(text: str, spans: list[tuple[int, int]]) -> str:
     """Replace each `(start, end)` span with spaces, newlines kept.
 
     Spliced from slices rather than edited character by character: the blanked
@@ -905,7 +1026,7 @@ def _blank_spans(text, spans):
 
 
 @functools.cache
-def _comment_scanners(line_tok, block):
+def _comment_scanners(line_tok: str, block: tuple[str, str] | None) -> tuple:
     """(outside-a-string, {quote: inside-that-string}) jump patterns.
 
     Outside a string the only characters that matter are a quote, a line
@@ -925,7 +1046,7 @@ def _comment_scanners(line_tok, block):
     return outside, inside
 
 
-def _step_in_string(text, i, quote, inside):
+def _step_in_string(text: str, i: int, quote: str, inside: bool) -> tuple:
     """Advance past the next character that can close the string open at `i`.
 
     Returns the offset to resume from and the quote still open — None once the
@@ -946,12 +1067,12 @@ def _step_in_string(text, i, quote, inside):
     return i + 1, None
 
 
-def _is_apostrophe(text, i):
+def _is_apostrophe(text: str, i: int) -> bool:
     """True for the `'` in don't / it's / won't — a letter either side of it."""
     return 0 < i < len(text) - 1 and text[i - 1].isalpha() and text[i + 1].isalpha()
 
 
-def _step_outside_string(text, i, outside, line_tok, block):
+def _step_outside_string(text: str, i: int, outside: bool, line_tok: str, block: tuple[str, str] | None) -> tuple:
     """Advance to the next string opener or comment at or after `i`.
 
     Returns the offset to resume from, the quote now open (None when the stop
@@ -979,7 +1100,7 @@ def _step_outside_string(text, i, outside, line_tok, block):
         return end, None, (i, end)
 
 
-def _blank_comments(text, path):
+def _blank_comments(text: str, path: str) -> str:
     """Return `text` with comment bodies replaced by spaces.
 
     Length and every newline are preserved, so line numbers and match offsets
@@ -1001,9 +1122,7 @@ def _blank_comments(text, path):
     gets blanked. That is a false negative, which is the safe direction: this
     whole pass exists because a linter that cries wolf gets switched off.
     """
-    line_tok, block = COMMENT_SYNTAX.get(
-        path.suffix, ("#", None) if path.name == "Dockerfile" else (None, None)
-    )
+    line_tok, block = COMMENT_SYNTAX.get(path.suffix, ("#", None) if path.name == "Dockerfile" else (None, None))
     if not line_tok:
         return text
     # Two C-speed substring searches before any character-at-a-time work: a
@@ -1069,19 +1188,17 @@ _STRING_LANGS = frozenset(
 _STRING_OPEN = re.compile(r"[\"'`\n]")
 
 
-def _no_strings_to_blank(code, path):
+def _no_strings_to_blank(code: str, path: str) -> bool:
     """True when this file cannot gain from blanking its strings.
 
     Either its language has no C-style quoting, or it holds no quote character
     at all — in a real tree that is a large share of the files. Same reasoning
     as the comment scanner's substring pre-check.
     """
-    return path.suffix not in _STRING_LANGS or (
-        '"' not in code and "'" not in code and "`" not in code
-    )
+    return path.suffix not in _STRING_LANGS or ('"' not in code and "'" not in code and "`" not in code)
 
 
-def _string_end(code, i, quote):
+def _string_end(code: str, i: int, quote: str) -> int:
     """Offset of the character that ends the literal whose body starts at `i`.
 
     A backslash escapes the next character; a newline ends the scan without
@@ -1094,13 +1211,13 @@ def _string_end(code, i, quote):
         if ch == "\\" and i + 1 < n and code[i + 1] != "\n":
             i += 2  # an escaped character, including \" and \'
             continue
-        if ch == "\n" or ch == quote:
+        if ch in ("\n", quote):
             break
         i += 1
     return i
 
 
-def _step_to_string_end(code, i):
+def _step_to_string_end(code: str, i: int) -> tuple:
     """Advance past the next string literal at or after `i`.
 
     Returns where to resume and the span to blank — `(None, None)` when nothing
@@ -1123,7 +1240,7 @@ def _step_to_string_end(code, i):
     return resume, (i + 1, end) if end > i + 1 else None
 
 
-def _blank_strings(code, path):
+def _blank_strings(code: str, path: str) -> str:
     """Return `code` with string-literal bodies replaced by spaces.
 
     Offsets and newlines are preserved, exactly as `_blank_comments` preserves
@@ -1154,7 +1271,7 @@ def _blank_strings(code, path):
     return _blank_spans(code, spans)
 
 
-def _blank_python_docstrings(code, index):
+def _blank_python_docstrings(code: str, index: PythonIndex) -> str:
     """Blank module/class/function docstrings, preserving offsets.
 
     A docstring is prose, and prose about a pattern is not the pattern — the
@@ -1170,11 +1287,7 @@ def _blank_python_docstrings(code, index):
     starts = None
     for node in holders:
         doc = node.body[0] if node.body else None
-        if not (
-            isinstance(doc, ast.Expr)
-            and isinstance(doc.value, ast.Constant)
-            and isinstance(doc.value.value, str)
-        ):
+        if not (isinstance(doc, ast.Expr) and isinstance(doc.value, ast.Constant) and isinstance(doc.value.value, str)):
             continue
         if starts is None:
             # Only built once a docstring is actually found: a file with none
@@ -1192,7 +1305,7 @@ def _blank_python_docstrings(code, index):
     return _blank_spans(code, spans)
 
 
-def _is_go_template(text):
+def _is_go_template(text: str) -> bool:
     """True for a Helm/Go-template YAML file. What such a file *renders to* is
     what matters, and greenlint does not render it — so manifest rules that ask
     "is key X present" cannot answer honestly here.
@@ -1206,7 +1319,7 @@ def _is_go_template(text):
 TEST_FILENAME = re.compile(r"(^test_|_test\.|\.test\.|\.spec\.|_spec\.)", re.IGNORECASE)
 
 
-def _is_test_file(path):
+def _is_test_file(path: str) -> bool:
     """True for test code. Tight sleeps and busy waits in a test are bounded by
     the test run and are usually the point (waiting for a condition quickly),
     so the energy rules that target long-lived loops do not apply.
@@ -1232,11 +1345,11 @@ class _LineIndex:
 
     __slots__ = ("_starts", "_text")
 
-    def __init__(self, text):
+    def __init__(self, text: str) -> None:
         self._text = text
         self._starts = None
 
-    def line_of(self, offset):
+    def line_of(self, offset: int) -> int:
         if self._starts is None:
             starts = []
             pos = self._text.find("\n")
@@ -1249,7 +1362,7 @@ class _LineIndex:
         return bisect.bisect_left(self._starts, offset) + 1
 
 
-def _finding(rule, path, line):
+def _finding(rule: Rule, path: str, line: int) -> dict:
     """Build one finding from the rule that fired.
 
     Every field a consumer sees is assembled here — the JSON output, the
@@ -1271,7 +1384,7 @@ def _finding(rule, path, line):
 # ------------------------------------------------------ python AST index ---
 
 
-def _parse_python(path, text):
+def _parse_python(path: str, text: str) -> ast.AST | None:
     """Parse `text` into an AST, or None on a syntax error. Shared by every
     AST-based Python rule so each file is only parsed once per scan.
     """
@@ -1297,7 +1410,7 @@ class PythonIndex:
 
     __slots__ = ("classes", "fors", "functions", "loop_scopes", "tree", "tries", "whiles")
 
-    def __init__(self, tree):
+    def __init__(self, tree: ast.AST) -> None:
         self.tree = tree
         # (node, enclosing loops) pairs, outermost first.
         self.fors = []
@@ -1318,34 +1431,34 @@ class PythonIndex:
 # `collect is None` path in the walk below and by far the commonest one.
 
 
-def _collect_for(index, node, loops, scope):
+def _collect_for(index: PythonIndex, node: ast.AST, loops: tuple[ast.AST, ...], scope: str) -> tuple:
     index.fors.append((node, loops))
     index.loop_scopes.add(scope)
     return (*loops, node), scope
 
 
-def _collect_while(index, node, loops, scope):
+def _collect_while(index: PythonIndex, node: ast.AST, loops: tuple[ast.AST, ...], scope: str) -> tuple:
     index.whiles.append((node, loops))
     index.loop_scopes.add(scope)
     return (*loops, node), scope
 
 
-def _collect_try(index, node, loops, scope):
+def _collect_try(index: PythonIndex, node: ast.AST, loops: tuple[ast.AST, ...], scope: str) -> tuple:
     index.tries.append((node, loops))
     return loops, scope
 
 
-def _collect_function(index, node, loops, scope):
+def _collect_function(index: PythonIndex, node: ast.AST, loops: tuple[ast.AST, ...], scope: str) -> tuple:
     index.functions.append(node)
     return loops, node
 
 
-def _collect_class(index, node, loops, scope):
+def _collect_class(index: PythonIndex, node: ast.AST, loops: tuple[ast.AST, ...], scope: str) -> tuple:
     index.classes.append(node)
     return loops, node
 
 
-def _collect_lambda(index, node, loops, scope):
+def _collect_lambda(index: PythonIndex, node: ast.AST, loops: tuple[ast.AST, ...], scope: str) -> tuple:
     return loops, node
 
 
@@ -1360,7 +1473,7 @@ _COLLECTORS = {
 }
 
 
-def index_python(tree):
+def index_python(tree: ast.AST) -> PythonIndex:
     """Build a `PythonIndex` from one breadth-first pass.
 
     Breadth-first because that is `ast.walk`'s order, and the rules used to
@@ -1408,7 +1521,7 @@ def index_python(tree):
 SCOPE_BOUNDARIES = (ast.FunctionDef, ast.AsyncFunctionDef, ast.Lambda, ast.ClassDef)
 
 
-def _walk_own(node):
+def _walk_own(node: ast.AST) -> Iterator[ast.AST]:
     """Like `ast.walk`, but never descends into a nested scope.
 
     `ast.walk` treats a `def` inside a loop as part of the loop, which made a
@@ -1425,7 +1538,7 @@ def _walk_own(node):
             stack.append(child)
 
 
-def _walk_own_loops(node):
+def _walk_own_loops(node: ast.AST) -> Iterator[ast.AST]:
     """`_walk_own`, pairing each node with the loops enclosing it in this scope.
 
     Same reason `PythonIndex` carries a loop stack: asking "is this statement
@@ -1443,7 +1556,7 @@ def _walk_own_loops(node):
             stack.append((child, inner))
 
 
-def _loop_can_exit(loop):
+def _loop_can_exit(loop: ast.AST) -> bool:
     """True if the loop body can leave the loop on a data-dependent condition —
     a `break` belonging to this loop, or a `return`/`raise`.
 
@@ -1464,7 +1577,7 @@ def _loop_can_exit(loop):
     return False
 
 
-def _nearest_loop(root, target):
+def _nearest_loop(root: str, target: ast.AST) -> ast.AST | None:
     """The innermost For/While in `root`'s body that encloses `target`, or
     `root` itself. A `break` inside a nested loop exits that one, not this one.
     """
@@ -1488,7 +1601,7 @@ def _nearest_loop(root, target):
 # ------------------------------------------------------ python AST rules ---
 
 
-def _calls_sleep(node):
+def _calls_sleep(node: ast.AST) -> bool:
     """True when `node` is a call to something named `sleep` — `time.sleep(x)`,
     `asyncio.sleep(x)` or a bare `sleep(x)` pulled in by `from time import`.
     """
@@ -1498,7 +1611,7 @@ def _calls_sleep(node):
     )
 
 
-def _ast_busy_loop_findings(path, index):
+def _ast_busy_loop_findings(path: str, index: PythonIndex) -> list[Finding]:
     """AST-based replacement for GL001 on Python: the regex version flags
     `while True:` unless "sleep" appears *anywhere* in the file, which both
     misses loops whose sleep is in an unrelated function and flags loops that
@@ -1515,7 +1628,7 @@ def _ast_busy_loop_findings(path, index):
         yield _finding(rule, path, node.lineno)
 
 
-def _ast_nested_loop_findings(path, index):
+def _ast_nested_loop_findings(path: str, index: PythonIndex) -> list[Finding]:
     """GL018: an inner `for` loop iterating over the same named collection as
     an enclosing `for` loop — a manual all-pairs O(n^2) scan (e.g. checking
     every element against every other). Only matches when both loops iterate
@@ -1530,16 +1643,14 @@ def _ast_nested_loop_findings(path, index):
         if not isinstance(node.iter, ast.Name) or node.lineno in seen:
             continue
         if any(
-            type(outer) is ast.For
-            and isinstance(outer.iter, ast.Name)
-            and outer.iter.id == node.iter.id
+            type(outer) is ast.For and isinstance(outer.iter, ast.Name) and outer.iter.id == node.iter.id
             for outer in enclosing
         ):
             seen.add(node.lineno)
             yield _finding(rule, path, node.lineno)
 
 
-def _is_tuple_swap(stmt):
+def _is_tuple_swap(stmt: ast.stmt) -> bool:
     """True for the idiomatic Python swap `a[i], a[j] = a[j], a[i]` — two
     subscripts assigned from two subscripts. That shape only shows up when
     someone is hand-rolling an in-place swap, i.e. a manual sort.
@@ -1548,15 +1659,15 @@ def _is_tuple_swap(stmt):
         isinstance(stmt, ast.Assign)
         and len(stmt.targets) == 1
         and isinstance(stmt.targets[0], ast.Tuple)
-        and len(stmt.targets[0].elts) == 2
+        and len(stmt.targets[0].elts) == PAIR
         and all(isinstance(e, ast.Subscript) for e in stmt.targets[0].elts)
         and isinstance(stmt.value, ast.Tuple)
-        and len(stmt.value.elts) == 2
+        and len(stmt.value.elts) == PAIR
         and all(isinstance(e, ast.Subscript) for e in stmt.value.elts)
     )
 
 
-def _ast_bubble_sort_findings(path, index):
+def _ast_bubble_sort_findings(path: str, index: PythonIndex) -> list[Finding]:
     """GL023: a `for` loop nested inside another `for` loop whose body
     contains an element swap — the textbook shape of a hand-rolled bubble or
     selection sort.
@@ -1571,13 +1682,13 @@ def _ast_bubble_sort_findings(path, index):
             yield _finding(rule, path, node.lineno)
 
 
-def _ast_dict_iterator_findings(path, index):
+def _ast_dict_iterator_findings(path: str, index: PythonIndex) -> list[Finding]:
     """GL030: `for k, v in d.items()` where the key or the value is discarded
     (bound to `_`) — the discarded half didn't need building/unpacking at all.
     """
     rule = RULES_BY_ID["GL030"]
     for node, _ in index.fors:
-        if not (isinstance(node.target, ast.Tuple) and len(node.target.elts) == 2):
+        if not (isinstance(node.target, ast.Tuple) and len(node.target.elts) == PAIR):
             continue
         if not (
             isinstance(node.iter, ast.Call)
@@ -1592,9 +1703,7 @@ def _ast_dict_iterator_findings(path, index):
 
 # Builtins/constructors whose result is a number or a duration, never a
 # sequence — `n += len(x)` is a counter, not a rebuild.
-SCALAR_CALLS = frozenset(
-    {"len", "sum", "int", "float", "round", "abs", "ord", "timedelta", "Decimal"}
-)
+SCALAR_CALLS = frozenset({"len", "sum", "int", "float", "round", "abs", "ord", "timedelta", "Decimal"})
 # Operators that only numbers support, so an expression using one is numeric.
 SCALAR_OPS = (ast.Div, ast.FloorDiv, ast.Sub, ast.Mod, ast.Pow)
 
@@ -1604,13 +1713,13 @@ SCALAR_OPS = (ast.Div, ast.FloorDiv, ast.Sub, ast.Mod, ast.Pow)
 NUMERIC_ONLY_OPS = (ast.Sub, ast.Div, ast.FloorDiv, ast.Pow, ast.MatMult)
 
 
-def _note_numeric(numeric, node):
+def _note_numeric(numeric: set[str], node: ast.AST) -> None:
     """Record `node`'s name in `numeric`, when `node` is a plain name."""
     if isinstance(node, ast.Name):
         numeric.add(node.id)
 
 
-def _scalar_assign_targets(node):
+def _scalar_assign_targets(node: ast.AST) -> set[str]:
     """The targets of an assignment whose value is certainly numeric.
 
     A name *assigned* arithmetic is as numeric as one used in it, and this is
@@ -1623,7 +1732,7 @@ def _scalar_assign_targets(node):
     return tuple(node.targets) if isinstance(node, ast.Assign) else (node.target,)
 
 
-def _numeric_operands(node):
+def _numeric_operands(node: ast.AST) -> set[str]:
     """The sub-expressions this node proves are numeric, or `()` for none."""
     if isinstance(node, ast.BinOp) and isinstance(node.op, NUMERIC_ONLY_OPS):
         return (node.left, node.right)
@@ -1636,7 +1745,7 @@ def _numeric_operands(node):
     return ()
 
 
-def _names_used_as_numbers(nodes):
+def _names_used_as_numbers(nodes: list[ast.AST]) -> set[str]:
     """Names that arithmetic elsewhere in this scope proves are numeric.
 
     `_names_bound_to_lists` can only classify a name it watched being
@@ -1658,7 +1767,7 @@ def _names_used_as_numbers(nodes):
     return numeric
 
 
-def _is_scalar_expr(node):
+def _is_scalar_expr(node: ast.AST) -> bool:
     """True when the expression is certainly numeric, so `x += node` is a
     counter rather than a sequence rebuild. Conservative: unknown names are
     not scalar, because `data += chunk` is exactly the case worth catching.
@@ -1678,7 +1787,7 @@ def _is_scalar_expr(node):
     return False
 
 
-def _classify_binding(target, value, lists, scalars):
+def _classify_binding(target: ast.AST, value: Any, lists: set[str], scalars: dict[str, Any]) -> None:
     """Record `target` in `lists` or `scalars`, judged from the shape of `value`."""
     # Unpacking binds each name to its own initialiser, so pair the sides
     # up rather than judging the tuple as a whole: `mwh, grams = 0.0, 0.0`
@@ -1694,14 +1803,12 @@ def _classify_binding(target, value, lists, scalars):
     if isinstance(value, (ast.List, ast.ListComp)):
         lists.add(target.id)
     elif (
-        isinstance(value, ast.Constant)
-        and isinstance(value.value, (int, float))
-        and not isinstance(value.value, bool)
+        isinstance(value, ast.Constant) and isinstance(value.value, (int, float)) and not isinstance(value.value, bool)
     ):
         scalars.add(target.id)
 
 
-def _names_bound_to_lists(nodes):
+def _names_bound_to_lists(nodes: list[ast.AST]) -> tuple:
     """(list_names, scalar_names) — names seen initialised to a list, and names
     seen initialised to a number, among `nodes`.
 
@@ -1727,7 +1834,7 @@ def _names_bound_to_lists(nodes):
     return lists, scalars
 
 
-def _accumulating_add(stmt):
+def _accumulating_add(stmt: ast.stmt) -> str | None:
     """(target, value) when `stmt` accumulates onto a plain name with `+`/`+=`,
     else (None, None).
 
@@ -1751,7 +1858,7 @@ def _accumulating_add(stmt):
     return (target, value) if isinstance(target, ast.Name) else (None, None)
 
 
-def _is_sequence_rebuild(stmt, list_names, scalar_names):
+def _is_sequence_rebuild(stmt: ast.stmt, list_names: set[str], scalar_names: set[str]) -> bool:
     """True when `stmt` copies the whole sequence built so far — the O(n^2) shape."""
     target, value = _accumulating_add(stmt)
     if target is None:
@@ -1766,12 +1873,11 @@ def _is_sequence_rebuild(stmt, list_names, scalar_names):
     # one. Only the rebinding form (`xs = xs + [a]`) copies everything
     # accumulated so far.
     return not (
-        isinstance(stmt, ast.AugAssign)
-        and (isinstance(value, (ast.List, ast.ListComp)) or target.id in list_names)
+        isinstance(stmt, ast.AugAssign) and (isinstance(value, (ast.List, ast.ListComp)) or target.id in list_names)
     )
 
 
-def _ast_quadratic_rebuild_findings(path, index):
+def _ast_quadratic_rebuild_findings(path: str, index: PythonIndex) -> list[Finding]:
     """GL007: accumulating with `+`/`+=` inside a loop, which copies the whole
     sequence built so far on every iteration — O(n^2) allocation where
     `list.append` / `''.join` are linear.
@@ -1810,7 +1916,7 @@ def _ast_quadratic_rebuild_findings(path, index):
 PROBE_CALLS = frozenset({"int", "float", "complex", "Decimal"})
 
 
-def _has_cheap_alternative(body):
+def _has_cheap_alternative(body: str) -> bool:
     """True when the guarded work is a lookup or a numeric conversion — the
     cases where the exception is standing in for a test that costs nothing:
     `d[k]` where `d.get(k)` works, `int(s)` where a guard works.
@@ -1832,7 +1938,7 @@ def _has_cheap_alternative(body):
     return False
 
 
-def _ast_try_in_loop_findings(path, index):
+def _ast_try_in_loop_findings(path: str, index: PythonIndex) -> list[Finding]:
     """GL031: exceptions used as per-iteration control flow inside a loop —
     a handler whose whole body is `pass` or `continue`, i.e. the exception is
     expected to fire on ordinary input and the raise/unwind cost is paid every
@@ -1852,9 +1958,7 @@ def _ast_try_in_loop_findings(path, index):
     for stmt, enclosing in index.tries:
         if not enclosing or stmt.lineno in seen:
             continue
-        swallowed = any(
-            all(isinstance(b, (ast.Pass, ast.Continue)) for b in h.body) for h in stmt.handlers
-        )
+        swallowed = any(all(isinstance(b, (ast.Pass, ast.Continue)) for b in h.body) for h in stmt.handlers)
         if swallowed and _has_cheap_alternative(stmt.body):
             seen.add(stmt.lineno)
             yield _finding(rule, path, stmt.lineno)
@@ -1863,7 +1967,7 @@ def _ast_try_in_loop_findings(path, index):
 # -------------------------------------------------- infrastructure rules ---
 
 
-def _tf_resource_blocks(text, resource_type):
+def _tf_resource_blocks(text: str, resource_type: str) -> list[tuple[int, str]]:
     """Yield (match, block_text, lineno) for every `resource "<resource_type>"
     "..." { ... }` in `text`. Block end is approximated as the next line that
     is just `}`, which matches typical `terraform fmt` output; not a real HCL
@@ -1876,7 +1980,7 @@ def _tf_resource_blocks(text, resource_type):
         yield m, block, text.count("\n", 0, m.start()) + 1
 
 
-def _tf_s3_lifecycle_findings(path, text):
+def _tf_s3_lifecycle_findings(path: str, text: str) -> list[Finding]:
     """GL013: an `aws_s3_bucket` resource block with no lifecycle rule anywhere
     inside it.
     """
@@ -1886,7 +1990,7 @@ def _tf_s3_lifecycle_findings(path, text):
             yield _finding(rule, path, lineno)
 
 
-def _tf_asg_static_size_findings(path, text):
+def _tf_asg_static_size_findings(path: str, text: str) -> list[Finding]:
     """GL024: an `aws_autoscaling_group` whose min_size and max_size are the
     same literal value — a fixed-size group provisioned for peak load, not an
     elastic one.
@@ -1899,7 +2003,7 @@ def _tf_asg_static_size_findings(path, text):
             yield _finding(rule, path, lineno)
 
 
-def _tf_log_retention_findings(path, text):
+def _tf_log_retention_findings(path: str, text: str) -> list[Finding]:
     """GL026: an `aws_cloudwatch_log_group` with no `retention_in_days` set —
     logs are kept forever by default.
     """
@@ -1909,7 +2013,7 @@ def _tf_log_retention_findings(path, text):
             yield _finding(rule, path, lineno)
 
 
-def _dockerfile_layer_bloat_findings(path, text):
+def _dockerfile_layer_bloat_findings(path: str, text: str) -> list[Finding]:
     """GL029: more than one separate `RUN ... install` line in a Dockerfile —
     each is its own image layer. Flags every occurrence after the first.
 
@@ -1936,7 +2040,7 @@ def _dockerfile_layer_bloat_findings(path, text):
         seen_stages.add(stage)
 
 
-def _k8s_resources_findings(path, text):
+def _k8s_resources_findings(path: str, text: str) -> list[Finding]:
     """GL014: a Pod-spec-bearing manifest with no `resources:` block anywhere
     in the file. File-wide, not per-container; a real gap for single-manifest
     repos, a false negative for values shared via Helm/Kustomize overlays.
@@ -1953,7 +2057,7 @@ def _k8s_resources_findings(path, text):
         yield _finding(rule, path, text.count("\n", 0, m.start()) + 1)
 
 
-def _k8s_hpa_static_findings(path, text):
+def _k8s_hpa_static_findings(path: str, text: str) -> list[Finding]:
     """GL033: a `HorizontalPodAutoscaler` manifest whose minReplicas and
     maxReplicas are the same literal value — a fixed-range HPA, not an
     elastic one.
@@ -1991,7 +2095,7 @@ NEEDS_FULL_HISTORY = re.compile(
 )
 
 
-def _job_starts(text, body_at):
+def _job_starts(text: str, body_at: int) -> list[int]:
     """Offsets where each entry under `jobs:` begins, empty when unsegmentable."""
     body = text[body_at:]
     # The first key under `jobs:` sets the indent at which a sibling job starts.
@@ -1999,19 +2103,18 @@ def _job_starts(text, body_at):
     if not first:
         return []
     return [
-        body_at + m.start()
-        for m in re.finditer(rf"^{re.escape(first.group(1))}[\w-]+:[ \t]*$", body, re.MULTILINE)
+        body_at + m.start() for m in re.finditer(rf"^{re.escape(first.group(1))}[\w-]+:[ \t]*$", body, re.MULTILINE)
     ]
 
 
-def _bracketing(starts, pos, low, high):
+def _bracketing(starts: list[int], pos: int, low: int, high: int) -> tuple:
     """The two `starts` either side of `pos`, falling back to `low` and `high`."""
     before = [s for s in starts if s <= pos]
     after = [s for s in starts if s > pos]
     return (before[-1] if before else low), (after[0] if after else high)
 
 
-def _job_span(text, pos):
+def _job_span(text: str, pos: int) -> tuple[int, int]:
     """(start, end) of the `jobs:` entry containing `pos`, or the whole file.
 
     Crude on purpose — indentation, not a YAML parse, because greenlint has no
@@ -2028,7 +2131,7 @@ def _job_span(text, pos):
     return _bracketing(starts, pos, jobs.end(), len(text))
 
 
-def _fetch_depth_findings(path, text):
+def _fetch_depth_findings(path: str, text: str) -> list[Finding]:
     """GL004: a full-history clone in CI.
 
     Skipped when the **same job** runs something that genuinely needs the
@@ -2052,7 +2155,7 @@ def _fetch_depth_findings(path, text):
         yield _finding(rule, path, text.count("\n", 0, m.start()) + 1)
 
 
-def _compose_resources_findings(path, text):
+def _compose_resources_findings(path: str, text: str) -> list[Finding]:
     """GL034: a docker-compose/swarm file (`services:` top-level key) with no
     resource limit anywhere in the file — neither the Swarm-mode
     `deploy.resources` block nor the classic `mem_limit`/`cpus` keys.
@@ -2068,7 +2171,7 @@ def _compose_resources_findings(path, text):
 SEVERITY_ORDER = {"high": 0, "medium": 1, "low": 2}
 
 
-def finding_sort_key(finding):
+def finding_sort_key(finding: Finding) -> tuple:
     """Sort key putting the findings worth fixing first. Named and exported so
     a front end that assembles its own list — the editor extension merging a
     freshly scanned buffer into a cached project scan — orders it the way the
@@ -2077,14 +2180,14 @@ def finding_sort_key(finding):
     return (SEVERITY_ORDER[finding["severity"]], finding["file"], finding["line"])
 
 
-def applicable(rule, path):
+def applicable(rule: Rule, path: str) -> bool:
     """Return True if the rule targets the file's language/extension."""
     if path.name == "Dockerfile" and "Dockerfile" in rule["langs"]:
         return True
     return path.suffix in rule["langs"]
 
 
-def fingerprint(finding, root):
+def fingerprint(finding: Finding, root: str) -> str:
     """Stable id for a finding, for the baseline to name it by.
 
     Line-insensitive, so it survives every edit above it — the same shape the
@@ -2110,7 +2213,7 @@ def fingerprint(finding, root):
     return hashlib.sha1(key.encode("utf-8", "replace"), usedforsecurity=False).hexdigest()
 
 
-def load_baseline(path):
+def load_baseline(path: str) -> set[str]:
     """Accepted fingerprints from a baseline file. Missing or unreadable is an
     empty baseline: a linter that stops reporting because a file it was not
     asked about is malformed would be worse than one that reports too much.
@@ -2126,14 +2229,14 @@ def load_baseline(path):
     return set(data.get("fingerprints") or [])
 
 
-def apply_baseline(findings, baseline, root):
+def apply_baseline(findings: list[Finding], baseline: set[str], root: str) -> list[Finding]:
     """Findings that the baseline does not already accept."""
     if not baseline:
         return findings
     return [f for f in findings if fingerprint(f, root) not in baseline]
 
 
-def write_baseline(path, findings, root):
+def write_baseline(path: str, findings: list[Finding], root: str) -> None:
     """Snapshot every current finding so later runs stay quiet about them.
     Returns how many distinct ones were recorded."""
     fingerprints = sorted({fingerprint(f, root) for f in findings})
@@ -2144,7 +2247,7 @@ def write_baseline(path, findings, root):
 # -------------------------------------------------------------- scanning ---
 
 
-def scannable(path):
+def scannable(path: str) -> bool:
     """True if any rule targets this file's language at all.
 
     Derived from `RULES` rather than a hardcoded extension list, so a rule for
@@ -2157,9 +2260,7 @@ def scannable(path):
     A set lookup rather than a pass over `RULES`: this is asked once per file in
     a walk, and the answer only ever depended on the set of tags.
     """
-    return path.suffix in SCANNABLE_LANGS or (
-        path.name == "Dockerfile" and "Dockerfile" in SCANNABLE_LANGS
-    )
+    return path.suffix in SCANNABLE_LANGS or (path.name == "Dockerfile" and "Dockerfile" in SCANNABLE_LANGS)
 
 
 # The AST rules, in the order their findings come out, wired to the ids
@@ -2194,17 +2295,19 @@ BLOCK_FINDERS[".yaml"] = BLOCK_FINDERS[".yml"]
 BLOCK_FINDERS[".dockerfile"] = BLOCK_FINDERS["Dockerfile"]
 
 
-def _lang_key(path):
+def _lang_key(path: str) -> str:
     """The tag the rule indexes are keyed by: the suffix, or `Dockerfile` by name."""
     return "Dockerfile" if path.name == "Dockerfile" else path.suffix
 
 
-def _context_findings(path, text, code, index, disabled):
+def _context_findings(
+    path: str, text: str, code: str, index: PythonIndex, disabled: frozenset[str]
+) -> Iterator[Finding]:
     """Findings from the checks that read whole-file or whole-block context
     instead of matching one regex — the AST rules, and the per-format ones that
     look for the *absence* of a key.
     """
-    if index is not None and not AST_RULE_IDS <= disabled:
+    if index is not None and not disabled >= AST_RULE_IDS:
         for rule_id, finder in AST_FINDERS:
             if rule_id not in disabled:
                 yield from finder(path, index)
@@ -2217,7 +2320,7 @@ def _context_findings(path, text, code, index, disabled):
             yield from finder(path, code)
 
 
-def _pattern_findings(path, code, disabled):
+def _pattern_findings(path: str, code: str, disabled: frozenset[str]) -> list[Finding]:
     """Findings from the single-regex rules tagged for this file's language,
     looked up rather than filtered — see `_pattern_rules_by_lang`.
     """
@@ -2238,7 +2341,7 @@ def _pattern_findings(path, code, disabled):
             yield _finding(rule, path, line_of(m.start()))
 
 
-def scan_file(path, disabled=frozenset(), text=None):
+def scan_file(path: str, disabled: frozenset[str] = frozenset(), text: str | None = None) -> Iterator[Finding]:
     """Yield findings for every enabled rule that matches the file's contents.
 
     `text` supplies the contents instead of reading them, for callers that
@@ -2284,7 +2387,7 @@ def scan_file(path, disabled=frozenset(), text=None):
 
 
 @functools.lru_cache(maxsize=32)
-def _ignore_matcher(patterns):
+def _ignore_matcher(patterns: tuple[str, ...]) -> Any:
     """One compiled regex for a whole ignore list.
 
     `fnmatch` per pattern per path meant a walk ran one regex match per glob per
@@ -2303,7 +2406,7 @@ def _ignore_matcher(patterns):
     return re.compile("|".join(fnmatch.translate(os.path.normcase(p)) for p in patterns)).match
 
 
-def _matches_any(rel, ignore):
+def _matches_any(rel: str, ignore: list[str]) -> bool:
     """Match a posix path string against ignore globs.
 
     Tried both as given and with a leading `/`. `greenlint .` produces
@@ -2318,7 +2421,7 @@ def _matches_any(rel, ignore):
     return any(match(os.path.normcase(form)) for form in forms)
 
 
-def is_ignored(path, config=None):
+def is_ignored(path: str, config: Config | None = None) -> bool:
     """True if this path is under a pruned directory, or an `ignore` glob
     covers it.
 
@@ -2338,7 +2441,7 @@ def is_ignored(path, config=None):
     return _matches_any(p.as_posix(), ignore)
 
 
-def prunable_bases(ignore):
+def prunable_bases(ignore: list[str]) -> tuple[str, ...]:
     """The `<base>` of every ignore glob shaped `<base>/*`, which are the only
     ones a walk can act on before descending.
 
@@ -2390,7 +2493,7 @@ PRUNED_DIR_NAMES = frozenset(
 )
 
 
-def walk_files(root, prune_bases=()):
+def walk_files(root: str, prune_bases: tuple[str, ...] = ()) -> Iterator[str]:
     """Yield every file under `root`, never descending into a pruned directory.
 
     `Path.rglob("*")` walks the whole tree and leaves the caller to filter, so
@@ -2422,7 +2525,7 @@ def walk_files(root, prune_bases=()):
             continue  # unreadable directory: nothing to scan and nothing to say
 
 
-def iter_files(paths, config=None):
+def iter_files(paths: list[str], config: Config | None = None) -> Iterator[str]:
     """Yield every file under `paths` that the config does not ignore.
 
     Split out of `scan()` so that other front ends — the editor extension in
@@ -2442,7 +2545,7 @@ def iter_files(paths, config=None):
             yield f
 
 
-def scan(paths, config=None):
+def scan(paths: list[str], config: Config | None = None) -> list[Finding]:
     """Scan files/directories and return findings sorted by severity."""
     config = config or {"disable": set(), "ignore": []}
     findings = []
@@ -2455,7 +2558,7 @@ def scan(paths, config=None):
 # ------------------------------------------------------------------- cli ---
 
 
-def _build_parser():
+def _build_parser() -> argparse.ArgumentParser:
     """The command-line surface: every flag greenlint accepts, and its help."""
     p = argparse.ArgumentParser(
         prog="greenlint",
@@ -2479,9 +2582,7 @@ def _build_parser():
         default="text",
         help="text for humans, json for tooling, github for workflow annotations",
     )
-    p.add_argument(
-        "--fail-on-findings", action="store_true", help="exit 1 when anything is found; the CI gate"
-    )
+    p.add_argument("--fail-on-findings", action="store_true", help="exit 1 when anything is found; the CI gate")
     p.add_argument("--config", help=f"path to config (default: ./{CONFIG_FILENAME} if present)")
     p.add_argument(
         "--exclude",
@@ -2508,35 +2609,35 @@ def _build_parser():
     return p
 
 
-def _print_rules():
+def _print_rules() -> None:
     """`--list-rules`: every rule, with the language tags it targets."""
     for r in RULES:
-        print(f"{r['id']} [{r['severity']:6s}] ({', '.join(sorted(r['langs']))}): {r['message']}")
+        print(f"{r['id']} [{r['severity']:6s}] ({', '.join(sorted(r['langs']))}): {r['message']}")  # noqa: T201 — the tool's output
 
 
-def _print_github(findings):
+def _print_github(findings: list[Finding]) -> None:
     """`--format github`: one workflow annotation per finding."""
     # https://docs.github.com/actions/using-workflows/workflow-commands-for-github-actions#setting-a-notice-message
     level = {"high": "error", "medium": "warning", "low": "notice"}
     for f in findings:
-        print(
+        print(  # noqa: T201 — the tool's output
             f"::{level[f['severity']]} file={f['file']},line={f['line']},"
             f"title=greenlint {f['rule']}::{f['message']} — {f['suggestion']}"
         )
 
 
-def _print_text(findings, accepted, baseline_path):
+def _print_text(findings: list[Finding], accepted: int, baseline_path: str | None) -> None:
     """`--format text`: the human report, and the count a reader looks for."""
     for f in findings:
-        print(f"{f['file']}:{f['line']}: [{f['rule']}/{f['severity']}] {f['message']}")
-        print(f"    ↳ {f['suggestion']}")
+        print(f"{f['file']}:{f['line']}: [{f['rule']}/{f['severity']}] {f['message']}")  # noqa: T201 — the tool's output
+        print(f"    ↳ {f['suggestion']}")  # noqa: T201 — the tool's output
         if f["co2e_estimate"]:
-            print(f"    ~ {f['co2e_estimate']}")
+            print(f"    ~ {f['co2e_estimate']}")  # noqa: T201 — the tool's output
     accepted_note = f" ({accepted} accepted by {baseline_path})" if accepted else ""
-    print(f"\ngreenlint: {len(findings)} finding(s){accepted_note}")
+    print(f"\ngreenlint: {len(findings)} finding(s){accepted_note}")  # noqa: T201 — the tool's output
 
 
-def _resolve_baseline(explicit):
+def _resolve_baseline(explicit: str | None) -> str | None:
     """The baseline file to honour, from `--baseline` or the default name.
 
     An explicit `--baseline` must exist; the default one is used when it happens
@@ -2548,7 +2649,7 @@ def _resolve_baseline(explicit):
     return path
 
 
-def main(argv=None):
+def main(argv: list[str] | None = None) -> int:
     """CLI entry point; returns the process exit code."""
     args = _build_parser().parse_args(argv)
 
@@ -2564,7 +2665,7 @@ def main(argv=None):
     if args.write_baseline:
         path = Path(args.write_baseline)
         count = write_baseline(path, findings, path.parent)
-        print(f"greenlint: {count} finding(s) accepted in {path}")
+        print(f"greenlint: {count} finding(s) accepted in {path}")  # noqa: T201 — the tool's output
         return 0
 
     baseline_path = _resolve_baseline(args.baseline)

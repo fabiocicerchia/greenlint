@@ -9,17 +9,19 @@ import hashlib
 import time
 from collections import OrderedDict
 
+from types_ import Finding, Request, StatStamp
+
 DEFAULT_CACHE_ENTRIES = 4096
 
 
-def digest(text):
+def digest(text: str) -> str:
     """Content fingerprint. blake2b at 16 bytes: shorter and faster than sha256,
     and this only ever answers "same bytes as last time?" — not a security claim.
     """
     return hashlib.blake2b(text.encode("utf-8", "replace"), digest_size=16).hexdigest()
 
 
-def mtime(path):
+def mtime(path: str) -> int | None:
     """A path's modification stamp, or None when there is nothing to stat."""
     if path is None:
         return None
@@ -38,17 +40,17 @@ class FindingCache:
     repairs the stat stamp, so the next lookup is free again.
     """
 
-    def __init__(self, limit=DEFAULT_CACHE_ENTRIES):
+    def __init__(self, limit: int = DEFAULT_CACHE_ENTRIES) -> None:
         self.limit = limit
         self.entries = OrderedDict()
         self.stat_hits = 0
         self.hash_hits = 0
         self.misses = 0
 
-    def _touch(self, key):
+    def _touch(self, key: str) -> None:
         self.entries.move_to_end(key)
 
-    def by_stat(self, key, stat_stamp):
+    def by_stat(self, key: str, stat_stamp: StatStamp) -> list[Finding] | None:
         entry = self.entries.get(key)
         if entry is not None and entry["stat"] == stat_stamp:
             self._touch(key)
@@ -56,7 +58,7 @@ class FindingCache:
             return entry["findings"]
         return None
 
-    def by_hash(self, key, content_hash, stat_stamp=None):
+    def by_hash(self, key: str, content_hash: str, stat_stamp: StatStamp = None) -> list[Finding] | None:
         entry = self.entries.get(key)
         if entry is not None and entry["hash"] == content_hash:
             if stat_stamp is not None:
@@ -66,20 +68,20 @@ class FindingCache:
             return entry["findings"]
         return None
 
-    def put(self, key, content_hash, findings, stat_stamp=None):
+    def put(self, key: str, content_hash: str, findings: list[Finding], stat_stamp: StatStamp = None) -> None:
         self.misses += 1
         self.entries[key] = {"hash": content_hash, "stat": stat_stamp, "findings": findings}
         self._touch(key)
         while len(self.entries) > self.limit:
             self.entries.popitem(last=False)
 
-    def drop(self, key):
+    def drop(self, key: str) -> None:
         self.entries.pop(key, None)
 
-    def clear(self):
+    def clear(self) -> None:
         self.entries.clear()
 
-    def stats(self):
+    def stats(self) -> dict:
         return {
             "entries": len(self.entries),
             "statHits": self.stat_hits,
@@ -104,13 +106,13 @@ class RunningSummary:
 
     __slots__ = ("by_rule", "by_severity", "files", "total")
 
-    def __init__(self):
+    def __init__(self) -> None:
         self.total = 0
         self.by_severity = {"high": 0, "medium": 0, "low": 0}
         self.by_rule = {}
         self.files = set()
 
-    def add(self, findings):
+    def add(self, findings: list[Finding]) -> None:
         for finding in findings:
             self.total += 1
             severity = finding["severity"]
@@ -118,7 +120,7 @@ class RunningSummary:
             self.by_rule[finding["rule"]] = self.by_rule.get(finding["rule"], 0) + 1
             self.files.add(finding["file"])
 
-    def result(self):
+    def result(self) -> dict:
         return {
             "total": self.total,
             "bySeverity": self.by_severity,
@@ -148,7 +150,7 @@ class ProjectScan:
         "summary",
     )
 
-    def __init__(self, request):
+    def __init__(self, request: Request) -> None:
         root = request.get("root")
         self.id = request.get("id")
         self.paths = request.get("paths") or ([root] if root else ["."])
@@ -165,7 +167,7 @@ class ProjectScan:
         self.findings = []
         self.summary = RunningSummary()
 
-    def add(self, found):
+    def add(self, found: list[Finding]) -> None:
         if not found:
             return
         self.summary.add(found)
@@ -173,7 +175,7 @@ class ProjectScan:
             self.findings.extend(found)
         self.batch.extend(found)
 
-    def result(self, cache_stats):
+    def result(self, cache_stats: dict[str, int]) -> dict[str, dict]:
         return {
             # Streaming already delivered these one batch at a time; sending
             # them again would double the cost of the thing being optimised.
