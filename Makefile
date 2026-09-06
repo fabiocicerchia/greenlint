@@ -95,8 +95,9 @@ ext-publish: ext-package ## Publish the .vsix to both marketplaces
 run: ## Run greenlint
 	greenlint --help
 
-format: ## Rewrite the sources to canonical form
+format: ## Rewrite the sources to canonical form — Python and TypeScript
 	ruff format .
+	npx --yes @biomejs/biome@2.5.7 format --write .
 
 analyze: ## Type-check the package
 	basedpyright
