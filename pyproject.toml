@@ -25,7 +25,7 @@ classifiers = [
 dependencies = []
 
 [project.optional-dependencies]
-dev = ["pytest>=8.0", "ruff>=0.4", "build>=1.2"]
+dev = ["pytest>=8.0", "ruff>=0.4", "build>=1.2", "basedpyright>=1.31"]
 
 [project.urls]
 Homepage = "https://github.com/fabiocicerchia/greenlint"
@@ -79,3 +79,30 @@ mypy-init-return = true
   "T201",     # a test that prints is reporting its own measurement
   "S603",     # a test that launches the language server is launching it
 ]
+
+[tool.basedpyright]
+# FC-PY-003 asks for strict. The point of a type checker in CI is that it knows
+# the types: "unknown" is the finding, not a level of detail to relax away.
+typeCheckingMode = "strict"
+# Matches requires-python, so the checker rejects what the oldest supported
+# interpreter would reject rather than what this machine happens to run.
+pythonVersion = "3.11"
+# Third-party stubs are not this repository's to ship, and a missing one is a
+# packaging fact about someone else's project rather than a defect here.
+reportMissingTypeStubs = false
+# The sample tree is deliberately broken code -- undefined names, untyped
+# helpers -- because it exists to make the linter fire in the README walkthrough.
+exclude = ["examples", "**/node_modules", "**/__pycache__", "**/.venv"]
+# The server package is imported by file path at runtime -- as a script, the
+# way the extension starts it -- so the checker needs the same directory on its
+# path to resolve `greenlint_api` and its siblings.
+extraPaths = ["extensions/vscode/server"]
+
+[[tool.basedpyright.executionEnvironments]]
+# The tests read module internals on purpose: half of what they assert is that
+# a private helper still behaves, which is not a claim the public API can make.
+root = "tests"
+reportPrivateUsage = false
+# An execution environment resolves imports from its own root, so the repo root
+# and the server directory have to be named again here.
+extraPaths = [".", "extensions/vscode/server"]
