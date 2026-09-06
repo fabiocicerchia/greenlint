@@ -44,8 +44,9 @@ import queue
 import sys
 import threading
 import time
+from collections.abc import Callable
 from pathlib import Path
-from typing import Any, ClassVar
+from typing import Any, ClassVar, TextIO
 
 from greenlint_api import greenlint_version, load_greenlint, missing_api
 from scan_cache import DEFAULT_CACHE_ENTRIES, FindingCache, ProjectScan, digest, mtime
@@ -71,25 +72,34 @@ INTERLEAVE_EVERY = 16
 PROGRESS_INTERVAL_S = 0.5
 
 
+# What makes a cached config stale: the two files' stamps and the client's
+# exclude list.
+ConfigKey = tuple[int | None, int | None, int]
+
+
 class Server:
-    def __init__(self, gl: Any, out: Any, cache_entries: int = DEFAULT_CACHE_ENTRIES) -> None:
+    def __init__(self, gl: Any, out: TextIO, cache_entries: int = DEFAULT_CACHE_ENTRIES) -> None:
         self.gl = gl
         self.out = out
         self.out_lock = threading.Lock()
-        self.inbox = queue.Queue()
+        self.inbox: queue.Queue[str | None] = queue.Queue()
         self.cache = FindingCache(cache_entries)
-        self.configs = {}
-        self.config_fingerprint = None
+        # Per workspace root: the key that says whether it is still current,
+        # and the config it produced.
+        self.configs: dict[str, tuple[ConfigKey, Config]] = {}
+        self.config_fingerprint: str | None = None
         # Scans asked to stop, and the one currently walking. The set is pruned
         # to what can still be cancelled every time it is added to, so a cancel
         # that arrives after its scan has finished is dropped rather than kept
         # for the life of the process.
-        self.cancelled = set()
-        self.active_scan = None
-        self.deferred = []
+        # Ids are whatever the client put in `id`, so they are compared and
+        # never interpreted.
+        self.cancelled: set[Any] = set()
+        self.active_scan: Any = None
+        self.deferred: list[Request] = []
         # Ignore globs the client adds on top of `.greenlint.toml` — the
         # editor's own exclude list, which greenlint has no way to know about.
-        self.extra_ignore = []
+        self.extra_ignore: list[str] = []
         self.ignore_generation = 0
 
     # --- transport -------------------------------------------------------
@@ -114,7 +124,7 @@ class Server:
 
     # --- config ----------------------------------------------------------
 
-    def config_for(self, root: str) -> Config:
+    def config_for(self, root: str | None) -> Config:
         """Config for a workspace root, re-read when `.greenlint.toml` changes.
 
         Stat-gated rather than cached outright: one stat per request is free
@@ -128,15 +138,15 @@ class Server:
         base_path = Path(root) / self.gl.BASELINE_FILENAME if root else None
         stamp = mtime(cfg_path)
         key = (stamp, mtime(base_path), self.ignore_generation)
-        cached = self.configs.get(root)
+        cached = self.configs.get(root or "")
         if cached is not None and cached[0] == key:
             return cached[1]
         config = self.merged_config(cfg_path, stamp, base_path)
         self.drop_cache_if_rules_moved(config)
-        self.configs[root] = (key, config)
+        self.configs[root or ""] = (key, config)
         return config
 
-    def merged_config(self, cfg_path: str, stamp: StatStamp, base_path: str) -> dict[str, list]:
+    def merged_config(self, cfg_path: Path | None, stamp: int | None, base_path: Path | None) -> Config:
         """`.greenlint.toml` plus the client's excludes, plus the baseline.
 
         The client's excludes are merged in rather than applied separately, so
@@ -147,7 +157,7 @@ class Server:
         if cfg_path is not None and stamp is not None:
             config = self.gl.load_config(str(cfg_path))
         else:
-            config = {"disable": set(), "ignore": []}
+            config: Config = {"disable": set(), "ignore": []}
         return {
             "disable": config["disable"],
             "ignore": [*config["ignore"], *self.extra_ignore],
@@ -176,7 +186,7 @@ class Server:
         """Findings the baseline has not already accepted."""
         return self.gl.apply_baseline(findings, config["baseline"], config["baseline_root"])
 
-    def scan_text(self, path: str, text: str, config: Config) -> list[Finding]:
+    def scan_text(self, path: Path, text: str, config: Config) -> list[Finding]:
         if self.gl.is_ignored(path, config):
             return []
         key = str(path)
@@ -189,8 +199,8 @@ class Server:
         return findings
 
     def scan_path(  # noqa: PLR0911 — one arm per cache layer: skip, stat, hash, scan
-        self, path: str, config: Config, max_bytes: int
-    ) -> tuple:
+        self, path: Path, config: Config, max_bytes: int
+    ) -> tuple[list[Finding], str]:
         """Scan one file on disk, going no further down than a hit allows.
 
         Returns (findings, how) where `how` is stat/hash/scan/skip — the
@@ -209,7 +219,7 @@ class Server:
         except OSError:
             self.cache.drop(key)
             return [], "skip"
-        stamp = [info.st_mtime_ns, info.st_size]
+        stamp: StatStamp = (info.st_mtime_ns, info.st_size)
         cached = self.cache.by_stat(key, stamp)
         if cached is not None:
             return cached, "stat"
@@ -229,7 +239,7 @@ class Server:
         self.cache.put(key, content_hash, findings, stat_stamp=stamp)
         return findings, "scan"
 
-    def report_progress(self, scan: Any) -> None:
+    def report_progress(self, scan: ProjectScan) -> None:
         """Say how far the walk has got, and hand over the batch when streaming.
 
         Not just for the progress bar: silence is the difference between a
@@ -247,7 +257,7 @@ class Server:
         )
         scan.batch.clear()
 
-    def walk(self, scan: Any, config: Config, max_bytes: int) -> bool:
+    def walk(self, scan: ProjectScan, config: Config, max_bytes: int) -> bool:
         """Scan every file under the request's paths. True if it was cancelled."""
         for path in self.gl.iter_files(scan.paths, config):
             scan.seen += 1
@@ -298,7 +308,7 @@ class Server:
     # a function in `server_ops` and a row here. `scanProject` is the method
     # above rather than an import: it drives the cache, the walk and the
     # progress events, which is the server itself and not an operation on it.
-    OPS: ClassVar[dict] = {
+    OPS: ClassVar[dict[str, Callable[["Server", Request], Response]]] = {
         "ping": op_ping,
         "languages": op_languages,
         "scanText": op_scan_text,
@@ -312,11 +322,10 @@ class Server:
 
     def handle(self, request: Request) -> Response:
         """Run the callable implementing this request's `op`."""
-        op = request.get("op")
-        try:
-            handler = self.OPS[op]
-        except (KeyError, TypeError):  # missing, misspelled, or not a string
-            raise ValueError(f"unknown op: {op!r}") from None
+        op: object = request.get("op")
+        handler = self.OPS.get(op) if isinstance(op, str) else None
+        if handler is None:  # missing, misspelled, or not a string
+            raise ValueError(f"unknown op: {op!r}")
         return handler(self, request)
 
     def parse(self, line: str) -> Request | None:

@@ -8,6 +8,8 @@ run a rule -- so it is one module, apart from the server that drives it.
 import hashlib
 import time
 from collections import OrderedDict
+from pathlib import Path
+from typing import Any, TypedDict
 
 from types_ import Finding, Request, StatStamp
 
@@ -21,7 +23,7 @@ def digest(text: str) -> str:
     return hashlib.blake2b(text.encode("utf-8", "replace"), digest_size=16).hexdigest()
 
 
-def mtime(path: str) -> int | None:
+def mtime(path: Path | None) -> int | None:
     """A path's modification stamp, or None when there is nothing to stat."""
     if path is None:
         return None
@@ -29,6 +31,16 @@ def mtime(path: str) -> int | None:
         return path.stat().st_mtime_ns
     except OSError:
         return None
+
+
+class Entry(TypedDict):
+    """One cached file: the two stamps a lookup can present, and the result."""
+
+    # None for a file that was skipped rather than read -- there is nothing
+    # to hash, and no content hash will ever match it.
+    hash: str | None
+    stat: StatStamp | None
+    findings: list[Finding]
 
 
 class FindingCache:
@@ -42,7 +54,7 @@ class FindingCache:
 
     def __init__(self, limit: int = DEFAULT_CACHE_ENTRIES) -> None:
         self.limit = limit
-        self.entries = OrderedDict()
+        self.entries: OrderedDict[str, Entry] = OrderedDict()
         self.stat_hits = 0
         self.hash_hits = 0
         self.misses = 0
@@ -58,7 +70,7 @@ class FindingCache:
             return entry["findings"]
         return None
 
-    def by_hash(self, key: str, content_hash: str, stat_stamp: StatStamp = None) -> list[Finding] | None:
+    def by_hash(self, key: str, content_hash: str, stat_stamp: StatStamp | None = None) -> list[Finding] | None:
         entry = self.entries.get(key)
         if entry is not None and entry["hash"] == content_hash:
             if stat_stamp is not None:
@@ -68,7 +80,9 @@ class FindingCache:
             return entry["findings"]
         return None
 
-    def put(self, key: str, content_hash: str, findings: list[Finding], stat_stamp: StatStamp = None) -> None:
+    def put(
+        self, key: str, content_hash: str | None, findings: list[Finding], stat_stamp: StatStamp | None = None
+    ) -> None:
         self.misses += 1
         self.entries[key] = {"hash": content_hash, "stat": stat_stamp, "findings": findings}
         self._touch(key)
@@ -81,7 +95,7 @@ class FindingCache:
     def clear(self) -> None:
         self.entries.clear()
 
-    def stats(self) -> dict:
+    def stats(self) -> dict[str, int]:
         return {
             "entries": len(self.entries),
             "statHits": self.stat_hits,
@@ -108,9 +122,9 @@ class RunningSummary:
 
     def __init__(self) -> None:
         self.total = 0
-        self.by_severity = {"high": 0, "medium": 0, "low": 0}
-        self.by_rule = {}
-        self.files = set()
+        self.by_severity: dict[str, int] = {"high": 0, "medium": 0, "low": 0}
+        self.by_rule: dict[str, int] = {}
+        self.files: set[str] = set()
 
     def add(self, findings: list[Finding]) -> None:
         for finding in findings:
@@ -120,7 +134,7 @@ class RunningSummary:
             self.by_rule[finding["rule"]] = self.by_rule.get(finding["rule"], 0) + 1
             self.files.add(finding["file"])
 
-    def result(self) -> dict:
+    def result(self) -> dict[str, Any]:
         return {
             "total": self.total,
             "bySeverity": self.by_severity,
@@ -151,20 +165,20 @@ class ProjectScan:
     )
 
     def __init__(self, request: Request) -> None:
-        root = request.get("root")
-        self.id = request.get("id")
-        self.paths = request.get("paths") or ([root] if root else ["."])
+        root: str | None = request.get("root")
+        self.id: str | None = request.get("id")
+        self.paths: list[str] = request.get("paths") or ([root] if root else ["."])
         self.stream = bool(request.get("stream"))
         self.started = time.perf_counter()
         self.reported = self.started
         self.seen = 0
-        self.counts = {"stat": 0, "hash": 0, "scan": 0, "skip": 0}
-        self.batch = []
+        self.counts: dict[str, int] = {"stat": 0, "hash": 0, "scan": 0, "skip": 0}
+        self.batch: list[Finding] = []
         # Kept only when the client is not streaming. A streamed scan has
         # already handed every finding over, so holding a second copy of a large
         # tree's findings here — and sorting it — is work for a list nobody
         # reads. The summary is accumulated instead.
-        self.findings = []
+        self.findings: list[Finding] = []
         self.summary = RunningSummary()
 
     def add(self, found: list[Finding]) -> None:
@@ -175,7 +189,7 @@ class ProjectScan:
             self.findings.extend(found)
         self.batch.extend(found)
 
-    def result(self, cache_stats: dict[str, int]) -> dict[str, dict]:
+    def result(self, cache_stats: dict[str, int]) -> dict[str, Any]:
         return {
             # Streaming already delivered these one batch at a time; sending
             # them again would double the cost of the thing being optimised.

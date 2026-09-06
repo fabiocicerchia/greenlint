@@ -1,6 +1,9 @@
+import ast
 import os
 import re
+from collections.abc import Iterable, Iterator
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -8,14 +11,14 @@ import greenlint
 from greenlint import _blank_strings, load_config, main, scan, scan_file
 
 
-def write(tmp_path: Path, name, content):
+def write(tmp_path: Path, name: str, content: str) -> Path:
     f = tmp_path / name
     f.parent.mkdir(parents=True, exist_ok=True)
     f.write_text(content)
     return f
 
 
-def rule_ids(findings):
+def rule_ids(findings: Iterable[greenlint.Finding]) -> set[str]:
     return {f["rule"] for f in findings}
 
 
@@ -1115,13 +1118,14 @@ def test_python_file_is_parsed_once(tmp_path: Path, monkeypatch: pytest.MonkeyPa
     import greenlint
 
     f = write(tmp_path, "a.py", "x = 1\n")
-    calls = []
+    calls: list[Path] = []
     original = greenlint._parse_python
-    monkeypatch.setattr(
-        greenlint,
-        "_parse_python",
-        lambda p, t: (calls.append(p), original(p, t))[1],
-    )
+
+    def recording(path: Path, text: str) -> ast.Module | None:
+        calls.append(path)
+        return original(path, text)
+
+    monkeypatch.setattr(greenlint, "_parse_python", recording)
     list(greenlint.scan_file(f))
     assert len(calls) == 1
 
@@ -1238,7 +1242,7 @@ def test_scannable_matches_whether_scan_file_can_find_anything(tmp_path: Path) -
 
 
 def test_is_ignored_matches_the_walkers_own_filtering(tmp_path: Path) -> None:
-    cfg = {"disable": set(), "ignore": ["*/vendor/*"]}
+    cfg: greenlint.Config = {"disable": set(), "ignore": ["*/vendor/*"]}
     assert greenlint.is_ignored(tmp_path / "vendor" / "q.sql", cfg)
     assert not greenlint.is_ignored(tmp_path / "src" / "q.sql", cfg)
     assert not greenlint.is_ignored(tmp_path / "vendor" / "q.sql", {"ignore": []})
@@ -1252,6 +1256,7 @@ def test_is_ignored_matches_the_walkers_own_filtering(tmp_path: Path) -> None:
 
 def test_index_python_collects_loops_functions_and_classes() -> None:
     tree = greenlint._parse_python(Path("a.py"), SAMPLE)
+    assert tree is not None
     index = greenlint.index_python(tree)
     assert [node.lineno for node, _ in index.fors] == [4, 5, 9]
     assert [node.lineno for node, _ in index.whiles] == [2]
@@ -1262,6 +1267,7 @@ def test_index_python_collects_loops_functions_and_classes() -> None:
 
 def test_index_python_records_the_loops_enclosing_each_node() -> None:
     tree = greenlint._parse_python(Path("a.py"), SAMPLE)
+    assert tree is not None
     index = greenlint.index_python(tree)
     enclosing = {node.lineno: [loop.lineno for loop in loops] for node, loops in index.fors}
     assert enclosing == {4: [], 5: [4], 9: []}
@@ -1274,6 +1280,7 @@ def test_index_python_marks_only_scopes_that_own_a_loop() -> None:
     """GL007 skips a scope with no loop in it rather than walking it to find
     out, and most functions have no loop."""
     tree = greenlint._parse_python(Path("a.py"), SAMPLE)
+    assert tree is not None
     index = greenlint.index_python(tree)
     owners = {getattr(scope, "name", "<module>") for scope in index.loop_scopes}
     assert owners == {"loops", "method"}
@@ -1335,7 +1342,7 @@ def clean(a, b):
         ("f.md", "# SELECT * FROM t\n", "# SELECT * FROM t\n"),
     ],
 )
-def test_blank_comments_shapes(name, text, expected) -> None:
+def test_blank_comments_shapes(name: str, text: str, expected: str) -> None:
     assert greenlint._blank_comments(text, Path(name)) == expected
 
 
@@ -1401,15 +1408,15 @@ def test_walk_files_never_descends_into_pruned_directories(tmp_path: Path, monke
     write(tmp_path, ".git/objects/ab/cdef", "x\n")
     write(tmp_path, "vendor/lib/thing.js", "x\n")
 
-    opened = []
+    opened: list[str] = []
     real_scandir = os.scandir
 
-    def watched(path):
+    def watched(path: Any) -> Iterator[os.DirEntry[str]]:
         opened.append(str(path))
         return real_scandir(path)
 
     monkeypatch.setattr(os, "scandir", watched)
-    config = {"disable": set(), "ignore": ["*/vendor/*"]}
+    config: greenlint.Config = {"disable": set(), "ignore": ["*/vendor/*"]}
     files = [f.name for f in greenlint.iter_files([str(tmp_path)], config)]
     assert files == ["app.py"]
     # Not merely filtered afterwards — never opened.
@@ -1424,10 +1431,10 @@ def test_walk_files_prunes_virtualenvs_and_caches(tmp_path: Path, monkeypatch: p
     write(tmp_path, "env3/lib/site-packages/other/mod.py", "while True: pass\n")
     write(tmp_path, ".mypy_cache/3.11/mod.data.json", "{}\n")
 
-    opened = []
+    opened: list[str] = []
     real_scandir = os.scandir
 
-    def watched(path):
+    def watched(path: Any) -> Iterator[os.DirEntry[str]]:
         opened.append(str(path))
         return real_scandir(path)
 
@@ -1546,7 +1553,7 @@ def test_cli_rejects_a_baseline_path_that_is_not_there(tmp_path: Path, monkeypat
         main([".", "--baseline", "missing.json"])
 
 
-def _docs_anchor(rule):
+def _docs_anchor(rule: greenlint.Rule) -> str:
     """The GitHub heading anchor a front end derives for a rule.
 
     Mirrors `ruleDocsUrl` in the VS Code extension: GitHub lowercases the
@@ -1584,7 +1591,7 @@ def test_rule_anchors_are_unique() -> None:
 # "barely checked", not "clean".
 
 
-def scan_one(tmp_path: Path, name, content):
+def scan_one(tmp_path: Path, name: str, content: str) -> set[str]:
     write(tmp_path, name, content)
     return rule_ids(scan([str(tmp_path)]))
 
@@ -1789,13 +1796,13 @@ def test_a_file_no_rule_targets_is_not_even_read(tmp_path: Path) -> None:
 # a sleep call. Comments were already blanked; strings were not.
 
 
-def scan_source(tmp_path: Path, name, source):
+def scan_source(tmp_path: Path, name: str, source: str) -> list[greenlint.Finding]:
     path = tmp_path / name
     path.write_text(source)
     return list(scan_file(path))
 
 
-def ids_for(tmp_path: Path, name, source):
+def ids_for(tmp_path: Path, name: str, source: str) -> list[str]:
     return sorted(f["rule"] for f in scan_source(tmp_path, name, source))
 
 
