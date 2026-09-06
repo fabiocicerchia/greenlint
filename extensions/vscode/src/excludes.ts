@@ -1,6 +1,6 @@
-import * as path from 'path';
+import * as path from "path";
 
-import * as vscode from 'vscode';
+import * as vscode from "vscode";
 
 /**
  * VS Code's exclude settings, as greenlint ignore globs.
@@ -19,10 +19,9 @@ import * as vscode from 'vscode';
  */
 export function editorExcludeGlobs(folder: vscode.WorkspaceFolder): string[] {
   const globs = new Set<string>();
-  for (const section of ['files', 'search'] as const) {
+  for (const section of ["files", "search"] as const) {
     const excludes =
-      vscode.workspace.getConfiguration(section, folder.uri).get<Record<string, unknown>>('exclude') ??
-      {};
+      vscode.workspace.getConfiguration(section, folder.uri).get<Record<string, unknown>>("exclude") ?? {};
     for (const [pattern, enabled] of Object.entries(excludes)) {
       // A value can also be a `{ "when": ... }` condition, which is about a
       // sibling file rather than this path; only a plain `true` is a
@@ -48,7 +47,7 @@ export function expandBraces(pattern: string): string[] {
     return [pattern];
   }
   return match[1]
-    .split(',')
+    .split(",")
     .flatMap((option) =>
       expandBraces(pattern.slice(0, match.index) + option + pattern.slice(match.index + match[0].length)),
     );
@@ -62,20 +61,20 @@ export function expandBraces(pattern: string): string[] {
  * root's real path.
  */
 export function toIgnoreGlobs(pattern: string, folder: vscode.WorkspaceFolder): string[] {
-  const trimmed = pattern.replace(/\/+$/, '').replace(/\/\*\*$/, '');
+  const trimmed = pattern.replace(/\/+$/, "").replace(/\/\*\*$/, "");
   if (!trimmed) {
     return [];
   }
   // fnmatch has no `**`: its `*` already crosses `/`, which is what `**` means.
-  const flattened = trimmed.replace(/\*\*/g, '*');
-  const anchored = flattened.startsWith('*/')
+  const flattened = trimmed.replace(/\*\*/g, "*");
+  const anchored = flattened.startsWith("*/")
     ? flattened
-    : `${posix(folder.uri.fsPath)}/${flattened.replace(/^\.\//, '')}`;
+    : `${posix(folder.uri.fsPath)}/${flattened.replace(/^\.\//, "")}`;
   // The entry itself, and — the form the walk can prune on — everything below it.
   return [anchored, `${anchored}/*`];
 }
 
 /** greenlint matches `Path.as_posix()`, which on Windows is `C:/foo`. */
 function posix(fsPath: string): string {
-  return fsPath.split(path.sep).join('/');
+  return fsPath.split(path.sep).join("/");
 }

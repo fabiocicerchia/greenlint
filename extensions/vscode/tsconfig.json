@@ -2,9 +2,7 @@
   "compilerOptions": {
     "module": "commonjs",
     "target": "ES2022",
-    "lib": [
-      "ES2022"
-    ],
+    "lib": ["ES2022"],
     "outDir": "out-tsc",
     "rootDir": "src",
     "sourceMap": true,
@@ -16,11 +14,6 @@
     "skipLibCheck": true,
     "esModuleInterop": true
   },
-  "include": [
-    "src/**/*.ts"
-  ],
-  "exclude": [
-    "node_modules",
-    "out"
-  ]
+  "include": ["src/**/*.ts"],
+  "exclude": ["node_modules", "out"]
 }

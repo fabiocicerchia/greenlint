@@ -1,4 +1,4 @@
-import type { Finding, ScanStats } from './types';
+import type { Finding, ScanStats } from "./types";
 
 export interface ReportMeta {
   /** "whole project", "src/db.py" — what the numbers below are about. */
@@ -11,11 +11,7 @@ export interface ReportMeta {
 }
 
 function escapeHtml(text: string): string {
-  return text
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;');
+  return text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 }
 
 /**
@@ -47,15 +43,13 @@ export function renderReport(findings: Finding[], meta: ReportMeta): string {
 <body>
 <div class="wrap">
   <h1>greenlint report</h1>
-  <p class="tagline">${escapeHtml(meta.scopeLabel)} — ${findings.length} finding${
-    findings.length === 1 ? '' : 's'
-  }</p>
+  <p class="tagline">${escapeHtml(meta.scopeLabel)} — ${findings.length} finding${findings.length === 1 ? "" : "s"}</p>
   <p class="meta">${escapeHtml(meta.generatedAt.toLocaleString())}${
-    meta.version ? ` · greenlint ${escapeHtml(meta.version)}` : ''
+    meta.version ? ` · greenlint ${escapeHtml(meta.version)}` : ""
   }${scanCost(meta.stats)}</p>
-  ${findings.length === 0 ? '<section class="card"><h2>Nothing found</h2></section>' : ''}
-  ${byRule.size > 0 ? ruleSummary(byRule) : ''}
-  ${[...byFile.entries()].map(([file, items]) => fileSection(file, items, meta)).join('\n')}
+  ${findings.length === 0 ? '<section class="card"><h2>Nothing found</h2></section>' : ""}
+  ${byRule.size > 0 ? ruleSummary(byRule) : ""}
+  ${[...byFile.entries()].map(([file, items]) => fileSection(file, items, meta)).join("\n")}
   <footer>
     Every finding says why it wastes energy and what to do instead. CO2e figures
     are order-of-magnitude steers, not measurements.<br>
@@ -77,7 +71,7 @@ function bucket(map: Map<string, Finding[]>, key: string): Finding[] {
 
 function scanCost(stats?: ScanStats): string {
   if (!stats) {
-    return '';
+    return "";
   }
   const reused = stats.reusedFromStat + stats.reusedFromHash;
   return ` · ${stats.files} files in ${stats.ms} ms (${stats.scanned} scanned, ${reused} reused from cache, ${stats.skipped} skipped)`;
@@ -93,7 +87,7 @@ function ruleSummary(byRule: Map<string, Finding[]>): string {
         <td class="num">${items.length}</td>
       </tr>`,
     )
-    .join('\n');
+    .join("\n");
   return `<section class="card">
     <h2>By rule</h2>
     <table><thead><tr><th>Rule</th><th>Message</th><th class="num">Count</th></tr></thead>
@@ -113,10 +107,10 @@ function fileSection(file: string, findings: Finding[], meta: ReportMeta): strin
           <span class="msg">${escapeHtml(finding.message)}</span>
         </div>
         <p class="suggestion">↳ ${escapeHtml(finding.suggestion)}</p>
-        ${finding.co2e_estimate ? `<p class="co2e">~ ${escapeHtml(finding.co2e_estimate)}</p>` : ''}
+        ${finding.co2e_estimate ? `<p class="co2e">~ ${escapeHtml(finding.co2e_estimate)}</p>` : ""}
       </li>`,
     )
-    .join('\n');
+    .join("\n");
   return `<section class="card">
     <h2 class="mono">${label} <span class="pill">${findings.length}</span></h2>
     <ul>${rows}</ul>

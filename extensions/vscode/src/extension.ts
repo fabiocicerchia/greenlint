@@ -1,22 +1,16 @@
-import * as path from 'path';
+import * as path from "path";
 
-import * as vscode from 'vscode';
+import * as vscode from "vscode";
 
-import { readSettings, requiresRestart } from './config';
-import { GreenlintHoverProvider, SOURCE, toDiagnostics } from './diagnostics';
-import { ScanServer } from './engine';
-import { ScanServerError } from './protocol';
-import { editorExcludeGlobs } from './excludes';
-import {
-  countBySeverity,
-  FindingsProvider,
-  type Grouping,
-  type Scope,
-  workspaceRelative,
-} from './findingsView';
-import { renderReport } from './report';
-import { FindingStore } from './store';
-import type { ScanStats, ScanSummary } from './types';
+import { readSettings, requiresRestart } from "./config";
+import { GreenlintHoverProvider, SOURCE, toDiagnostics } from "./diagnostics";
+import { ScanServer } from "./engine";
+import { ScanServerError } from "./protocol";
+import { editorExcludeGlobs } from "./excludes";
+import { countBySeverity, FindingsProvider, type Grouping, type Scope, workspaceRelative } from "./findingsView";
+import { renderReport } from "./report";
+import { FindingStore } from "./store";
+import type { ScanStats, ScanSummary } from "./types";
 
 /** External changes are batched: a `git checkout` touches hundreds of files,
  * and scanning each one as its event lands is the thundering herd this whole
@@ -44,16 +38,13 @@ export function deactivate(): void {
 
 class Controller implements vscode.Disposable {
   private settings = readSettings();
-  private readonly log = vscode.window.createOutputChannel('greenlint');
+  private readonly log = vscode.window.createOutputChannel("greenlint");
   private readonly diagnostics = vscode.languages.createDiagnosticCollection(SOURCE);
   private readonly store = new FindingStore();
   private readonly server: ScanServer;
   private readonly findings = new FindingsProvider(this.store);
   private readonly tree: vscode.TreeView<unknown>;
-  private readonly status = vscode.window.createStatusBarItem(
-    vscode.StatusBarAlignment.Right,
-    50,
-  );
+  private readonly status = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 50);
   private readonly disposables: vscode.Disposable[] = [];
 
   private readonly debouncers = new Map<string, NodeJS.Timeout>();
@@ -70,33 +61,33 @@ class Controller implements vscode.Disposable {
   private lastStats?: ScanStats;
   private lastSummary?: ScanSummary;
   private lastErrorShown?: string;
-  private appliedExcludes = '';
+  private appliedExcludes = "";
   private scanning = false;
 
   constructor(private readonly context: vscode.ExtensionContext) {
     this.server = new ScanServer(
-      context.asAbsolutePath(path.join('server', 'greenlint_server.py')),
+      context.asAbsolutePath(path.join("server", "greenlint_server.py")),
       this.settings,
       this.log,
     );
-    this.findings.scope = context.workspaceState.get<Scope>('scope', 'project');
+    this.findings.scope = context.workspaceState.get<Scope>("scope", "project");
     // By file, like the sibling extensions: "which of my files is this in" is
     // the first question, and severity is already the order within each group.
-    this.findings.grouping = context.workspaceState.get<Grouping>('grouping', 'file');
-    this.tree = vscode.window.createTreeView('greenlint.findings', {
+    this.findings.grouping = context.workspaceState.get<Grouping>("grouping", "file");
+    this.tree = vscode.window.createTreeView("greenlint.findings", {
       treeDataProvider: this.findings,
       // The view's own collapse-all button, implemented inside the tree, so it
       // always works. gandalf and depwatch both use it.
       showCollapseAll: true,
     });
-    this.status.command = 'greenlint.findings.focus';
-    this.status.name = 'greenlint';
+    this.status.command = "greenlint.findings.focus";
+    this.status.name = "greenlint";
   }
 
   async start(): Promise<void> {
     this.register();
-    void vscode.commands.executeCommand('setContext', 'greenlint.scope', this.findings.scope);
-    void vscode.commands.executeCommand('setContext', 'greenlint.expanded', this.findings.expanded);
+    void vscode.commands.executeCommand("setContext", "greenlint.scope", this.findings.scope);
+    void vscode.commands.executeCommand("setContext", "greenlint.expanded", this.findings.expanded);
     this.findings.setCurrentFile(vscode.window.activeTextEditor?.document.uri.fsPath);
     this.repaint();
     if (!this.settings.enable) {
@@ -130,21 +121,15 @@ class Controller implements vscode.Disposable {
   // --- registration -----------------------------------------------------
 
   private register(): void {
-    this.disposables.push(
-      ...this.commands(),
-      ...this.viewWiring(),
-      ...this.documentListeners(),
-      ...this.watchers(),
-    );
+    this.disposables.push(...this.commands(), ...this.viewWiring(), ...this.documentListeners(), ...this.watchers());
   }
 
   /** One entry per `contributes.commands` id in package.json. */
   private commands(): vscode.Disposable[] {
-    const command = (name: string, run: () => unknown) =>
-      vscode.commands.registerCommand(name, run);
+    const command = (name: string, run: () => unknown) => vscode.commands.registerCommand(name, run);
 
     return [
-      command('greenlint.scanFile', () => {
+      command("greenlint.scanFile", () => {
         const editor = vscode.window.activeTextEditor;
         if (!editor) {
           return;
@@ -154,18 +139,18 @@ class Controller implements vscode.Disposable {
         this.scannedVersion.delete(editor.document.uri.toString());
         return this.scanDocument(editor.document);
       }),
-      command('greenlint.scanProject', () => this.scanProject()),
-      command('greenlint.showReport', () => this.showReport()),
-      command('greenlint.showScopeFile', () => this.setScope('file')),
-      command('greenlint.showScopeProject', () => this.setScope('project')),
-      command('greenlint.setGrouping', () => this.pickGrouping()),
-      command('greenlint.cancelScan', () => this.server.cancelProjectScan()),
-      command('greenlint.writeBaseline', () => this.writeBaseline()),
-      command('greenlint.expandAll', () => this.setExpanded(true)),
-      command('greenlint.showOutput', () => this.log.show(true)),
-      command('greenlint.restartServer', async () => {
+      command("greenlint.scanProject", () => this.scanProject()),
+      command("greenlint.showReport", () => this.showReport()),
+      command("greenlint.showScopeFile", () => this.setScope("file")),
+      command("greenlint.showScopeProject", () => this.setScope("project")),
+      command("greenlint.setGrouping", () => this.pickGrouping()),
+      command("greenlint.cancelScan", () => this.server.cancelProjectScan()),
+      command("greenlint.writeBaseline", () => this.writeBaseline()),
+      command("greenlint.expandAll", () => this.setExpanded(true)),
+      command("greenlint.showOutput", () => this.log.show(true)),
+      command("greenlint.restartServer", async () => {
         await this.server.restart();
-        this.appliedExcludes = '';
+        this.appliedExcludes = "";
         // The restart is how a contributor picks up their own edited rules, so
         // what was scanned before it says nothing about what a scan says now.
         this.scannedVersion.clear();
@@ -177,10 +162,7 @@ class Controller implements vscode.Disposable {
   /** What turns findings into things on screen: hovers, squiggles, the panel. */
   private viewWiring(): vscode.Disposable[] {
     return [
-      vscode.languages.registerHoverProvider(
-        { scheme: 'file' },
-        new GreenlintHoverProvider(this.store),
-      ),
+      vscode.languages.registerHoverProvider({ scheme: "file" }, new GreenlintHoverProvider(this.store)),
       this.store.onDidChange((files) => {
         this.publishDiagnostics(files);
         this.repaint();
@@ -193,16 +175,16 @@ class Controller implements vscode.Disposable {
     return [
       vscode.workspace.onDidChangeConfiguration((event) => {
         if (
-          event.affectsConfiguration('greenlint') ||
+          event.affectsConfiguration("greenlint") ||
           // Not greenlint's own settings, but they decide what it walks.
-          event.affectsConfiguration('files.exclude') ||
-          event.affectsConfiguration('search.exclude')
+          event.affectsConfiguration("files.exclude") ||
+          event.affectsConfiguration("search.exclude")
         ) {
           void this.reconfigure();
         }
       }),
       vscode.workspace.onDidChangeTextDocument((event) => {
-        if (this.settings.run === 'onType') {
+        if (this.settings.run === "onType") {
           this.schedule(event.document, this.settings.debounceMs);
         }
       }),
@@ -215,7 +197,7 @@ class Controller implements vscode.Disposable {
         // indentation and all — the text to trace it to was not loaded. Now it
         // is, so it is worth one file's worth of republishing, and in `manual`
         // mode nothing else will ever do it.
-        if (document.uri.scheme === 'file') {
+        if (document.uri.scheme === "file") {
           this.publishDiagnostics([document.uri.fsPath]);
         }
         this.schedule(document, 0);
@@ -241,8 +223,8 @@ class Controller implements vscode.Disposable {
 
   /** The disk telling us what everything else is doing. */
   private watchers(): vscode.Disposable[] {
-    const watcher = vscode.workspace.createFileSystemWatcher('**/*');
-    const config = vscode.workspace.createFileSystemWatcher('**/.greenlint.toml');
+    const watcher = vscode.workspace.createFileSystemWatcher("**/*");
+    const config = vscode.workspace.createFileSystemWatcher("**/.greenlint.toml");
 
     return [
       watcher,
@@ -255,10 +237,8 @@ class Controller implements vscode.Disposable {
       }),
       // A config change rewrites what every cached finding means, so it drops
       // the lot rather than working out which rules moved.
-      ...['onDidChange', 'onDidCreate', 'onDidDelete'].map((event) =>
-        (config[event as 'onDidChange'] as typeof config.onDidChange)(() =>
-          void this.reconfigure(),
-        ),
+      ...["onDidChange", "onDidCreate", "onDidDelete"].map((event) =>
+        (config[event as "onDidChange"] as typeof config.onDidChange)(() => void this.reconfigure()),
       ),
     ];
   }
@@ -266,7 +246,7 @@ class Controller implements vscode.Disposable {
   // --- scheduling -------------------------------------------------------
 
   private schedule(document: vscode.TextDocument, delay: number): void {
-    if (!this.settings.enable || this.settings.run === 'manual' || !this.isScannable(document.uri)) {
+    if (!this.settings.enable || this.settings.run === "manual" || !this.isScannable(document.uri)) {
       return;
     }
     const key = document.uri.toString();
@@ -324,15 +304,15 @@ class Controller implements vscode.Disposable {
    * across the process boundary to be told there was nothing to look for.
    */
   private isScannable(uri: vscode.Uri): boolean {
-    if (uri.scheme !== 'file' || !this.scannableExtensions) {
-      return uri.scheme === 'file';
+    if (uri.scheme !== "file" || !this.scannableExtensions) {
+      return uri.scheme === "file";
     }
     const base = path.basename(uri.fsPath);
     return this.scannableExtensions.has(base) || this.scannableExtensions.has(path.extname(base));
   }
 
   private async scanDocument(document: vscode.TextDocument): Promise<void> {
-    if (document.isClosed || document.uri.scheme !== 'file') {
+    if (document.isClosed || document.uri.scheme !== "file") {
       return;
     }
     const version = document.version;
@@ -368,7 +348,7 @@ class Controller implements vscode.Disposable {
       await vscode.window.withProgress(
         {
           location: vscode.ProgressLocation.Window,
-          title: 'greenlint: scanning workspace',
+          title: "greenlint: scanning workspace",
           cancellable: true,
         },
         async (progress, token) => {
@@ -378,9 +358,7 @@ class Controller implements vscode.Disposable {
           // Unsaved buffers are what the developer is actually looking at; a
           // scan of their last-saved bytes would overwrite the truth with
           // history.
-          const dirty = new Set(
-            vscode.workspace.textDocuments.filter((d) => d.isDirty).map((d) => d.uri.fsPath),
-          );
+          const dirty = new Set(vscode.workspace.textDocuments.filter((d) => d.isDirty).map((d) => d.uri.fsPath));
           for (const folder of folders) {
             // Findings arrive in batches and go straight into the panel, so it
             // fills as the walk goes. Nothing is pruned until the walk
@@ -405,7 +383,7 @@ class Controller implements vscode.Disposable {
             if (response.cancelled) {
               // Nothing is pruned: the walk stopped partway, so the files it
               // never reached are not files without findings.
-              this.log.appendLine('[greenlint] scan cancelled');
+              this.log.appendLine("[greenlint] scan cancelled");
               return;
             }
             this.lastStats = response.stats;
@@ -423,11 +401,7 @@ class Controller implements vscode.Disposable {
     }
   }
 
-  private logScan(
-    folder: vscode.WorkspaceFolder,
-    stats?: ScanStats,
-    summary?: ScanSummary,
-  ): void {
+  private logScan(folder: vscode.WorkspaceFolder, stats?: ScanStats, summary?: ScanSummary): void {
     if (summary) {
       const { bySeverity: by, total, files } = summary;
       this.log.appendLine(
@@ -465,13 +439,13 @@ class Controller implements vscode.Disposable {
       }
     }
     const sorted = [...globs].sort();
-    const fingerprint = sorted.join('\n');
+    const fingerprint = sorted.join("\n");
     if (fingerprint === this.appliedExcludes) {
       return;
     }
     await this.server.configure(sorted);
     this.appliedExcludes = fingerprint;
-    this.log.appendLine(`[greenlint] excluding ${sorted.length} glob(s): ${sorted.join(', ')}`);
+    this.log.appendLine(`[greenlint] excluding ${sorted.length} glob(s): ${sorted.join(", ")}`);
   }
 
   private async reconfigure(): Promise<void> {
@@ -492,7 +466,7 @@ class Controller implements vscode.Disposable {
     this.scannedVersion.clear();
     // Both the excludes and greenlint's own config can have moved; the cheapest
     // correct answer to "what changed?" is to scan again.
-    this.appliedExcludes = '';
+    this.appliedExcludes = "";
     await this.server.invalidate();
     await this.scanProject();
   }
@@ -536,7 +510,7 @@ class Controller implements vscode.Disposable {
   private repaint(): void {
     this.findings.refresh();
     const total = this.store.size;
-    void vscode.commands.executeCommand('setContext', 'greenlint.hasFindings', total > 0);
+    void vscode.commands.executeCommand("setContext", "greenlint.hasFindings", total > 0);
     this.tree.description = this.findings.describeScope();
     this.tree.badge = total > 0 ? { value: total, tooltip: `${total} findings` } : undefined;
     // "Scanned, and clean" and "never scanned" are both an empty tree, and
@@ -586,11 +560,11 @@ class Controller implements vscode.Disposable {
     const total = this.store.size;
     const confirmed = await vscode.window.showWarningMessage(
       `Accept the ${total} current finding(s) as the baseline? ` +
-        'They stop being reported here and in CI; new ones still are.',
+        "They stop being reported here and in CI; new ones still are.",
       { modal: true },
-      'Write Baseline',
+      "Write Baseline",
     );
-    if (confirmed !== 'Write Baseline') {
+    if (confirmed !== "Write Baseline") {
       return;
     }
     try {
@@ -608,15 +582,15 @@ class Controller implements vscode.Disposable {
   private async pickGrouping(): Promise<void> {
     const pick = await vscode.window.showQuickPick(
       [
-        { label: 'severity', description: 'high, then medium, then low' },
-        { label: 'file', description: 'one group per file' },
-        { label: 'rule', description: 'one group per rule' },
+        { label: "severity", description: "high, then medium, then low" },
+        { label: "file", description: "one group per file" },
+        { label: "rule", description: "one group per rule" },
       ],
-      { title: 'Group findings by' },
+      { title: "Group findings by" },
     );
     if (pick) {
       this.findings.grouping = pick.label as Grouping;
-      void this.context.workspaceState.update('grouping', pick.label);
+      void this.context.workspaceState.update("grouping", pick.label);
       this.repaint();
     }
   }
@@ -633,16 +607,16 @@ class Controller implements vscode.Disposable {
     this.status.text =
       total === 0
         ? this.lastStats
-          ? '$(check) greenlint'
-          : '$(circle-large-outline) greenlint'
+          ? "$(check) greenlint"
+          : "$(circle-large-outline) greenlint"
         : `$(flame) ${counts.high} $(warning) ${counts.medium} $(info) ${counts.low}`;
     const tooltip = new vscode.MarkdownString(undefined, true);
     tooltip.appendMarkdown(`**greenlint** — ${this.findings.describeScope()}`);
     if (this.lastSummary) {
       const { bySeverity: by, total: all, files } = this.lastSummary;
       tooltip.appendMarkdown(
-        `\n\nWhole project: ${all} finding${all === 1 ? '' : 's'} in ${files} file${
-          files === 1 ? '' : 's'
+        `\n\nWhole project: ${all} finding${all === 1 ? "" : "s"} in ${files} file${
+          files === 1 ? "" : "s"
         } — $(flame) ${by.high} · $(warning) ${by.medium} · $(info) ${by.low}`,
       );
     }
@@ -659,29 +633,25 @@ class Controller implements vscode.Disposable {
 
   private setExpanded(expanded: boolean): void {
     this.findings.setExpanded(expanded);
-    void vscode.commands.executeCommand('setContext', 'greenlint.expanded', expanded);
+    void vscode.commands.executeCommand("setContext", "greenlint.expanded", expanded);
   }
 
   private setScope(scope: Scope): void {
     this.findings.scope = scope;
-    void this.context.workspaceState.update('scope', scope);
-    void vscode.commands.executeCommand('setContext', 'greenlint.scope', scope);
+    void this.context.workspaceState.update("scope", scope);
+    void vscode.commands.executeCommand("setContext", "greenlint.scope", scope);
     this.repaint();
   }
 
   private showReport(): void {
     if (!this.reportPanel) {
       this.reportPanel = vscode.window.createWebviewPanel(
-        'greenlint.report',
-        'greenlint report',
+        "greenlint.report",
+        "greenlint report",
         { viewColumn: vscode.ViewColumn.Beside, preserveFocus: true },
         {},
       );
-      this.reportPanel.iconPath = vscode.Uri.joinPath(
-        this.context.extensionUri,
-        'media',
-        'leaf.svg',
-      );
+      this.reportPanel.iconPath = vscode.Uri.joinPath(this.context.extensionUri, "media", "leaf.svg");
       this.reportPanel.onDidDispose(() => {
         clearTimeout(this.reportTimer);
         this.reportPanel = undefined;
@@ -700,10 +670,10 @@ class Controller implements vscode.Disposable {
 
   private reportHtml(): string {
     return renderReport(this.findings.findings(), {
-      scopeLabel: this.findings.scope === 'project' ? 'whole project' : this.findings.describeScope(),
+      scopeLabel: this.findings.scope === "project" ? "whole project" : this.findings.describeScope(),
       generatedAt: new Date(),
       version: this.server.serverInfo?.version,
-      stats: this.findings.scope === 'project' ? this.lastStats : undefined,
+      stats: this.findings.scope === "project" ? this.lastStats : undefined,
       relative: workspaceRelative,
     });
   }
@@ -719,15 +689,15 @@ class Controller implements vscode.Disposable {
     // carries the command itself — a link to the README is one click and one
     // page of reading away from the same sentence.
     const install = error instanceof ScanServerError ? error.install : undefined;
-    const headline = message.split('\n')[0];
+    const headline = message.split("\n")[0];
     const text = install ? `greenlint: ${headline}\n\nInstall it with: ${install}` : `greenlint: ${headline}`;
-    const actions = install ? ['Install greenlint', 'Copy Command', 'Show Log'] : ['Show Log'];
+    const actions = install ? ["Install greenlint", "Copy Command", "Show Log"] : ["Show Log"];
     void vscode.window.showErrorMessage(text, ...actions).then((choice) => {
-      if (choice === 'Show Log') {
+      if (choice === "Show Log") {
         this.log.show(true);
-      } else if (choice === 'Install greenlint' && install) {
+      } else if (choice === "Install greenlint" && install) {
         this.runInstall(install);
-      } else if (choice === 'Copy Command' && install) {
+      } else if (choice === "Copy Command" && install) {
         void vscode.env.clipboard
           .writeText(install)
           .then(() => vscode.window.showInformationMessage(`Copied: ${install}`));
@@ -745,20 +715,20 @@ class Controller implements vscode.Disposable {
    * button rather than an automatic restart.
    */
   private runInstall(command: string): void {
-    const terminal = vscode.window.createTerminal('greenlint install');
+    const terminal = vscode.window.createTerminal("greenlint install");
     terminal.show();
     terminal.sendText(command);
     void vscode.window
       .showInformationMessage(
-        'Installing greenlint. When the terminal is done, restart the scan server.',
-        'Restart Scan Server',
+        "Installing greenlint. When the terminal is done, restart the scan server.",
+        "Restart Scan Server",
       )
       .then((choice) => {
-        if (choice === 'Restart Scan Server') {
+        if (choice === "Restart Scan Server") {
           // The failure that got us here is fixed or not; either way the next
           // start reports for itself, so the guard must not swallow it.
           this.lastErrorShown = undefined;
-          void vscode.commands.executeCommand('greenlint.restartServer');
+          void vscode.commands.executeCommand("greenlint.restartServer");
         }
       });
   }

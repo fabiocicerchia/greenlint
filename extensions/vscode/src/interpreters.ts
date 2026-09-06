@@ -7,12 +7,12 @@
 // "greenlint is installed and the extension cannot find it", which is the most
 // reported failure this extension has.
 
-import * as fs from 'fs';
-import * as path from 'path';
+import * as fs from "fs";
+import * as path from "path";
 
-import * as vscode from 'vscode';
+import * as vscode from "vscode";
 
-import type { Settings } from './config';
+import type { Settings } from "./config";
 
 /**
  * Candidate (interpreter, greenlint module) pairs, most likely first.
@@ -33,15 +33,13 @@ export function candidates(settings: Settings): Array<{ python: string; module?:
   }
   const plain = settings.pythonPath
     ? [settings.pythonPath]
-    : process.platform === 'win32'
-      ? ['python', 'py']
-      : ['python3', 'python'];
+    : process.platform === "win32"
+      ? ["python", "py"]
+      : ["python3", "python"];
   const pairs: Array<{ python: string; module?: string }> = [];
   // A module loaded from a path needs no particular interpreter — any Python
   // that runs will import it — so these come first and only need `plain`.
-  for (const module of settings.greenlintPath
-    ? [settings.greenlintPath]
-    : workspaceGreenlintModules()) {
+  for (const module of settings.greenlintPath ? [settings.greenlintPath] : workspaceGreenlintModules()) {
     for (const python of plain) {
       pairs.push({ python, module });
     }
@@ -51,9 +49,7 @@ export function candidates(settings: Settings): Array<{ python: string; module?:
     // than about greenlint: pipx and venv installs are deliberately invisible
     // to the `python3` on PATH, so the interpreter that owns the `greenlint`
     // command gets a turn too.
-    for (const python of settings.pythonPath
-      ? plain
-      : dedupe([...plain, ...interpretersOwningGreenlint()])) {
+    for (const python of settings.pythonPath ? plain : dedupe([...plain, ...interpretersOwningGreenlint()])) {
       pairs.push({ python });
     }
   }
@@ -69,7 +65,7 @@ export function dedupe(values: string[]): string[] {
 function workspaceGreenlintModules(): string[] {
   const found: string[] = [];
   for (const folder of vscode.workspace.workspaceFolders ?? []) {
-    const candidate = path.join(folder.uri.fsPath, 'greenlint.py');
+    const candidate = path.join(folder.uri.fsPath, "greenlint.py");
     if (fs.existsSync(candidate)) {
       found.push(candidate);
     }
@@ -90,11 +86,11 @@ function workspaceGreenlintModules(): string[] {
  */
 function interpretersOwningGreenlint(): string[] {
   const found: string[] = [];
-  const script = onPath('greenlint');
+  const script = onPath("greenlint");
   if (script) {
     try {
       const shebang = /^#!\s*("?)(\S+?)\1(?:\s|$)/.exec(
-        fs.readFileSync(script, 'utf8').slice(0, 512).split('\n')[0] ?? '',
+        fs.readFileSync(script, "utf8").slice(0, 512).split("\n")[0] ?? "",
       );
       // A pyenv or asdf shim is a shell script, so its shebang is a shell —
       // only take the line seriously when it actually names a Python.
@@ -108,9 +104,9 @@ function interpretersOwningGreenlint(): string[] {
   const home = process.env.HOME ?? process.env.USERPROFILE;
   if (home) {
     const pipx =
-      process.platform === 'win32'
-        ? path.join(home, 'pipx', 'venvs', 'greenlint', 'Scripts', 'python.exe')
-        : path.join(home, '.local', 'pipx', 'venvs', 'greenlint', 'bin', 'python');
+      process.platform === "win32"
+        ? path.join(home, "pipx", "venvs", "greenlint", "Scripts", "python.exe")
+        : path.join(home, ".local", "pipx", "venvs", "greenlint", "bin", "python");
     if (fs.existsSync(pipx)) {
       found.push(pipx);
     }
@@ -120,8 +116,8 @@ function interpretersOwningGreenlint(): string[] {
 
 /** First executable named `command` on PATH. */
 function onPath(command: string): string | undefined {
-  const extensions = process.platform === 'win32' ? ['.exe', '.cmd', '.bat', ''] : [''];
-  for (const dir of (process.env.PATH ?? '').split(path.delimiter)) {
+  const extensions = process.platform === "win32" ? [".exe", ".cmd", ".bat", ""] : [""];
+  for (const dir of (process.env.PATH ?? "").split(path.delimiter)) {
     if (!dir) {
       continue;
     }

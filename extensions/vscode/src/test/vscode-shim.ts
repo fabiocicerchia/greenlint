@@ -27,7 +27,7 @@ class EventEmitter<T> {
 export const configuration: Record<string, Record<string, unknown>> = {};
 
 class ThemeIcon {
-  static readonly File = new ThemeIcon('file');
+  static readonly File = new ThemeIcon("file");
   constructor(
     readonly id: string,
     readonly color?: unknown,
@@ -95,7 +95,7 @@ export const vscode = {
     ) {}
   },
   MarkdownString: class {
-    value = '';
+    value = "";
     constructor(
       _value?: string,
       readonly supportThemeIcons?: boolean,
@@ -107,11 +107,11 @@ export const vscode = {
     }
   },
   Uri: {
-    file: (fsPath: string) => ({ fsPath, scheme: 'file', toString: () => `file://${fsPath}` }),
-    parse: (value: string) => ({ fsPath: value, scheme: 'https', toString: () => value }),
+    file: (fsPath: string) => ({ fsPath, scheme: "file", toString: () => `file://${fsPath}` }),
+    parse: (value: string) => ({ fsPath: value, scheme: "https", toString: () => value }),
     joinPath: (base: { fsPath: string }, ...parts: string[]) => ({
-      fsPath: [base.fsPath, ...parts].join('/'),
-      scheme: 'file',
+      fsPath: [base.fsPath, ...parts].join("/"),
+      scheme: "file",
     }),
   },
   Diagnostic: class {
@@ -158,10 +158,9 @@ export const vscode = {
       set: () => undefined,
       delete: () => undefined,
       clear: () => undefined,
-      dispose: () => recorded.disposed.push('diagnosticCollection'),
+      dispose: () => recorded.disposed.push("diagnosticCollection"),
     }),
-    registerHoverProvider: (_selector: unknown, _provider: unknown) =>
-      disposable('hoverProvider'),
+    registerHoverProvider: (_selector: unknown, _provider: unknown) => disposable("hoverProvider"),
   },
   window: {
     activeTextEditor: undefined as unknown,
@@ -171,7 +170,7 @@ export const vscode = {
       appendLine: () => undefined,
       append: () => undefined,
       show: () => undefined,
-      dispose: () => recorded.disposed.push('outputChannel'),
+      dispose: () => recorded.disposed.push("outputChannel"),
     }),
     createTreeView: (id: string, options: unknown) => ({
       id,
@@ -179,19 +178,19 @@ export const vscode = {
       description: undefined as string | undefined,
       badge: undefined as unknown,
       message: undefined as string | undefined,
-      dispose: () => recorded.disposed.push('treeView'),
+      dispose: () => recorded.disposed.push("treeView"),
     }),
     createStatusBarItem: (alignment: number, priority: number) => ({
       alignment,
       priority,
       command: undefined as string | undefined,
       name: undefined as string | undefined,
-      text: '',
+      text: "",
       tooltip: undefined as unknown,
       show: () => undefined,
-      dispose: () => recorded.disposed.push('statusBarItem'),
+      dispose: () => recorded.disposed.push("statusBarItem"),
     }),
-    onDidChangeActiveTextEditor: emitter('window.onDidChangeActiveTextEditor'),
+    onDidChangeActiveTextEditor: emitter("window.onDidChangeActiveTextEditor"),
     withProgress: async <T>(
       _options: unknown,
       task: (
@@ -208,19 +207,19 @@ export const vscode = {
     getConfiguration: (section: string) => ({
       get: <T>(_key: string, fallback?: T) => (configuration[section] ?? fallback ?? {}) as T,
     }),
-    asRelativePath: (uri: { fsPath: string }) => uri.fsPath.replace(/^\/proj\//, ''),
+    asRelativePath: (uri: { fsPath: string }) => uri.fsPath.replace(/^\/proj\//, ""),
     getWorkspaceFolder: (_uri: unknown) => undefined,
     createFileSystemWatcher: (_glob: string) => ({
-      onDidChange: emitter('watcher.onDidChange'),
-      onDidCreate: emitter('watcher.onDidCreate'),
-      onDidDelete: emitter('watcher.onDidDelete'),
-      dispose: () => recorded.disposed.push('fileSystemWatcher'),
+      onDidChange: emitter("watcher.onDidChange"),
+      onDidCreate: emitter("watcher.onDidCreate"),
+      onDidDelete: emitter("watcher.onDidDelete"),
+      dispose: () => recorded.disposed.push("fileSystemWatcher"),
     }),
-    onDidChangeConfiguration: emitter('workspace.onDidChangeConfiguration'),
-    onDidChangeTextDocument: emitter('workspace.onDidChangeTextDocument'),
-    onDidSaveTextDocument: emitter('workspace.onDidSaveTextDocument'),
-    onDidOpenTextDocument: emitter('workspace.onDidOpenTextDocument'),
-    onDidCloseTextDocument: emitter('workspace.onDidCloseTextDocument'),
+    onDidChangeConfiguration: emitter("workspace.onDidChangeConfiguration"),
+    onDidChangeTextDocument: emitter("workspace.onDidChangeTextDocument"),
+    onDidSaveTextDocument: emitter("workspace.onDidSaveTextDocument"),
+    onDidOpenTextDocument: emitter("workspace.onDidOpenTextDocument"),
+    onDidCloseTextDocument: emitter("workspace.onDidCloseTextDocument"),
     textDocuments: [] as unknown[],
     workspaceFolders: [] as unknown[],
   },
