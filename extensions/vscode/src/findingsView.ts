@@ -1,18 +1,18 @@
-import * as path from 'path';
+import * as path from "path";
 
-import * as vscode from 'vscode';
+import * as vscode from "vscode";
 
-import { describe } from './diagnostics';
-import type { FindingStore } from './store';
-import type { Finding, Severity } from './types';
+import { describe } from "./diagnostics";
+import type { FindingStore } from "./store";
+import type { Finding, Severity } from "./types";
 
-export type Scope = 'file' | 'project';
-export type Grouping = 'severity' | 'file' | 'rule';
+export type Scope = "file" | "project";
+export type Grouping = "severity" | "file" | "rule";
 
 const SEVERITY_THEME: Record<Severity, { icon: string; colour: string }> = {
-  high: { icon: 'flame', colour: 'charts.red' },
-  medium: { icon: 'warning', colour: 'charts.yellow' },
-  low: { icon: 'info', colour: 'charts.blue' },
+  high: { icon: "flame", colour: "charts.red" },
+  medium: { icon: "warning", colour: "charts.yellow" },
+  low: { icon: "info", colour: "charts.blue" },
 };
 
 interface Group {
@@ -27,7 +27,7 @@ interface Group {
 
 type Node = Group | Finding;
 
-const isGroup = (node: Node): node is Group => 'children' in node;
+const isGroup = (node: Node): node is Group => "children" in node;
 
 function severityIcon(severity: Severity): vscode.ThemeIcon {
   const theme = SEVERITY_THEME[severity];
@@ -40,8 +40,8 @@ export class FindingsProvider implements vscode.TreeDataProvider<Node> {
   private readonly emitter = new vscode.EventEmitter<undefined>();
   readonly onDidChangeTreeData = this.emitter.event;
 
-  scope: Scope = 'project';
-  grouping: Grouping = 'file';
+  scope: Scope = "project";
+  grouping: Grouping = "file";
   /** Whether groups start open. */
   expanded = true;
   /**
@@ -82,7 +82,7 @@ export class FindingsProvider implements vscode.TreeDataProvider<Node> {
   setCurrentFile(fsPath: string | undefined): void {
     if (this.currentFile !== fsPath) {
       this.currentFile = fsPath;
-      if (this.scope === 'file') {
+      if (this.scope === "file") {
         this.refresh();
       }
     }
@@ -90,7 +90,7 @@ export class FindingsProvider implements vscode.TreeDataProvider<Node> {
 
   /** The findings the current scope selects, already ordered worst-first. */
   findings(): Finding[] {
-    if (this.scope === 'project') {
+    if (this.scope === "project") {
       return this.store.all();
     }
     return this.currentFile ? this.store.forFile(this.currentFile) : [];
@@ -102,7 +102,7 @@ export class FindingsProvider implements vscode.TreeDataProvider<Node> {
     }
     // Grouping by file while scoped to one file is a single group named after
     // the file you are already looking at: indentation and nothing else.
-    if (this.scope === 'file' && this.grouping === 'file') {
+    if (this.scope === "file" && this.grouping === "file") {
       return this.findings();
     }
     return this.groups();
@@ -110,8 +110,8 @@ export class FindingsProvider implements vscode.TreeDataProvider<Node> {
 
   private groups(): Group[] {
     const findings = this.findings();
-    if (this.grouping === 'severity') {
-      return (['high', 'medium', 'low'] as Severity[])
+    if (this.grouping === "severity") {
+      return (["high", "medium", "low"] as Severity[])
         .map((severity) => ({ severity, items: findings.filter((f) => f.severity === severity) }))
         .filter(({ items }) => items.length > 0)
         .map(({ severity, items }) => ({
@@ -122,7 +122,7 @@ export class FindingsProvider implements vscode.TreeDataProvider<Node> {
           children: items,
         }));
     }
-    const byFile = this.grouping === 'file';
+    const byFile = this.grouping === "file";
     const groups = new Map<string, Finding[]>();
     for (const finding of findings) {
       const key = byFile ? finding.file : finding.rule;
@@ -147,9 +147,7 @@ export class FindingsProvider implements vscode.TreeDataProvider<Node> {
     if (isGroup(node)) {
       const item = new vscode.TreeItem(
         node.label,
-        this.expanded
-          ? vscode.TreeItemCollapsibleState.Expanded
-          : vscode.TreeItemCollapsibleState.Collapsed,
+        this.expanded ? vscode.TreeItemCollapsibleState.Expanded : vscode.TreeItemCollapsibleState.Collapsed,
       );
       // Keyed on the group key, not the label: grouping by file shows
       // basenames, and two directories can hold the same one.
@@ -162,15 +160,15 @@ export class FindingsProvider implements vscode.TreeDataProvider<Node> {
     const item = new vscode.TreeItem(node.message, vscode.TreeItemCollapsibleState.None);
     // The path is redundant when the group already is the file.
     const where =
-      this.grouping === 'file' || this.scope === 'file'
+      this.grouping === "file" || this.scope === "file"
         ? `line ${node.line}`
         : `${workspaceRelative(node.file)}:${node.line}`;
     item.description = `${node.rule} · ${where}`;
     item.iconPath = severityIcon(node.severity);
     item.resourceUri = vscode.Uri.file(node.file);
     item.command = {
-      command: 'vscode.open',
-      title: 'Open finding',
+      command: "vscode.open",
+      title: "Open finding",
       arguments: [
         vscode.Uri.file(node.file),
         {
@@ -198,17 +196,13 @@ export class FindingsProvider implements vscode.TreeDataProvider<Node> {
   describeScope(): string {
     const findings = this.findings();
     const where =
-      this.scope === 'file'
-        ? this.currentFile
-          ? path.basename(this.currentFile)
-          : 'no file'
-        : 'whole project';
+      this.scope === "file" ? (this.currentFile ? path.basename(this.currentFile) : "no file") : "whole project";
     if (findings.length === 0) {
       return `${where} — nothing found`;
     }
     const counts = countBySeverity(findings);
     return (
-      `${where} — ${findings.length} finding${findings.length === 1 ? '' : 's'} ` +
+      `${where} — ${findings.length} finding${findings.length === 1 ? "" : "s"} ` +
       `(${counts.high} high, ${counts.medium} medium, ${counts.low} low)`
     );
   }

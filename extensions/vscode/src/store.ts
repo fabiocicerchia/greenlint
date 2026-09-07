@@ -1,8 +1,8 @@
-import * as path from 'path';
+import * as path from "path";
 
-import * as vscode from 'vscode';
+import * as vscode from "vscode";
 
-import { compareFindings, type Finding } from './types';
+import { compareFindings, type Finding } from "./types";
 
 /**
  * Every finding the window currently knows about, keyed by file.

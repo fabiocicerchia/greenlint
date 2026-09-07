@@ -1,5 +1,5 @@
 /** The shape greenlint's own `_finding()` produces, unchanged. */
-export type Severity = 'high' | 'medium' | 'low';
+export type Severity = "high" | "medium" | "low";
 
 export interface Finding {
   rule: string;
@@ -90,7 +90,7 @@ export function compareFindings(a: Finding, b: Finding): number {
 export function ruleDocsUrl(finding: { rule: string; message: string }): string {
   const slug = `${finding.rule} — ${finding.message}`
     .toLowerCase()
-    .replace(/[^a-z0-9 _-]/g, '')
-    .replace(/ /g, '-');
+    .replace(/[^a-z0-9 _-]/g, "")
+    .replace(/ /g, "-");
   return `https://github.com/fabiocicerchia/greenlint/blob/main/docs/rules.md#${slug}`;
 }

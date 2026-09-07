@@ -1,19 +1,19 @@
-import * as cp from 'child_process';
+import * as cp from "child_process";
 
-import * as vscode from 'vscode';
+import * as vscode from "vscode";
 
-import type { Settings } from './config';
-import { candidates, dedupe } from './interpreters';
-import { LineProtocol, type ScanProgress, ScanServerError } from './protocol';
-import { forgetRuleProse, share } from './share';
-import { type Finding, type ScanStats, type ScanSummary, type ServerInfo, useSeverityOrder } from './types';
+import type { Settings } from "./config";
+import { candidates, dedupe } from "./interpreters";
+import { LineProtocol, type ScanProgress, ScanServerError } from "./protocol";
+import { forgetRuleProse, share } from "./share";
+import { type Finding, type ScanStats, type ScanSummary, type ServerInfo, useSeverityOrder } from "./types";
 
 const START_TIMEOUT_MS = 20_000;
 
 /** The one command that fixes "greenlint is not installed". Kept short on
  * purpose: a toast is read in a second, and the log already lists every path
  * that was tried. */
-export const INSTALL_COMMAND = 'pipx install git+https://github.com/fabiocicerchia/greenlint';
+export const INSTALL_COMMAND = "pipx install git+https://github.com/fabiocicerchia/greenlint";
 
 /**
  * Client for `server/greenlint_server.py`.
@@ -59,7 +59,7 @@ export class ScanServer implements vscode.Disposable {
   }
 
   stop(): void {
-    this.killProcess(new ScanServerError('scan server stopped'));
+    this.killProcess(new ScanServerError("scan server stopped"));
     this.starting = undefined;
   }
 
@@ -98,15 +98,15 @@ export class ScanServer implements vscode.Disposable {
     // in this list — no workspace greenlint.py, or a single configured path.
     this.log.appendLine(
       `[greenlint] looking for greenlint in order: ${tries
-        .map((c) => `${c.python}${c.module ? ` + ${c.module}` : ' + installed package'}`)
-        .join(', ')}`,
+        .map((c) => `${c.python}${c.module ? ` + ${c.module}` : " + installed package"}`)
+        .join(", ")}`,
     );
     for (const candidate of tries) {
       try {
         const info = await this.spawn(candidate.python, candidate.module);
         this.log.appendLine(
           `[greenlint] scan server ready: python ${info.python}, greenlint ${info.version} ` +
-            `(${info.rules} rules) from ${info.module ?? 'installed package'}`,
+            `(${info.rules} rules) from ${info.module ?? "installed package"}`,
         );
         this.info = info;
         forgetRuleProse();
@@ -115,9 +115,7 @@ export class ScanServer implements vscode.Disposable {
         return info;
       } catch (error) {
         const reason = error instanceof Error ? error.message : String(error);
-        failures.push(
-          `${candidate.python}${candidate.module ? ` (${candidate.module})` : ''}: ${reason}`,
-        );
+        failures.push(`${candidate.python}${candidate.module ? ` (${candidate.module})` : ""}: ${reason}`);
         this.killProcess(new ScanServerError(reason));
       }
     }
@@ -125,35 +123,35 @@ export class ScanServer implements vscode.Disposable {
     // every candidate failed the same way — an installed greenlint that is too
     // old, say — that reason is far more useful than generic advice, so it
     // leads instead.
-    const reasons = dedupe(failures.map((failure) => failure.replace(/^[^:]*: /, '')));
+    const reasons = dedupe(failures.map((failure) => failure.replace(/^[^:]*: /, "")));
     const headline =
       reasons.length === 1
         ? reasons[0]
-        : 'could not start the scan server — install or upgrade greenlint, ' +
-          'or set `greenlint.pythonPath` / `greenlint.greenlintPath`.';
-    throw new ScanServerError(`${headline}\nTried:\n${failures.join('\n')}`, INSTALL_COMMAND);
+        : "could not start the scan server — install or upgrade greenlint, " +
+          "or set `greenlint.pythonPath` / `greenlint.greenlintPath`.";
+    throw new ScanServerError(`${headline}\nTried:\n${failures.join("\n")}`, INSTALL_COMMAND);
   }
 
   private spawn(python: string, module?: string): Promise<ServerInfo> {
     const args = [this.serverScript];
     if (module) {
-      args.push('--greenlint', module);
+      args.push("--greenlint", module);
     }
-    this.log.appendLine(`[greenlint] starting: ${python} ${args.join(' ')}`);
+    this.log.appendLine(`[greenlint] starting: ${python} ${args.join(" ")}`);
     const proc = cp.spawn(python, args, {
       cwd: vscode.workspace.workspaceFolders?.[0]?.uri.fsPath,
-      stdio: ['pipe', 'pipe', 'pipe'],
+      stdio: ["pipe", "pipe", "pipe"],
     });
     this.proc = proc;
-    proc.stdout?.setEncoding('utf8');
-    proc.stdout?.on('data', (chunk: string) => this.protocol.consume(chunk));
-    proc.stderr?.setEncoding('utf8');
-    proc.stderr?.on('data', (chunk: string) => this.log.append(`[greenlint:stderr] ${chunk}`));
+    proc.stdout?.setEncoding("utf8");
+    proc.stdout?.on("data", (chunk: string) => this.protocol.consume(chunk));
+    proc.stderr?.setEncoding("utf8");
+    proc.stderr?.on("data", (chunk: string) => this.log.append(`[greenlint:stderr] ${chunk}`));
 
     return new Promise<ServerInfo>((resolve, reject) => {
       let settled = false;
       const timer = setTimeout(
-        () => fail(new ScanServerError('timed out waiting for the scan server')),
+        () => fail(new ScanServerError("timed out waiting for the scan server")),
         START_TIMEOUT_MS,
       );
       function done(): boolean {
@@ -172,22 +170,19 @@ export class ScanServer implements vscode.Disposable {
       this.protocol.onReady = () => {
         // `ready` only says the process is alive; the ping is what proves it
         // found a rule set to scan with.
-        this.request<ServerInfo>('ping', {}).then(
-          (info) => {
-            if (!done()) {
-              resolve(info);
-            }
-          },
-          fail,
-        );
+        this.request<ServerInfo>("ping", {}).then((info) => {
+          if (!done()) {
+            resolve(info);
+          }
+        }, fail);
       };
       this.protocol.onFailed = fail;
-      proc.on('error', (error) => fail(new ScanServerError(error.message)));
+      proc.on("error", (error) => fail(new ScanServerError(error.message)));
       // `close`, not `exit`: a server that refuses to start writes *why* to
       // stdout and then exits, and `exit` can beat the last stdout chunk. That
       // race is the difference between "greenlint 0.1.0 is too old, upgrade it"
       // and "exited (code 1)".
-      proc.on('close', (code, signal) => {
+      proc.on("close", (code, signal) => {
         const reason = new ScanServerError(`scan server exited (code ${code}, signal ${signal})`);
         fail(reason);
         // Only the current process may tear down shared state: a candidate
@@ -213,7 +208,7 @@ export class ScanServer implements vscode.Disposable {
   ): Promise<T> {
     const proc = this.proc;
     if (!proc?.stdin) {
-      return Promise.reject(new ScanServerError('scan server is not running'));
+      return Promise.reject(new ScanServerError("scan server is not running"));
     }
     return this.protocol.send<T>(proc.stdin, op, payload, onProgress, onSent);
   }
@@ -232,7 +227,7 @@ export class ScanServer implements vscode.Disposable {
   // --- operations -------------------------------------------------------
 
   async scanText(document: vscode.TextDocument): Promise<Finding[]> {
-    const response = await this.call<{ findings: Finding[] }>('scanText', {
+    const response = await this.call<{ findings: Finding[] }>("scanText", {
       path: document.uri.fsPath,
       text: document.getText(),
       root: rootFor(document.uri),
@@ -241,7 +236,7 @@ export class ScanServer implements vscode.Disposable {
   }
 
   async scanFile(uri: vscode.Uri): Promise<Finding[]> {
-    const response = await this.call<{ findings: Finding[] }>('scanFile', {
+    const response = await this.call<{ findings: Finding[] }>("scanFile", {
       path: uri.fsPath,
       root: rootFor(uri),
       maxFileBytes: this.settings.maxFileBytes,
@@ -260,7 +255,7 @@ export class ScanServer implements vscode.Disposable {
   ): Promise<{ summary?: ScanSummary; stats?: ScanStats; cancelled?: boolean }> {
     this.log.appendLine(`[greenlint] scanning ${folder.uri.fsPath}`);
     return this.call(
-      'scanProject',
+      "scanProject",
       {
         root: folder.uri.fsPath,
         paths: [folder.uri.fsPath],
@@ -283,35 +278,35 @@ export class ScanServer implements vscode.Disposable {
    */
   async cancelProjectScan(): Promise<void> {
     if (this.projectScanId !== undefined && this.running) {
-      await this.call('cancel', { cancel: this.projectScanId });
+      await this.call("cancel", { cancel: this.projectScanId });
     }
   }
 
   /** File extensions any rule targets, so the client can skip asking about a
    * file no rule would look at. Derived from the rule table, not hardcoded. */
   async languages(): Promise<string[]> {
-    const response = await this.call<{ extensions: string[] }>('languages');
+    const response = await this.call<{ extensions: string[] }>("languages");
     return response.extensions;
   }
 
   /** Ignore globs on top of `.greenlint.toml`, for what the editor already
    * knows is not your code. Applied to every scan until changed. */
   async configure(ignore: string[]): Promise<string[]> {
-    const response = await this.call<{ ignore: string[] }>('configure', { ignore });
+    const response = await this.call<{ ignore: string[] }>("configure", { ignore });
     return response.ignore;
   }
 
   /** Record everything currently found as accepted, so only new findings
    * nag from here on. Returns where it was written and how many it took. */
   async writeBaseline(folder: vscode.WorkspaceFolder): Promise<{ path: string; accepted: number }> {
-    return this.call('writeBaseline', { root: folder.uri.fsPath });
+    return this.call("writeBaseline", { root: folder.uri.fsPath });
   }
 
   async invalidate(paths?: string[]): Promise<void> {
     if (!this.running) {
       return;
     }
-    await this.call('invalidate', paths ? { paths } : {});
+    await this.call("invalidate", paths ? { paths } : {});
   }
 }
 

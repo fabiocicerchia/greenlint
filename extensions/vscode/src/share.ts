@@ -1,4 +1,4 @@
-import type { Finding } from './types';
+import type { Finding } from "./types";
 
 /** One copy of each rule's prose, keyed by rule id — see `share`. */
 const ruleProse = new Map<string, { message: string; suggestion: string; co2e: string }>();
