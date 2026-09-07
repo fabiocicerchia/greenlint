@@ -18,9 +18,9 @@ VSIX := $(EXT_DIR)/greenlint-$(EXT_VERSION).vsix
 .PHONY: help
 help: ## Show this help
 	awk 'BEGIN {FS = ":.*## "} \
-	  /^##@/ { printf "\n\033[1m%s\033[0m\n", substr($$0, 5) } \
-	  /^[a-zA-Z_0-9-]+:.*## / { printf "  \033[36m%-12s\033[0m %s\n", $$1, $$2 }' \
-	  $(MAKEFILE_LIST)
+		/^##@/ { printf "\n\033[1m%s\033[0m\n", substr($$0, 5) } \
+		/^[a-zA-Z_0-9-]+:.*## / { printf "  \033[36m%-12s\033[0m %s\n", $$1, $$2 }' \
+		$(MAKEFILE_LIST)
 
 .PHONY: setup
 setup: ## Install the pre-commit hook
@@ -78,10 +78,10 @@ ext-package: ext-build ## Build the VS Code extension into a .vsix
 .PHONY: ext-install
 ext-install: ext-package ## Build the VS Code extension and install it
 	@command -v code >/dev/null 2>&1 || { \
-	  echo "make: the 'code' CLI is not on PATH."; \
-	  echo "In VS Code run: Shell Command: Install 'code' command in PATH,"; \
-	  echo "or install $(VSIX) from the Extensions view (... > Install from VSIX)."; \
-	  exit 1; }
+		echo "make: the 'code' CLI is not on PATH."; \
+		echo "In VS Code run: Shell Command: Install 'code' command in PATH,"; \
+		echo "or install $(VSIX) from the Extensions view (... > Install from VSIX)."; \
+		exit 1; }
 	code --install-extension $(VSIX) --force
 
 # Normally CI's business: publishing happens in publish-extension.yml, called by
