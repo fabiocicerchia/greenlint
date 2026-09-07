@@ -25,7 +25,11 @@ def load_greenlint(module_path: str | None = None) -> Any:
         # file path: `from .base import ...` needs the package on sys.path to
         # resolve. Put the directory that *contains* it there and import by
         # name, which works for a package and for a plain module file alike.
-        directory = path.parent if path.is_file() else path
+        # A real file gives its directory; anything else IS the directory --
+        # including a stale ".../greenlint.py", which is what the extension
+        # settings and their documented default still say and which no longer
+        # exists.
+        directory = path.parent if path.is_file() or path.suffix == ".py" else path
         if str(directory) not in sys.path:
             sys.path.insert(0, str(directory))
         sys.modules.pop("greenlint", None)
