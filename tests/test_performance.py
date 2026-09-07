@@ -18,8 +18,11 @@ The benchmark asserts nothing: it prints what a scan costs, for when you are
 changing something and want to know which way it moved.
 """
 
+import re
 import time
+from collections.abc import Callable
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -31,22 +34,21 @@ import greenlint
 QUERY = "SELECT * FROM t;\n"
 
 
-def write(tmp_path: Path, name, content):
+def write(tmp_path: Path, name: str, content: str) -> Path:
     f = tmp_path / name
     f.parent.mkdir(parents=True, exist_ok=True)
     f.write_text(content)
     return f
 
 
-def best_of(fn, runs=3):
+def best_of(fn: Callable[[], object], runs: int = 3) -> float:
     """The fastest of `runs`. Noise only ever adds, so the minimum is the
     closest thing to the cost of the work itself."""
-    fastest = None
+    fastest = float("inf")
     for _ in range(runs):
         started = time.perf_counter()
         fn()
-        elapsed = time.perf_counter() - started
-        fastest = elapsed if fastest is None else min(fastest, elapsed)
+        fastest = min(fastest, time.perf_counter() - started)
     return fastest
 
 
@@ -56,10 +58,10 @@ def best_of(fn, runs=3):
 def test_only_files_a_rule_targets_are_opened(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """A checkout is mostly images, lock files and bundles. Reading one to match
     it against no rules is the cheapest work to remove: don't do it."""
-    opened = []
+    opened: list[str] = []
     original = Path.read_text
 
-    def counting(self, *args, **kwargs):
+    def counting(self: Path, *args: Any, **kwargs: Any) -> str:
         opened.append(self.name)
         return original(self, *args, **kwargs)
 
@@ -82,13 +84,15 @@ def test_the_ignore_list_costs_the_same_at_five_globs_and_at_250(
     which is a hundred-odd patterns; running each of them against every file was
     more work than reading some of the files would have been.
     """
-    matched = []
+    matched: list[str] = []
     real = greenlint._ignore_matcher
 
-    def counting(patterns):
+    def counting(patterns: tuple[str, ...]) -> greenlint.Matcher | None:
         match = real(patterns)
+        if match is None:
+            return None
 
-        def wrapped(candidate):
+        def wrapped(candidate: str) -> re.Match[str] | None:
             matched.append(candidate)
             return match(candidate)
 
@@ -101,7 +105,7 @@ def test_the_ignore_list_costs_the_same_at_five_globs_and_at_250(
     # Globs that match nothing here, so both walks visit exactly the same tree.
     few = ["*/vendor/*", "*/dist/*", "*.min.js", "*/build/*", "*/.cache/*"]
     many = [*few, *(f"*/generated{index}/*" for index in range(245))]
-    counts = []
+    counts: list[int] = []
     for globs in (few, many):
         matched.clear()
         files = list(greenlint.iter_files([str(tmp_path)], {"disable": set(), "ignore": globs}))
@@ -115,7 +119,7 @@ def test_the_ignore_list_is_compiled_once_for_a_whole_walk(tmp_path: Path) -> No
     and not per file per glob."""
     for index in range(40):
         write(tmp_path, f"pkg{index % 4}/m{index}.py", "x = 1\n")
-    config = {"disable": set(), "ignore": ["*/vendor/*", "*/dist/*"]}
+    config: greenlint.Config = {"disable": set(), "ignore": ["*/vendor/*", "*/dist/*"]}
     greenlint._ignore_matcher.cache_clear()
     list(greenlint.iter_files([str(tmp_path)], config))
     assert greenlint._ignore_matcher.cache_info().misses == 2
@@ -130,11 +134,11 @@ def test_a_file_the_same_rule_matches_many_times_stays_linear(tmp_path: Path) ->
     that is quadratic, and generated files are the large ones.
     """
 
-    def scan_with(matches):
+    def scan_with(matches: int) -> float:
         # One line repeated: the rule fires per occurrence, and what is being
         # measured is the count of matches, not what they say.
         path = write(tmp_path, f"dump{matches}.sql", QUERY * matches)
-        found = None
+        found: list[greenlint.Finding] = []
 
         def run() -> None:
             nonlocal found
@@ -157,13 +161,13 @@ def test_a_file_the_same_rule_matches_many_times_stays_linear(tmp_path: Path) ->
 # --- benchmark --------------------------------------------------------------
 
 
-def _benchmark(target) -> None:  # pragma: no cover - a tool, not a test
+def _benchmark(target: str) -> None:  # pragma: no cover - a tool, not a test
     import tempfile
 
     print(f"corpus: {target}")
-    config = {"disable": set(), "ignore": []}
+    config: greenlint.Config = {"disable": set(), "ignore": []}
     files = list(greenlint.iter_files([target], config))
-    findings = None
+    findings: list[greenlint.Finding] = []
 
     def run() -> None:
         nonlocal findings
@@ -192,7 +196,7 @@ def _benchmark(target) -> None:  # pragma: no cover - a tool, not a test
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text("x = 1\n")
     globs = [f"*/generated{index}/*" for index in range(250)]
-    walk = {"disable": set(), "ignore": globs}
+    walk: greenlint.Config = {"disable": set(), "ignore": globs}
     print(
         f"  walk/250 globs{1000 * best_of(lambda: list(greenlint.iter_files([str(scratch / 'tree')], walk))):8.1f} ms"
     )

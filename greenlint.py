@@ -27,9 +27,9 @@ import re
 import sys
 import tomllib
 from collections import deque
-from collections.abc import Iterator
+from collections.abc import Callable, Iterable, Iterator, Sequence
 from pathlib import Path, PurePath
-from typing import Any
+from typing import Any, cast
 
 # A rule as the RULES table declares it, and a finding as the reporters consume
 # it. Both are dicts because the table is written as literals and every reader
@@ -38,6 +38,8 @@ Rule = dict[str, Any]
 Finding = dict[str, Any]
 # A parsed `.greenlint.toml`: {"disable": set[str], "ignore": list[str]}.
 Config = dict[str, Any]
+# A compiled ignore list: one regex `match` for the whole set of globs.
+Matcher = Callable[[str], re.Match[str] | None]
 
 CONFIG_FILENAME = ".greenlint.toml"
 BASELINE_FILENAME = ".greenlint-baseline.json"
@@ -213,7 +215,7 @@ CO2E_HINTS = {
 
 # ----------------------------------------------------------------- rules ---
 
-RULES = [
+RULES: list[Rule] = [
     # id, languages, regex, message, suggestion, severity
     {
         "id": "GL001",
@@ -901,11 +903,12 @@ def _pattern_rules_by_lang() -> dict[str, list[Rule]]:
     answer no. A scan of a large tree spent more time on that question than on
     several of the rules.
     """
-    index = {}
+    index: dict[str, list[Rule]] = {}
     for rule in RULES:
         if rule["pattern"] is None or rule["id"] in AST_RULE_IDS:
             continue
-        for lang in rule["langs"]:
+        langs: list[str] = rule["langs"]
+        for lang in langs:
             index.setdefault(lang, []).append(rule)
     return index
 
@@ -913,7 +916,7 @@ def _pattern_rules_by_lang() -> dict[str, list[Rule]]:
 PATTERN_RULES_BY_LANG = _pattern_rules_by_lang()
 
 # Every language tag any rule mentions, for `scannable()`.
-SCANNABLE_LANGS = frozenset(lang for rule in RULES for lang in rule["langs"])
+SCANNABLE_LANGS: frozenset[str] = frozenset(lang for rule in RULES for lang in cast("list[str]", rule["langs"]))
 
 
 # --------------------------------------------------------- configuration ---
@@ -949,7 +952,7 @@ def load_config(path: str | None = None) -> Config:
         return {"disable": set(), "ignore": []}
     try:
         with cfg_path.open("rb") as fh:  # tomllib decodes UTF-8 itself, per spec
-            data = tomllib.load(fh)
+            data: dict[str, Any] = tomllib.load(fh)
     except tomllib.TOMLDecodeError as exc:
         raise SystemExit(f"greenlint: {cfg_path}: invalid TOML — {exc}") from exc
     return {
@@ -961,8 +964,8 @@ def load_config(path: str | None = None) -> Config:
 # ----------------------------------------------------- comment stripping ---
 
 # Line- and block-comment syntax per extension. Dockerfile/unknown default to `#`.
-_SLASH = ("//", ("/*", "*/"))
-COMMENT_SYNTAX = {
+_SLASH: tuple[str | None, tuple[str, str] | None] = ("//", ("/*", "*/"))
+COMMENT_SYNTAX: dict[str, tuple[str | None, tuple[str, str] | None]] = {
     # CSS and HTML carry rules but had no entry at all. Both are listed with a
     # None line-comment form because neither language has one: `//` in CSS
     # would eat the rest of any line containing `url(http://…)`, which is a
@@ -1016,7 +1019,8 @@ def _blank_spans(text: str, spans: list[tuple[int, int]]) -> str:
     """
     if not spans:
         return text
-    pieces, prev = [], 0
+    pieces: list[str] = []
+    prev = 0
     for start, end in spans:
         pieces.append(text[prev:start])
         pieces.append(_NOT_NEWLINE.sub(" ", text[start:end]))
@@ -1026,7 +1030,9 @@ def _blank_spans(text: str, spans: list[tuple[int, int]]) -> str:
 
 
 @functools.cache
-def _comment_scanners(line_tok: str, block: tuple[str, str] | None) -> tuple:
+def _comment_scanners(
+    line_tok: str, block: tuple[str, str] | None
+) -> tuple[re.Pattern[str], dict[str, re.Pattern[str]]]:
     """(outside-a-string, {quote: inside-that-string}) jump patterns.
 
     Outside a string the only characters that matter are a quote, a line
@@ -1046,7 +1052,7 @@ def _comment_scanners(line_tok: str, block: tuple[str, str] | None) -> tuple:
     return outside, inside
 
 
-def _step_in_string(text: str, i: int, quote: str, inside: bool) -> tuple:
+def _step_in_string(text: str, i: int, quote: str, inside: dict[str, re.Pattern[str]]) -> tuple[int | None, str | None]:
     """Advance past the next character that can close the string open at `i`.
 
     Returns the offset to resume from and the quote still open — None once the
@@ -1072,7 +1078,9 @@ def _is_apostrophe(text: str, i: int) -> bool:
     return 0 < i < len(text) - 1 and text[i - 1].isalpha() and text[i + 1].isalpha()
 
 
-def _step_outside_string(text: str, i: int, outside: bool, line_tok: str, block: tuple[str, str] | None) -> tuple:
+def _step_outside_string(
+    text: str, i: int, outside: re.Pattern[str], line_tok: str, block: tuple[str, str] | None
+) -> tuple[int | None, str | None, tuple[int, int] | None]:
     """Advance to the next string opener or comment at or after `i`.
 
     Returns the offset to resume from, the quote now open (None when the stop
@@ -1095,12 +1103,17 @@ def _step_outside_string(text: str, i: int, outside: bool, line_tok: str, block:
             end = text.find("\n", i)
             end = n if end == -1 else end
             return end, None, (i, end)
+        if block is None:
+            # Unreachable: with no block form the pattern offers only quotes
+            # and the line token, both handled above. Stepping on rather than
+            # indexing None keeps a future third token from crashing the scan.
+            return i + 1, None, None
         end = text.find(block[1], i + len(block[0]))
         end = n if end == -1 else end + len(block[1])
         return end, None, (i, end)
 
 
-def _blank_comments(text: str, path: str) -> str:
+def _blank_comments(text: str, path: Path) -> str:
     """Return `text` with comment bodies replaced by spaces.
 
     Length and every newline are preserved, so line numbers and match offsets
@@ -1122,7 +1135,8 @@ def _blank_comments(text: str, path: str) -> str:
     gets blanked. That is a false negative, which is the safe direction: this
     whole pass exists because a linter that cries wolf gets switched off.
     """
-    line_tok, block = COMMENT_SYNTAX.get(path.suffix, ("#", None) if path.name == "Dockerfile" else (None, None))
+    default: tuple[str | None, tuple[str, str] | None] = ("#", None) if path.name == "Dockerfile" else (None, None)
+    line_tok, block = COMMENT_SYNTAX.get(path.suffix, default)
     if not line_tok:
         return text
     # Two C-speed substring searches before any character-at-a-time work: a
@@ -1140,7 +1154,7 @@ def _blank_comments(text: str, path: str) -> str:
     # in a scan. `re` does the skipping in C; the Python below still runs once
     # per interesting position, and the decisions it makes are unchanged.
     outside, inside = _comment_scanners(line_tok, block)
-    spans = []
+    spans: list[tuple[int, int]] = []
     i, n, quote = 0, len(text), None
     while i < n:
         if quote:
@@ -1188,7 +1202,7 @@ _STRING_LANGS = frozenset(
 _STRING_OPEN = re.compile(r"[\"'`\n]")
 
 
-def _no_strings_to_blank(code: str, path: str) -> bool:
+def _no_strings_to_blank(code: str, path: Path) -> bool:
     """True when this file cannot gain from blanking its strings.
 
     Either its language has no C-style quoting, or it holds no quote character
@@ -1217,7 +1231,7 @@ def _string_end(code: str, i: int, quote: str) -> int:
     return i
 
 
-def _step_to_string_end(code: str, i: int) -> tuple:
+def _step_to_string_end(code: str, i: int) -> tuple[int | None, tuple[int, int] | None]:
     """Advance past the next string literal at or after `i`.
 
     Returns where to resume and the span to blank — `(None, None)` when nothing
@@ -1240,7 +1254,7 @@ def _step_to_string_end(code: str, i: int) -> tuple:
     return resume, (i + 1, end) if end > i + 1 else None
 
 
-def _blank_strings(code: str, path: str) -> str:
+def _blank_strings(code: str, path: Path) -> str:
     """Return `code` with string-literal bodies replaced by spaces.
 
     Offsets and newlines are preserved, exactly as `_blank_comments` preserves
@@ -1260,7 +1274,7 @@ def _blank_strings(code: str, path: str) -> str:
     """
     if _no_strings_to_blank(code, path):
         return code
-    spans = []
+    spans: list[tuple[int, int]] = []
     i, n = 0, len(code)
     while i < n:
         i, span = _step_to_string_end(code, i)
@@ -1282,9 +1296,13 @@ def _blank_python_docstrings(code: str, index: PythonIndex) -> str:
     tree for them, so a Python file is traversed once for this and every AST
     rule together.
     """
-    holders = [index.tree, *index.functions, *index.classes]
-    spans = []
-    starts = None
+    holders: list[ast.Module | ast.FunctionDef | ast.AsyncFunctionDef | ast.ClassDef] = [
+        index.tree,
+        *index.functions,
+        *index.classes,
+    ]
+    spans: list[tuple[int, int]] = []
+    starts: list[int] | None = None
     for node in holders:
         doc = node.body[0] if node.body else None
         if not (isinstance(doc, ast.Expr) and isinstance(doc.value, ast.Constant) and isinstance(doc.value.value, str)):
@@ -1292,12 +1310,18 @@ def _blank_python_docstrings(code: str, index: PythonIndex) -> str:
         if starts is None:
             # Only built once a docstring is actually found: a file with none
             # (every generated or one-liner module in a tree) pays nothing.
-            starts, off = [], 0
+            starts = []
+            off = 0
             for line in code.splitlines(keepends=True):
                 starts.append(off)
                 off += len(line)
         start = starts[doc.lineno - 1] + doc.col_offset
-        end = starts[doc.end_lineno - 1] + doc.end_col_offset
+        # `end_lineno`/`end_col_offset` are optional on the node type but always
+        # set on anything `ast.parse` produced; falling back to the start blanks
+        # nothing rather than running to the end of the file.
+        end_lineno = doc.end_lineno if doc.end_lineno is not None else doc.lineno
+        end_col = doc.end_col_offset if doc.end_col_offset is not None else doc.col_offset
+        end = starts[end_lineno - 1] + end_col
         spans.append((start, min(end, len(code))))
     # Docstrings come off the index in traversal order, which is not file
     # order once functions nest; splicing needs them left to right.
@@ -1319,7 +1343,7 @@ def _is_go_template(text: str) -> bool:
 TEST_FILENAME = re.compile(r"(^test_|_test\.|\.test\.|\.spec\.|_spec\.)", re.IGNORECASE)
 
 
-def _is_test_file(path: str) -> bool:
+def _is_test_file(path: Path) -> bool:
     """True for test code. Tight sleeps and busy waits in a test are bounded by
     the test run and are usually the point (waiting for a condition quickly),
     so the energy rules that target long-lived loops do not apply.
@@ -1347,11 +1371,11 @@ class _LineIndex:
 
     def __init__(self, text: str) -> None:
         self._text = text
-        self._starts = None
+        self._starts: list[int] | None = None
 
     def line_of(self, offset: int) -> int:
         if self._starts is None:
-            starts = []
+            starts: list[int] = []
             pos = self._text.find("\n")
             while pos != -1:
                 starts.append(pos)
@@ -1362,7 +1386,7 @@ class _LineIndex:
         return bisect.bisect_left(self._starts, offset) + 1
 
 
-def _finding(rule: Rule, path: str, line: int) -> dict:
+def _finding(rule: Rule, path: Path, line: int) -> Finding:
     """Build one finding from the rule that fired.
 
     Every field a consumer sees is assembled here — the JSON output, the
@@ -1384,7 +1408,7 @@ def _finding(rule: Rule, path: str, line: int) -> dict:
 # ------------------------------------------------------ python AST index ---
 
 
-def _parse_python(path: str, text: str) -> ast.AST | None:
+def _parse_python(path: Path, text: str) -> ast.Module | None:
     """Parse `text` into an AST, or None on a syntax error. Shared by every
     AST-based Python rule so each file is only parsed once per scan.
     """
@@ -1410,18 +1434,18 @@ class PythonIndex:
 
     __slots__ = ("classes", "fors", "functions", "loop_scopes", "tree", "tries", "whiles")
 
-    def __init__(self, tree: ast.AST) -> None:
+    def __init__(self, tree: ast.Module) -> None:
         self.tree = tree
         # (node, enclosing loops) pairs, outermost first.
-        self.fors = []
-        self.whiles = []
-        self.tries = []
-        self.functions = []
-        self.classes = []
+        self.fors: list[tuple[ast.For, Loops]] = []
+        self.whiles: list[tuple[ast.While, Loops]] = []
+        self.tries: list[tuple[ast.Try, Loops]] = []
+        self.functions: list[ast.FunctionDef | ast.AsyncFunctionDef] = []
+        self.classes: list[ast.ClassDef] = []
         # Scopes containing at least one loop of their own. A scope with none
         # cannot produce a GL007 finding, and most functions have none, so this
         # is what lets that rule skip them without walking them to find out.
-        self.loop_scopes = set()
+        self.loop_scopes: set[ast.AST] = set()
 
 
 # One collector per node kind the index cares about, each returning the loop
@@ -1431,38 +1455,47 @@ class PythonIndex:
 # `collect is None` path in the walk below and by far the commonest one.
 
 
-def _collect_for(index: PythonIndex, node: ast.AST, loops: tuple[ast.AST, ...], scope: str) -> tuple:
-    index.fors.append((node, loops))
+# The loops enclosing a node, outermost first, and the signature every
+# collector shares. `scope` is the node that owns the code — the module, or the
+# def, lambda or class the walk last descended into — not a name.
+Loops = tuple[ast.For | ast.While, ...]
+Collector = Callable[[PythonIndex, ast.AST, Loops, ast.AST], tuple[Loops, ast.AST]]
+
+
+def _collect_for(index: PythonIndex, node: ast.AST, loops: Loops, scope: ast.AST) -> tuple[Loops, ast.AST]:
+    loop = cast("ast.For", node)
+    index.fors.append((loop, loops))
     index.loop_scopes.add(scope)
-    return (*loops, node), scope
+    return (*loops, loop), scope
 
 
-def _collect_while(index: PythonIndex, node: ast.AST, loops: tuple[ast.AST, ...], scope: str) -> tuple:
-    index.whiles.append((node, loops))
+def _collect_while(index: PythonIndex, node: ast.AST, loops: Loops, scope: ast.AST) -> tuple[Loops, ast.AST]:
+    loop = cast("ast.While", node)
+    index.whiles.append((loop, loops))
     index.loop_scopes.add(scope)
-    return (*loops, node), scope
+    return (*loops, loop), scope
 
 
-def _collect_try(index: PythonIndex, node: ast.AST, loops: tuple[ast.AST, ...], scope: str) -> tuple:
-    index.tries.append((node, loops))
+def _collect_try(index: PythonIndex, node: ast.AST, loops: Loops, scope: ast.AST) -> tuple[Loops, ast.AST]:
+    index.tries.append((cast("ast.Try", node), loops))
     return loops, scope
 
 
-def _collect_function(index: PythonIndex, node: ast.AST, loops: tuple[ast.AST, ...], scope: str) -> tuple:
-    index.functions.append(node)
+def _collect_function(index: PythonIndex, node: ast.AST, loops: Loops, scope: ast.AST) -> tuple[Loops, ast.AST]:
+    index.functions.append(cast("ast.FunctionDef | ast.AsyncFunctionDef", node))
     return loops, node
 
 
-def _collect_class(index: PythonIndex, node: ast.AST, loops: tuple[ast.AST, ...], scope: str) -> tuple:
-    index.classes.append(node)
+def _collect_class(index: PythonIndex, node: ast.AST, loops: Loops, scope: ast.AST) -> tuple[Loops, ast.AST]:
+    index.classes.append(cast("ast.ClassDef", node))
     return loops, node
 
 
-def _collect_lambda(index: PythonIndex, node: ast.AST, loops: tuple[ast.AST, ...], scope: str) -> tuple:
+def _collect_lambda(index: PythonIndex, node: ast.AST, loops: Loops, scope: ast.AST) -> tuple[Loops, ast.AST]:
     return loops, node
 
 
-_COLLECTORS = {
+_COLLECTORS: dict[type[ast.AST], Collector] = {
     ast.For: _collect_for,
     ast.While: _collect_while,
     ast.Try: _collect_try,
@@ -1473,7 +1506,7 @@ _COLLECTORS = {
 }
 
 
-def index_python(tree: ast.AST) -> PythonIndex:
+def index_python(tree: ast.Module) -> PythonIndex:
     """Build a `PythonIndex` from one breadth-first pass.
 
     Breadth-first because that is `ast.walk`'s order, and the rules used to
@@ -1488,7 +1521,7 @@ def index_python(tree: ast.AST) -> PythonIndex:
     stdlib scan (11.96 s → 13.54 s, five runs each, `make bench`).
     """
     index = PythonIndex(tree)
-    queue = deque([(tree, (), tree)])
+    queue: deque[tuple[ast.AST, Loops, ast.AST]] = deque([(tree, (), tree)])
     pop = queue.popleft
     push = queue.append
     while queue:
@@ -1506,9 +1539,9 @@ def index_python(tree: ast.AST) -> PythonIndex:
         # inside one. That is most of a syntax tree — every name, call, constant
         # and operator — skipped rather than queued and rejected.
         for name in node._fields:
-            value = getattr(node, name, None)
+            value: object = getattr(node, name, None)
             if type(value) is list:
-                for item in value:
+                for item in cast("list[object]", value):
                     if isinstance(item, ast.AST) and not isinstance(item, ast.expr):
                         push((item, loops, child_scope))
             elif isinstance(value, ast.AST) and not isinstance(value, ast.expr):
@@ -1538,14 +1571,14 @@ def _walk_own(node: ast.AST) -> Iterator[ast.AST]:
             stack.append(child)
 
 
-def _walk_own_loops(node: ast.AST) -> Iterator[ast.AST]:
+def _walk_own_loops(node: ast.AST) -> Iterator[tuple[ast.AST, Loops]]:
     """`_walk_own`, pairing each node with the loops enclosing it in this scope.
 
     Same reason `PythonIndex` carries a loop stack: asking "is this statement
     inside a loop?" by re-walking the subtree of every loop is quadratic in
     nesting, and the answer is already known on the way down.
     """
-    stack = [(node, ())]
+    stack: list[tuple[ast.AST, Loops]] = [(node, ())]
     while stack:
         cur, loops = stack.pop()
         yield cur, loops
@@ -1556,7 +1589,7 @@ def _walk_own_loops(node: ast.AST) -> Iterator[ast.AST]:
             stack.append((child, inner))
 
 
-def _loop_can_exit(loop: ast.AST) -> bool:
+def _loop_can_exit(loop: ast.For | ast.While) -> bool:
     """True if the loop body can leave the loop on a data-dependent condition —
     a `break` belonging to this loop, or a `return`/`raise`.
 
@@ -1577,12 +1610,12 @@ def _loop_can_exit(loop: ast.AST) -> bool:
     return False
 
 
-def _nearest_loop(root: str, target: ast.AST) -> ast.AST | None:
+def _nearest_loop(root: ast.AST, target: ast.AST) -> ast.AST:
     """The innermost For/While in `root`'s body that encloses `target`, or
     `root` itself. A `break` inside a nested loop exits that one, not this one.
     """
     found = root
-    stack = [(root, root)]
+    stack: list[tuple[ast.AST, ast.AST]] = [(root, root)]
     while stack:
         node, owner = stack.pop()
         for child in ast.iter_child_nodes(node):
@@ -1611,7 +1644,7 @@ def _calls_sleep(node: ast.AST) -> bool:
     )
 
 
-def _ast_busy_loop_findings(path: str, index: PythonIndex) -> list[Finding]:
+def _ast_busy_loop_findings(path: Path, index: PythonIndex) -> Iterator[Finding]:
     """AST-based replacement for GL001 on Python: the regex version flags
     `while True:` unless "sleep" appears *anywhere* in the file, which both
     misses loops whose sleep is in an unrelated function and flags loops that
@@ -1628,7 +1661,7 @@ def _ast_busy_loop_findings(path: str, index: PythonIndex) -> list[Finding]:
         yield _finding(rule, path, node.lineno)
 
 
-def _ast_nested_loop_findings(path: str, index: PythonIndex) -> list[Finding]:
+def _ast_nested_loop_findings(path: Path, index: PythonIndex) -> Iterator[Finding]:
     """GL018: an inner `for` loop iterating over the same named collection as
     an enclosing `for` loop — a manual all-pairs O(n^2) scan (e.g. checking
     every element against every other). Only matches when both loops iterate
@@ -1638,7 +1671,7 @@ def _ast_nested_loop_findings(path: str, index: PythonIndex) -> list[Finding]:
     when loops are nested three or more deep.
     """
     rule = RULES_BY_ID["GL018"]
-    seen = set()
+    seen: set[int] = set()
     for node, enclosing in index.fors:
         if not isinstance(node.iter, ast.Name) or node.lineno in seen:
             continue
@@ -1650,7 +1683,7 @@ def _ast_nested_loop_findings(path: str, index: PythonIndex) -> list[Finding]:
             yield _finding(rule, path, node.lineno)
 
 
-def _is_tuple_swap(stmt: ast.stmt) -> bool:
+def _is_tuple_swap(stmt: ast.AST) -> bool:
     """True for the idiomatic Python swap `a[i], a[j] = a[j], a[i]` — two
     subscripts assigned from two subscripts. That shape only shows up when
     someone is hand-rolling an in-place swap, i.e. a manual sort.
@@ -1667,13 +1700,13 @@ def _is_tuple_swap(stmt: ast.stmt) -> bool:
     )
 
 
-def _ast_bubble_sort_findings(path: str, index: PythonIndex) -> list[Finding]:
+def _ast_bubble_sort_findings(path: Path, index: PythonIndex) -> Iterator[Finding]:
     """GL023: a `for` loop nested inside another `for` loop whose body
     contains an element swap — the textbook shape of a hand-rolled bubble or
     selection sort.
     """
     rule = RULES_BY_ID["GL023"]
-    seen = set()
+    seen: set[int] = set()
     for node, enclosing in index.fors:
         if node.lineno in seen or not any(type(outer) is ast.For for outer in enclosing):
             continue
@@ -1682,7 +1715,7 @@ def _ast_bubble_sort_findings(path: str, index: PythonIndex) -> list[Finding]:
             yield _finding(rule, path, node.lineno)
 
 
-def _ast_dict_iterator_findings(path: str, index: PythonIndex) -> list[Finding]:
+def _ast_dict_iterator_findings(path: Path, index: PythonIndex) -> Iterator[Finding]:
     """GL030: `for k, v in d.items()` where the key or the value is discarded
     (bound to `_`) — the discarded half didn't need building/unpacking at all.
     """
@@ -1719,7 +1752,7 @@ def _note_numeric(numeric: set[str], node: ast.AST) -> None:
         numeric.add(node.id)
 
 
-def _scalar_assign_targets(node: ast.AST) -> set[str]:
+def _scalar_assign_targets(node: ast.Assign | ast.AnnAssign) -> tuple[ast.expr, ...]:
     """The targets of an assignment whose value is certainly numeric.
 
     A name *assigned* arithmetic is as numeric as one used in it, and this is
@@ -1732,7 +1765,7 @@ def _scalar_assign_targets(node: ast.AST) -> set[str]:
     return tuple(node.targets) if isinstance(node, ast.Assign) else (node.target,)
 
 
-def _numeric_operands(node: ast.AST) -> set[str]:
+def _numeric_operands(node: ast.AST) -> tuple[ast.expr, ...]:
     """The sub-expressions this node proves are numeric, or `()` for none."""
     if isinstance(node, ast.BinOp) and isinstance(node.op, NUMERIC_ONLY_OPS):
         return (node.left, node.right)
@@ -1745,7 +1778,7 @@ def _numeric_operands(node: ast.AST) -> set[str]:
     return ()
 
 
-def _names_used_as_numbers(nodes: list[ast.AST]) -> set[str]:
+def _names_used_as_numbers(nodes: Iterable[ast.AST]) -> set[str]:
     """Names that arithmetic elsewhere in this scope proves are numeric.
 
     `_names_bound_to_lists` can only classify a name it watched being
@@ -1760,14 +1793,14 @@ def _names_used_as_numbers(nodes: list[ast.AST]) -> set[str]:
     infers nothing the operators do not already guarantee: `s - 1` on the str
     that GL007 exists to catch is a TypeError, so no genuine rebuild is hidden.
     """
-    numeric = set()
+    numeric: set[str] = set()
     for node in nodes:
         for operand in _numeric_operands(node):
             _note_numeric(numeric, operand)
     return numeric
 
 
-def _is_scalar_expr(node: ast.AST) -> bool:
+def _is_scalar_expr(node: ast.expr | None) -> bool:
     """True when the expression is certainly numeric, so `x += node` is a
     counter rather than a sequence rebuild. Conservative: unknown names are
     not scalar, because `data += chunk` is exactly the case worth catching.
@@ -1787,7 +1820,7 @@ def _is_scalar_expr(node: ast.AST) -> bool:
     return False
 
 
-def _classify_binding(target: ast.AST, value: Any, lists: set[str], scalars: dict[str, Any]) -> None:
+def _classify_binding(target: ast.AST, value: ast.expr | None, lists: set[str], scalars: set[str]) -> None:
     """Record `target` in `lists` or `scalars`, judged from the shape of `value`."""
     # Unpacking binds each name to its own initialiser, so pair the sides
     # up rather than judging the tuple as a whole: `mwh, grams = 0.0, 0.0`
@@ -1808,7 +1841,7 @@ def _classify_binding(target: ast.AST, value: Any, lists: set[str], scalars: dic
         scalars.add(target.id)
 
 
-def _names_bound_to_lists(nodes: list[ast.AST]) -> tuple:
+def _names_bound_to_lists(nodes: Iterable[ast.AST]) -> tuple[set[str], set[str]]:
     """(list_names, scalar_names) — names seen initialised to a list, and names
     seen initialised to a number, among `nodes`.
 
@@ -1824,7 +1857,8 @@ def _names_bound_to_lists(nodes: list[ast.AST]) -> tuple:
     between `lines += render(x)` being fine and being O(n^2), and `errors = 0`
     is the difference between `errors += e` being a counter and a rebuild.
     """
-    lists, scalars = set(), set()
+    lists: set[str] = set()
+    scalars: set[str] = set()
     for node in nodes:
         if not isinstance(node, (ast.Assign, ast.AnnAssign)):
             continue
@@ -1834,7 +1868,7 @@ def _names_bound_to_lists(nodes: list[ast.AST]) -> tuple:
     return lists, scalars
 
 
-def _accumulating_add(stmt: ast.stmt) -> str | None:
+def _accumulating_add(stmt: ast.stmt) -> tuple[ast.Name, ast.expr] | tuple[None, None]:
     """(target, value) when `stmt` accumulates onto a plain name with `+`/`+=`,
     else (None, None).
 
@@ -1877,7 +1911,7 @@ def _is_sequence_rebuild(stmt: ast.stmt, list_names: set[str], scalar_names: set
     )
 
 
-def _ast_quadratic_rebuild_findings(path: str, index: PythonIndex) -> list[Finding]:
+def _ast_quadratic_rebuild_findings(path: Path, index: PythonIndex) -> Iterator[Finding]:
     """GL007: accumulating with `+`/`+=` inside a loop, which copies the whole
     sequence built so far on every iteration — O(n^2) allocation where
     `list.append` / `''.join` are linear.
@@ -1888,7 +1922,7 @@ def _ast_quadratic_rebuild_findings(path: str, index: PythonIndex) -> list[Findi
     the rule fire on almost every Python file that builds a list.
     """
     rule = RULES_BY_ID["GL007"]
-    seen = set()
+    seen: set[int] = set()
     # One pass per scope, each judged against only its own name bindings.
     scopes = [index.tree, *index.functions]
     for scope in scopes:
@@ -1916,7 +1950,7 @@ def _ast_quadratic_rebuild_findings(path: str, index: PythonIndex) -> list[Findi
 PROBE_CALLS = frozenset({"int", "float", "complex", "Decimal"})
 
 
-def _has_cheap_alternative(body: str) -> bool:
+def _has_cheap_alternative(body: list[ast.stmt]) -> bool:
     """True when the guarded work is a lookup or a numeric conversion — the
     cases where the exception is standing in for a test that costs nothing:
     `d[k]` where `d.get(k)` works, `int(s)` where a guard works.
@@ -1938,7 +1972,7 @@ def _has_cheap_alternative(body: str) -> bool:
     return False
 
 
-def _ast_try_in_loop_findings(path: str, index: PythonIndex) -> list[Finding]:
+def _ast_try_in_loop_findings(path: Path, index: PythonIndex) -> Iterator[Finding]:
     """GL031: exceptions used as per-iteration control flow inside a loop —
     a handler whose whole body is `pass` or `continue`, i.e. the exception is
     expected to fire on ordinary input and the raise/unwind cost is paid every
@@ -1954,7 +1988,7 @@ def _ast_try_in_loop_findings(path: str, index: PythonIndex) -> list[Finding]:
     loops are nested.
     """
     rule = RULES_BY_ID["GL031"]
-    seen = set()
+    seen: set[int] = set()
     for stmt, enclosing in index.tries:
         if not enclosing or stmt.lineno in seen:
             continue
@@ -1967,7 +2001,7 @@ def _ast_try_in_loop_findings(path: str, index: PythonIndex) -> list[Finding]:
 # -------------------------------------------------- infrastructure rules ---
 
 
-def _tf_resource_blocks(text: str, resource_type: str) -> list[tuple[int, str]]:
+def _tf_resource_blocks(text: str, resource_type: str) -> Iterator[tuple[re.Match[str], str, int]]:
     """Yield (match, block_text, lineno) for every `resource "<resource_type>"
     "..." { ... }` in `text`. Block end is approximated as the next line that
     is just `}`, which matches typical `terraform fmt` output; not a real HCL
@@ -1980,7 +2014,7 @@ def _tf_resource_blocks(text: str, resource_type: str) -> list[tuple[int, str]]:
         yield m, block, text.count("\n", 0, m.start()) + 1
 
 
-def _tf_s3_lifecycle_findings(path: str, text: str) -> list[Finding]:
+def _tf_s3_lifecycle_findings(path: Path, text: str) -> Iterator[Finding]:
     """GL013: an `aws_s3_bucket` resource block with no lifecycle rule anywhere
     inside it.
     """
@@ -1990,7 +2024,7 @@ def _tf_s3_lifecycle_findings(path: str, text: str) -> list[Finding]:
             yield _finding(rule, path, lineno)
 
 
-def _tf_asg_static_size_findings(path: str, text: str) -> list[Finding]:
+def _tf_asg_static_size_findings(path: Path, text: str) -> Iterator[Finding]:
     """GL024: an `aws_autoscaling_group` whose min_size and max_size are the
     same literal value — a fixed-size group provisioned for peak load, not an
     elastic one.
@@ -2003,7 +2037,7 @@ def _tf_asg_static_size_findings(path: str, text: str) -> list[Finding]:
             yield _finding(rule, path, lineno)
 
 
-def _tf_log_retention_findings(path: str, text: str) -> list[Finding]:
+def _tf_log_retention_findings(path: Path, text: str) -> Iterator[Finding]:
     """GL026: an `aws_cloudwatch_log_group` with no `retention_in_days` set —
     logs are kept forever by default.
     """
@@ -2013,7 +2047,7 @@ def _tf_log_retention_findings(path: str, text: str) -> list[Finding]:
             yield _finding(rule, path, lineno)
 
 
-def _dockerfile_layer_bloat_findings(path: str, text: str) -> list[Finding]:
+def _dockerfile_layer_bloat_findings(path: Path, text: str) -> Iterator[Finding]:
     """GL029: more than one separate `RUN ... install` line in a Dockerfile —
     each is its own image layer. Flags every occurrence after the first.
 
@@ -2032,7 +2066,7 @@ def _dockerfile_layer_bloat_findings(path: str, text: str) -> list[Finding]:
             re.MULTILINE | re.IGNORECASE,
         )
     ]
-    seen_stages = set()
+    seen_stages: set[int] = set()
     for pos in installs:
         stage = sum(1 for s in stage_starts if s < pos)
         if stage in seen_stages:
@@ -2040,7 +2074,7 @@ def _dockerfile_layer_bloat_findings(path: str, text: str) -> list[Finding]:
         seen_stages.add(stage)
 
 
-def _k8s_resources_findings(path: str, text: str) -> list[Finding]:
+def _k8s_resources_findings(path: Path, text: str) -> Iterator[Finding]:
     """GL014: a Pod-spec-bearing manifest with no `resources:` block anywhere
     in the file. File-wide, not per-container; a real gap for single-manifest
     repos, a false negative for values shared via Helm/Kustomize overlays.
@@ -2057,7 +2091,7 @@ def _k8s_resources_findings(path: str, text: str) -> list[Finding]:
         yield _finding(rule, path, text.count("\n", 0, m.start()) + 1)
 
 
-def _k8s_hpa_static_findings(path: str, text: str) -> list[Finding]:
+def _k8s_hpa_static_findings(path: Path, text: str) -> Iterator[Finding]:
     """GL033: a `HorizontalPodAutoscaler` manifest whose minReplicas and
     maxReplicas are the same literal value — a fixed-range HPA, not an
     elastic one.
@@ -2107,7 +2141,7 @@ def _job_starts(text: str, body_at: int) -> list[int]:
     ]
 
 
-def _bracketing(starts: list[int], pos: int, low: int, high: int) -> tuple:
+def _bracketing(starts: list[int], pos: int, low: int, high: int) -> tuple[int, int]:
     """The two `starts` either side of `pos`, falling back to `low` and `high`."""
     before = [s for s in starts if s <= pos]
     after = [s for s in starts if s > pos]
@@ -2131,7 +2165,7 @@ def _job_span(text: str, pos: int) -> tuple[int, int]:
     return _bracketing(starts, pos, jobs.end(), len(text))
 
 
-def _fetch_depth_findings(path: str, text: str) -> list[Finding]:
+def _fetch_depth_findings(path: Path, text: str) -> Iterator[Finding]:
     """GL004: a full-history clone in CI.
 
     Skipped when the **same job** runs something that genuinely needs the
@@ -2155,7 +2189,7 @@ def _fetch_depth_findings(path: str, text: str) -> list[Finding]:
         yield _finding(rule, path, text.count("\n", 0, m.start()) + 1)
 
 
-def _compose_resources_findings(path: str, text: str) -> list[Finding]:
+def _compose_resources_findings(path: Path, text: str) -> Iterator[Finding]:
     """GL034: a docker-compose/swarm file (`services:` top-level key) with no
     resource limit anywhere in the file — neither the Swarm-mode
     `deploy.resources` block nor the classic `mem_limit`/`cpus` keys.
@@ -2171,7 +2205,7 @@ def _compose_resources_findings(path: str, text: str) -> list[Finding]:
 SEVERITY_ORDER = {"high": 0, "medium": 1, "low": 2}
 
 
-def finding_sort_key(finding: Finding) -> tuple:
+def finding_sort_key(finding: Finding) -> tuple[int, str, int]:
     """Sort key putting the findings worth fixing first. Named and exported so
     a front end that assembles its own list — the editor extension merging a
     freshly scanned buffer into a cached project scan — orders it the way the
@@ -2180,14 +2214,14 @@ def finding_sort_key(finding: Finding) -> tuple:
     return (SEVERITY_ORDER[finding["severity"]], finding["file"], finding["line"])
 
 
-def applicable(rule: Rule, path: str) -> bool:
+def applicable(rule: Rule, path: Path) -> bool:
     """Return True if the rule targets the file's language/extension."""
     if path.name == "Dockerfile" and "Dockerfile" in rule["langs"]:
         return True
     return path.suffix in rule["langs"]
 
 
-def fingerprint(finding: Finding, root: str) -> str:
+def fingerprint(finding: Finding, root: Path | str) -> str:
     """Stable id for a finding, for the baseline to name it by.
 
     Line-insensitive, so it survives every edit above it — the same shape the
@@ -2213,7 +2247,7 @@ def fingerprint(finding: Finding, root: str) -> str:
     return hashlib.sha1(key.encode("utf-8", "replace"), usedforsecurity=False).hexdigest()
 
 
-def load_baseline(path: str) -> set[str]:
+def load_baseline(path: Path | str) -> set[str]:
     """Accepted fingerprints from a baseline file. Missing or unreadable is an
     empty baseline: a linter that stops reporting because a file it was not
     asked about is malformed would be worse than one that reports too much.
@@ -2229,14 +2263,14 @@ def load_baseline(path: str) -> set[str]:
     return set(data.get("fingerprints") or [])
 
 
-def apply_baseline(findings: list[Finding], baseline: set[str], root: str) -> list[Finding]:
+def apply_baseline(findings: list[Finding], baseline: set[str], root: Path | str) -> list[Finding]:
     """Findings that the baseline does not already accept."""
     if not baseline:
         return findings
     return [f for f in findings if fingerprint(f, root) not in baseline]
 
 
-def write_baseline(path: str, findings: list[Finding], root: str) -> None:
+def write_baseline(path: Path | str, findings: list[Finding], root: Path | str) -> int:
     """Snapshot every current finding so later runs stay quiet about them.
     Returns how many distinct ones were recorded."""
     fingerprints = sorted({fingerprint(f, root) for f in findings})
@@ -2247,7 +2281,7 @@ def write_baseline(path: str, findings: list[Finding], root: str) -> None:
 # -------------------------------------------------------------- scanning ---
 
 
-def scannable(path: str) -> bool:
+def scannable(path: Path) -> bool:
     """True if any rule targets this file's language at all.
 
     Derived from `RULES` rather than a hardcoded extension list, so a rule for
@@ -2295,13 +2329,13 @@ BLOCK_FINDERS[".yaml"] = BLOCK_FINDERS[".yml"]
 BLOCK_FINDERS[".dockerfile"] = BLOCK_FINDERS["Dockerfile"]
 
 
-def _lang_key(path: str) -> str:
+def _lang_key(path: Path) -> str:
     """The tag the rule indexes are keyed by: the suffix, or `Dockerfile` by name."""
     return "Dockerfile" if path.name == "Dockerfile" else path.suffix
 
 
 def _context_findings(
-    path: str, text: str, code: str, index: PythonIndex, disabled: frozenset[str]
+    path: Path, text: str, code: str, index: PythonIndex | None, disabled: frozenset[str]
 ) -> Iterator[Finding]:
     """Findings from the checks that read whole-file or whole-block context
     instead of matching one regex — the AST rules, and the per-format ones that
@@ -2320,7 +2354,7 @@ def _context_findings(
             yield from finder(path, code)
 
 
-def _pattern_findings(path: str, code: str, disabled: frozenset[str]) -> list[Finding]:
+def _pattern_findings(path: Path, code: str, disabled: frozenset[str]) -> Iterator[Finding]:
     """Findings from the single-regex rules tagged for this file's language,
     looked up rather than filtered — see `_pattern_rules_by_lang`.
     """
@@ -2341,7 +2375,7 @@ def _pattern_findings(path: str, code: str, disabled: frozenset[str]) -> list[Fi
             yield _finding(rule, path, line_of(m.start()))
 
 
-def scan_file(path: str, disabled: frozenset[str] = frozenset(), text: str | None = None) -> Iterator[Finding]:
+def scan_file(path: Path, disabled: frozenset[str] = frozenset(), text: str | None = None) -> Iterator[Finding]:
     """Yield findings for every enabled rule that matches the file's contents.
 
     `text` supplies the contents instead of reading them, for callers that
@@ -2387,7 +2421,7 @@ def scan_file(path: str, disabled: frozenset[str] = frozenset(), text: str | Non
 
 
 @functools.lru_cache(maxsize=32)
-def _ignore_matcher(patterns: tuple[str, ...]) -> Any:
+def _ignore_matcher(patterns: tuple[str, ...]) -> Matcher | None:
     """One compiled regex for a whole ignore list.
 
     `fnmatch` per pattern per path meant a walk ran one regex match per glob per
@@ -2406,7 +2440,7 @@ def _ignore_matcher(patterns: tuple[str, ...]) -> Any:
     return re.compile("|".join(fnmatch.translate(os.path.normcase(p)) for p in patterns)).match
 
 
-def _matches_any(rel: str, ignore: list[str]) -> bool:
+def _matches_any(rel: str, ignore: Sequence[str]) -> bool:
     """Match a posix path string against ignore globs.
 
     Tried both as given and with a leading `/`. `greenlint .` produces
@@ -2421,7 +2455,7 @@ def _matches_any(rel: str, ignore: list[str]) -> bool:
     return any(match(os.path.normcase(form)) for form in forms)
 
 
-def is_ignored(path: str, config: Config | None = None) -> bool:
+def is_ignored(path: Path | str, config: Config | None = None) -> bool:
     """True if this path is under a pruned directory, or an `ignore` glob
     covers it.
 
@@ -2435,13 +2469,13 @@ def is_ignored(path: str, config: Config | None = None) -> bool:
     p = path if isinstance(path, PurePath) else Path(path)
     if not PRUNED_DIR_NAMES.isdisjoint(p.parts):
         return True
-    ignore = (config or {}).get("ignore") or []
+    ignore: list[str] = config["ignore"] if config else []
     if not ignore:
         return False
     return _matches_any(p.as_posix(), ignore)
 
 
-def prunable_bases(ignore: list[str]) -> tuple[str, ...]:
+def prunable_bases(ignore: Sequence[str]) -> list[str]:
     """The `<base>` of every ignore glob shaped `<base>/*`, which are the only
     ones a walk can act on before descending.
 
@@ -2453,7 +2487,7 @@ def prunable_bases(ignore: list[str]) -> tuple[str, ...]:
     ignored, so the test is on the shape of the pattern rather than on a guess
     about what it might match.
     """
-    bases = []
+    bases: list[str] = []
     for pattern in ignore:
         stripped = pattern.rstrip("*")
         if stripped != pattern and stripped.endswith("/") and len(stripped) > 1:
@@ -2493,7 +2527,7 @@ PRUNED_DIR_NAMES = frozenset(
 )
 
 
-def walk_files(root: str, prune_bases: tuple[str, ...] = ()) -> Iterator[str]:
+def walk_files(root: Path | str, prune_bases: Sequence[str] = ()) -> Iterator[Path]:
     """Yield every file under `root`, never descending into a pruned directory.
 
     `Path.rglob("*")` walks the whole tree and leaves the caller to filter, so
@@ -2525,7 +2559,7 @@ def walk_files(root: str, prune_bases: tuple[str, ...] = ()) -> Iterator[str]:
             continue  # unreadable directory: nothing to scan and nothing to say
 
 
-def iter_files(paths: list[str], config: Config | None = None) -> Iterator[str]:
+def iter_files(paths: Sequence[str], config: Config | None = None) -> Iterator[Path]:
     """Yield every file under `paths` that the config does not ignore.
 
     Split out of `scan()` so that other front ends — the editor extension in
@@ -2545,10 +2579,10 @@ def iter_files(paths: list[str], config: Config | None = None) -> Iterator[str]:
             yield f
 
 
-def scan(paths: list[str], config: Config | None = None) -> list[Finding]:
+def scan(paths: Sequence[str], config: Config | None = None) -> list[Finding]:
     """Scan files/directories and return findings sorted by severity."""
     config = config or {"disable": set(), "ignore": []}
-    findings = []
+    findings: list[Finding] = []
     for f in iter_files(paths, config):
         findings.extend(scan_file(f, config["disable"]))
     findings.sort(key=finding_sort_key)
@@ -2626,7 +2660,7 @@ def _print_github(findings: list[Finding]) -> None:
         )
 
 
-def _print_text(findings: list[Finding], accepted: int, baseline_path: str | None) -> None:
+def _print_text(findings: list[Finding], accepted: int, baseline_path: Path) -> None:
     """`--format text`: the human report, and the count a reader looks for."""
     for f in findings:
         print(f"{f['file']}:{f['line']}: [{f['rule']}/{f['severity']}] {f['message']}")  # noqa: T201 — the tool's output
@@ -2637,7 +2671,7 @@ def _print_text(findings: list[Finding], accepted: int, baseline_path: str | Non
     print(f"\ngreenlint: {len(findings)} finding(s){accepted_note}")  # noqa: T201 — the tool's output
 
 
-def _resolve_baseline(explicit: str | None) -> str | None:
+def _resolve_baseline(explicit: str | None) -> Path:
     """The baseline file to honour, from `--baseline` or the default name.
 
     An explicit `--baseline` must exist; the default one is used when it happens

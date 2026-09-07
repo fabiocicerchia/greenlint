@@ -13,21 +13,30 @@ import os
 import subprocess
 import sys
 import types
+from collections.abc import Iterator
 from pathlib import Path
+from typing import TYPE_CHECKING, Any, cast
 
 import pytest
 
 import greenlint
 
+if TYPE_CHECKING:
+    # Resolved through `extraPaths`, which is how the checker sees the server
+    # package the same way the interpreter does when it runs it as a script.
+    from greenlint_server import Server
+
 SERVER_PATH = Path(__file__).resolve().parent.parent / "extensions/vscode/server/greenlint_server.py"
 
 
-def load_server_module():
+def load_server_module() -> types.ModuleType:
     # Run as a script -- which is how the extension starts it -- the interpreter
     # puts the server's directory on sys.path itself, so `greenlint_api` and its
     # siblings resolve. Loading it by file path does not, so say it here.
     sys.path.insert(0, str(SERVER_PATH.parent))
     spec = importlib.util.spec_from_file_location("greenlint_server", SERVER_PATH)
+    assert spec is not None, f"cannot load {SERVER_PATH}"
+    assert spec.loader is not None, f"no loader for {SERVER_PATH}"
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module
@@ -37,11 +46,11 @@ server_module = load_server_module()
 
 
 @pytest.fixture
-def server():
+def server() -> "Server":
     return server_module.Server(greenlint, io.StringIO())
 
 
-def ask(server, **request):
+def ask(server: "Server", **request: Any) -> dict[str, Any]:
     """Run one request through the real dispatch path and return the response."""
     request.setdefault("id", 1)
     before = server.out.tell()
@@ -50,21 +59,21 @@ def ask(server, **request):
     return json.loads(server.out.read())
 
 
-def write(tmp_path: Path, name, content):
+def write(tmp_path: Path, name: str, content: str) -> Path:
     path = tmp_path / name
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(content)
     return path
 
 
-def test_ping_reports_the_loaded_rule_set(server) -> None:
+def test_ping_reports_the_loaded_rule_set(server: "Server") -> None:
     response = ask(server, op="ping")
     assert response["ok"] is True
     assert response["rules"] == len(greenlint.RULES)
     assert response["protocol"] == server_module.PROTOCOL_VERSION
 
 
-def test_ping_publishes_greenlints_severity_ordering(server) -> None:
+def test_ping_publishes_greenlints_severity_ordering(server: "Server") -> None:
     """The panel merges findings from several scans and sorts the merged list
     itself, so it needs the order — but the order is greenlint's to decide, and
     an extension holding its own copy is a second answer waiting to disagree."""
@@ -73,7 +82,7 @@ def test_ping_publishes_greenlints_severity_ordering(server) -> None:
     assert sorted(order, key=order.get) == ["high", "medium", "low"]
 
 
-def test_languages_op_reports_what_the_rules_target(server) -> None:
+def test_languages_op_reports_what_the_rules_target(server: "Server") -> None:
     """The client skips files no rule would look at; the list has to come from
     the rule table rather than a copy of it."""
     extensions = ask(server, op="languages")["extensions"]
@@ -82,12 +91,12 @@ def test_languages_op_reports_what_the_rules_target(server) -> None:
     assert "Dockerfile" in extensions
 
 
-def test_scan_text_finds_issues_in_an_unsaved_buffer(server, tmp_path: Path) -> None:
+def test_scan_text_finds_issues_in_an_unsaved_buffer(server: "Server", tmp_path: Path) -> None:
     response = ask(server, op="scanText", path=str(tmp_path / "q.sql"), text="SELECT * FROM t;\n")
     assert [f["rule"] for f in response["findings"]] == ["GL005"]
 
 
-def test_scan_text_reuses_findings_for_unchanged_content(server, tmp_path: Path) -> None:
+def test_scan_text_reuses_findings_for_unchanged_content(server: "Server", tmp_path: Path) -> None:
     """Every cursor move and selection change fires a document event. Rescanning
     identical bytes is the cost this cache exists to remove."""
     args = {"op": "scanText", "path": str(tmp_path / "q.sql"), "text": "SELECT * FROM t;\n"}
@@ -97,13 +106,13 @@ def test_scan_text_reuses_findings_for_unchanged_content(server, tmp_path: Path)
     assert server.cache.stats()["misses"] == 1
 
 
-def test_scan_file_reuses_findings_while_the_stat_is_unchanged(server, tmp_path: Path) -> None:
+def test_scan_file_reuses_findings_while_the_stat_is_unchanged(server: "Server", tmp_path: Path) -> None:
     path = write(tmp_path, "q.sql", "SELECT * FROM t;\n")
     assert ask(server, op="scanFile", path=str(path))["source"] == "scan"
     assert ask(server, op="scanFile", path=str(path))["source"] == "stat"
 
 
-def test_rewriting_a_file_with_the_same_bytes_costs_a_read_not_a_scan(server, tmp_path: Path) -> None:
+def test_rewriting_a_file_with_the_same_bytes_costs_a_read_not_a_scan(server: "Server", tmp_path: Path) -> None:
     """A branch switch and back, or a formatter that changed nothing, moves
     every mtime in the tree without changing a single rule's answer."""
     path = write(tmp_path, "q.sql", "SELECT * FROM t;\n")
@@ -112,7 +121,7 @@ def test_rewriting_a_file_with_the_same_bytes_costs_a_read_not_a_scan(server, tm
     assert ask(server, op="scanFile", path=str(path))["source"] == "hash"
 
 
-def test_editing_a_file_rescans_it(server, tmp_path: Path) -> None:
+def test_editing_a_file_rescans_it(server: "Server", tmp_path: Path) -> None:
     path = write(tmp_path, "q.sql", "SELECT * FROM t;\n")
     ask(server, op="scanFile", path=str(path))
     path.write_text("SELECT id FROM t;\n")
@@ -121,26 +130,26 @@ def test_editing_a_file_rescans_it(server, tmp_path: Path) -> None:
     assert response["findings"] == []
 
 
-def test_files_no_rule_targets_are_never_opened(server, tmp_path: Path) -> None:
+def test_files_no_rule_targets_are_never_opened(server: "Server", tmp_path: Path) -> None:
     path = write(tmp_path, "logo.png", "not really a png\n")
     assert ask(server, op="scanFile", path=str(path))["source"] == "skip"
 
 
-def test_oversized_files_are_skipped(server, tmp_path: Path) -> None:
+def test_oversized_files_are_skipped(server: "Server", tmp_path: Path) -> None:
     path = write(tmp_path, "big.sql", "SELECT * FROM t;\n" * 100)
     response = ask(server, op="scanFile", path=str(path), maxFileBytes=10)
     assert response["source"] == "skip"
     assert response["findings"] == []
 
 
-def test_project_scan_matches_the_cli(server, tmp_path: Path) -> None:
+def test_project_scan_matches_the_cli(server: "Server", tmp_path: Path) -> None:
     write(tmp_path, "q.sql", "SELECT * FROM t;\n")
     write(tmp_path, "ci.yml", "on:\n  schedule:\n    - cron: '* * * * *'\n")
     findings = ask(server, op="scanProject", root=str(tmp_path), paths=[str(tmp_path)])["findings"]
     assert findings == greenlint.scan([str(tmp_path)], greenlint.load_config(str(tmp_path)))
 
 
-def test_second_project_scan_reads_nothing(server, tmp_path: Path) -> None:
+def test_second_project_scan_reads_nothing(server: "Server", tmp_path: Path) -> None:
     write(tmp_path, "q.sql", "SELECT * FROM t;\n")
     write(tmp_path, "a.py", "while True:\n    check()\n")
     args = {"op": "scanProject", "root": str(tmp_path), "paths": [str(tmp_path)]}
@@ -152,13 +161,13 @@ def test_second_project_scan_reads_nothing(server, tmp_path: Path) -> None:
     assert second["findings"] == first["findings"]
 
 
-def test_project_scan_honours_ignore_globs(server, tmp_path: Path) -> None:
+def test_project_scan_honours_ignore_globs(server: "Server", tmp_path: Path) -> None:
     write(tmp_path, "vendor/q.sql", "SELECT * FROM t;\n")
     write(tmp_path, ".greenlint.toml", 'ignore = ["*/vendor/*"]\n')
     assert ask(server, op="scanProject", root=str(tmp_path), paths=[str(tmp_path)])["findings"] == []
 
 
-def test_editing_the_config_invalidates_the_cache(server, tmp_path: Path) -> None:
+def test_editing_the_config_invalidates_the_cache(server: "Server", tmp_path: Path) -> None:
     """A cached finding is only valid for the config that produced it."""
     write(tmp_path, "q.sql", "SELECT * FROM t;\n")
     args = {"op": "scanProject", "root": str(tmp_path), "paths": [str(tmp_path)]}
@@ -167,7 +176,7 @@ def test_editing_the_config_invalidates_the_cache(server, tmp_path: Path) -> Non
     assert ask(server, **args)["findings"] == []
 
 
-def test_invalidate_drops_a_single_path(server, tmp_path: Path) -> None:
+def test_invalidate_drops_a_single_path(server: "Server", tmp_path: Path) -> None:
     path = write(tmp_path, "q.sql", "SELECT * FROM t;\n")
     ask(server, op="scanFile", path=str(path))
     ask(server, op="invalidate", paths=[str(path)])
@@ -181,7 +190,7 @@ def test_cache_is_bounded(tmp_path: Path) -> None:
     assert small.cache.stats()["entries"] == 8
 
 
-def test_a_broken_config_is_an_error_not_a_dead_server(server, tmp_path: Path) -> None:
+def test_a_broken_config_is_an_error_not_a_dead_server(server: "Server", tmp_path: Path) -> None:
     """greenlint exits on invalid TOML, which is right for a CLI and fatal for
     a server that has to survive every keystroke of someone editing that TOML."""
     write(tmp_path, ".greenlint.toml", "disable = [\n")
@@ -191,11 +200,11 @@ def test_a_broken_config_is_an_error_not_a_dead_server(server, tmp_path: Path) -
     assert ask(server, op="ping")["ok"] is True
 
 
-def test_unknown_op_is_reported(server) -> None:
+def test_unknown_op_is_reported(server: "Server") -> None:
     assert ask(server, op="nope")["ok"] is False
 
 
-def test_an_ignored_file_is_not_scanned_just_because_it_was_opened(server, tmp_path: Path) -> None:
+def test_an_ignored_file_is_not_scanned_just_because_it_was_opened(server: "Server", tmp_path: Path) -> None:
     """A project walk filters ignored files out; a buffer scan is reached by
     opening the file, so it has to check for itself or the editor disagrees
     with CI about the same file."""
@@ -209,12 +218,18 @@ def test_an_ignored_file_is_not_scanned_just_because_it_was_opened(server, tmp_p
 
 def test_missing_api_names_what_an_older_greenlint_lacks() -> None:
     # A 0.1.0-shaped module: imports fine, missing the editor API.
+    def old_load_config(path: str | None = None) -> greenlint.Config:
+        return {"disable": set(), "ignore": []}
+
+    def old_scan_file(path: Path, disabled: frozenset[str] = frozenset()) -> list[greenlint.Finding]:
+        return []
+
     old = types.SimpleNamespace(
         CONFIG_FILENAME=".greenlint.toml",
         CO2E_HINTS={},
         RULES=[],
-        load_config=lambda path=None: {},
-        scan_file=lambda path, disabled=frozenset(): [],
+        load_config=old_load_config,
+        scan_file=old_scan_file,
     )
     assert server_module.missing_api(greenlint) == []
     missing = server_module.missing_api(old)
@@ -251,12 +266,17 @@ def test_an_old_greenlint_refuses_to_start_and_says_why(tmp_path: Path) -> None:
     assert "pipx install --force" in payload["error"]
 
 
-def responses(server):
+def responses(server: "Server") -> list[dict[str, Any]]:
     """Every line the server has written, progress events included."""
-    return [json.loads(line) for line in server.out.getvalue().splitlines()]
+    # The fixture hands the server a StringIO, which is what makes this
+    # readable back; the protocol only requires something writable.
+    written = cast("io.StringIO", server.out)
+    return [json.loads(line) for line in written.getvalue().splitlines()]
 
 
-def test_a_long_project_scan_reports_progress(server, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_a_long_project_scan_reports_progress(
+    server: "Server", tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     """Silence and a hang look identical from the client, and the client's only
     recourse is a timeout — which is how a slow-but-fine scan of a large tree
     came back as "scanProject timed out"."""
@@ -271,7 +291,7 @@ def test_a_long_project_scan_reports_progress(server, tmp_path: Path, monkeypatc
     assert responses(server)[-1]["ok"] is True
 
 
-def test_a_project_scan_answers_a_buffer_scan_before_it_finishes(server, tmp_path: Path) -> None:
+def test_a_project_scan_answers_a_buffer_scan_before_it_finishes(server: "Server", tmp_path: Path) -> None:
     """Typing must not wait for a full walk to end. The buffer scan is queued
     before the project scan starts, so if it is answered first the interleaving
     is what did it."""
@@ -283,7 +303,7 @@ def test_a_project_scan_answers_a_buffer_scan_before_it_finishes(server, tmp_pat
     assert answered.index(2) < answered.index(1)
 
 
-def test_another_project_scan_arriving_mid_walk_is_deferred_not_nested(server, tmp_path: Path) -> None:
+def test_another_project_scan_arriving_mid_walk_is_deferred_not_nested(server: "Server", tmp_path: Path) -> None:
     write(tmp_path, "q.sql", "SELECT * FROM t;\n")
     for index in range(64):
         write(tmp_path, f"f{index}.py", "x = 1\n")
@@ -295,7 +315,7 @@ def test_another_project_scan_arriving_mid_walk_is_deferred_not_nested(server, t
 
 
 def test_streaming_delivers_findings_in_batches_as_they_are_made(
-    server, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    server: "Server", tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """The panel should fill while the walk runs, not after it. Each progress
     event carries what was found since the last one."""
@@ -321,7 +341,7 @@ def test_streaming_delivers_findings_in_batches_as_they_are_made(
 
 
 def test_streaming_and_batching_agree_with_one_shot_and_with_the_cli(
-    server, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    server: "Server", tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.setattr(server_module, "PROGRESS_INTERVAL_S", 0)
     for index in range(40):
@@ -334,7 +354,9 @@ def test_streaming_and_batching_agree_with_one_shot_and_with_the_cli(
     assert sorted(streamed, key=greenlint.finding_sort_key) == expected
 
 
-def test_the_summary_is_the_whole_scan_not_a_batch(server, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_the_summary_is_the_whole_scan_not_a_batch(
+    server: "Server", tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     monkeypatch.setattr(server_module, "PROGRESS_INTERVAL_S", 0)
     for index in range(20):
         write(tmp_path, f"q{index}.sql", "SELECT * FROM t;\n")
@@ -355,7 +377,7 @@ def test_the_summary_is_the_whole_scan_not_a_batch(server, tmp_path: Path, monke
     assert list(summary["byRule"]) == ["GL005", "GL003"]  # busiest rule first
 
 
-def test_a_non_streaming_scan_still_returns_everything(server, tmp_path: Path) -> None:
+def test_a_non_streaming_scan_still_returns_everything(server: "Server", tmp_path: Path) -> None:
     """The one-shot shape stays valid: streaming is a request the client opts
     into, not a change to what a project scan means."""
     write(tmp_path, "q.sql", "SELECT * FROM t;\n")
@@ -365,7 +387,7 @@ def test_a_non_streaming_scan_still_returns_everything(server, tmp_path: Path) -
     assert response["summary"]["total"] == 1
 
 
-def test_configure_adds_ignore_globs_on_top_of_the_config(server, tmp_path: Path) -> None:
+def test_configure_adds_ignore_globs_on_top_of_the_config(server: "Server", tmp_path: Path) -> None:
     """The editor's own exclude list, which greenlint has no way to read."""
     write(tmp_path, "src/q.sql", "SELECT * FROM t;\n")
     write(tmp_path, "dist/q.sql", "SELECT * FROM t;\n")
@@ -376,7 +398,7 @@ def test_configure_adds_ignore_globs_on_top_of_the_config(server, tmp_path: Path
     assert [f["file"] for f in findings] == [str(tmp_path / "src" / "q.sql")]
 
 
-def test_configure_invalidates_what_was_cached_under_the_old_excludes(server, tmp_path: Path) -> None:
+def test_configure_invalidates_what_was_cached_under_the_old_excludes(server: "Server", tmp_path: Path) -> None:
     """A cached finding is only valid for the excludes that produced it — the
     same reason editing .greenlint.toml drops the cache."""
     write(tmp_path, "dist/q.sql", "SELECT * FROM t;\n")
@@ -389,7 +411,7 @@ def test_configure_invalidates_what_was_cached_under_the_old_excludes(server, tm
     assert ask(server, **args)["findings"]
 
 
-def test_configure_applies_to_a_single_buffer_too(server, tmp_path: Path) -> None:
+def test_configure_applies_to_a_single_buffer_too(server: "Server", tmp_path: Path) -> None:
     """An excluded file that happens to be open should not sprout squiggles;
     the editor said it was not interesting."""
     path = write(tmp_path, "dist/q.sql", "SELECT * FROM t;\n")
@@ -401,7 +423,7 @@ def test_configure_applies_to_a_single_buffer_too(server, tmp_path: Path) -> Non
 
 
 def test_configure_lets_the_walk_skip_the_directory_entirely(
-    server, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    server: "Server", tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """The point of the exercise: an excluded directory is never opened, not
     opened and then filtered."""
@@ -409,10 +431,10 @@ def test_configure_lets_the_walk_skip_the_directory_entirely(
     for index in range(20):
         write(tmp_path, f"dist/f{index}.sql", "SELECT * FROM t;\n")
     ask(server, op="configure", ignore=["*/dist/*"])
-    opened = []
+    opened: list[str] = []
     real_scandir = os.scandir
 
-    def watched(path):
+    def watched(path: Any) -> Iterator[os.DirEntry[str]]:
         opened.append(str(path))
         return real_scandir(path)
 
@@ -422,7 +444,7 @@ def test_configure_lets_the_walk_skip_the_directory_entirely(
     assert not any("dist" in path for path in opened)
 
 
-def test_write_baseline_quietens_the_findings_it_recorded(server, tmp_path: Path) -> None:
+def test_write_baseline_quietens_the_findings_it_recorded(server: "Server", tmp_path: Path) -> None:
     write(tmp_path, "src/q.sql", "SELECT * FROM t;\n")
     args = {"op": "scanProject", "root": str(tmp_path), "paths": [str(tmp_path)]}
     assert len(ask(server, **args)["findings"]) == 1
@@ -434,7 +456,7 @@ def test_write_baseline_quietens_the_findings_it_recorded(server, tmp_path: Path
     assert len(ask(server, **args)["findings"]) == 1
 
 
-def test_a_baselined_finding_is_quiet_in_an_open_buffer_too(server, tmp_path: Path) -> None:
+def test_a_baselined_finding_is_quiet_in_an_open_buffer_too(server: "Server", tmp_path: Path) -> None:
     """Otherwise the panel and the squiggles disagree about the same line."""
     path = write(tmp_path, "q.sql", "SELECT * FROM t;\n")
     root = str(tmp_path)
@@ -444,7 +466,7 @@ def test_a_baselined_finding_is_quiet_in_an_open_buffer_too(server, tmp_path: Pa
     assert text["findings"] == []
 
 
-def test_the_cache_survives_a_baseline_change(server, tmp_path: Path) -> None:
+def test_the_cache_survives_a_baseline_change(server: "Server", tmp_path: Path) -> None:
     """Findings are cached unfiltered and the baseline is applied on the way
     out, so accepting one costs a repaint rather than a rescan of the tree."""
     write(tmp_path, "q.sql", "SELECT * FROM t;\n")
@@ -458,7 +480,7 @@ def test_the_cache_survives_a_baseline_change(server, tmp_path: Path) -> None:
     assert stats["reusedFromStat"] >= 1
 
 
-def test_cancelling_a_project_scan_stops_the_walk(server, tmp_path: Path) -> None:
+def test_cancelling_a_project_scan_stops_the_walk(server: "Server", tmp_path: Path) -> None:
     for index in range(200):
         write(tmp_path, f"f{index}.sql", "SELECT * FROM t;\n")
     # Queued ahead of the scan, so the pump between batches picks it up.
@@ -469,7 +491,7 @@ def test_cancelling_a_project_scan_stops_the_walk(server, tmp_path: Path) -> Non
     assert scan["findings"] == []
 
 
-def test_a_scan_cancelled_while_it_is_still_queued_never_walks(server, tmp_path: Path) -> None:
+def test_a_scan_cancelled_while_it_is_still_queued_never_walks(server: "Server", tmp_path: Path) -> None:
     """`pump` defers a project scan that arrives during another one, so a scan
     can be cancelled before it has started. That cancel has to be remembered
     until the scan it names runs."""
@@ -489,7 +511,7 @@ def test_a_scan_cancelled_while_it_is_still_queued_never_walks(server, tmp_path:
     assert server.cancelled == set()  # and the id is not kept afterwards
 
 
-def test_a_cancel_for_a_scan_that_already_finished_is_not_remembered(server, tmp_path: Path) -> None:
+def test_a_cancel_for_a_scan_that_already_finished_is_not_remembered(server: "Server", tmp_path: Path) -> None:
     """Otherwise the set grows by one entry per cancelled scan for the life of
     the window, and a later scan reusing the id would stop for no reason."""
     write(tmp_path, "q.sql", "SELECT * FROM t;\n")
