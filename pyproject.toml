@@ -36,7 +36,7 @@ Changelog = "https://github.com/fabiocicerchia/greenlint/blob/main/CHANGELOG.md"
 greenlint = "greenlint:main"
 
 [tool.setuptools]
-py-modules = ["greenlint"]
+packages = ["greenlint"]
 
 [tool.pytest.ini_options]
 # `import greenlint` from tests/ finds whatever is installed before it finds the
