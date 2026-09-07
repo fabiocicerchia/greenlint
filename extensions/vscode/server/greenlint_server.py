@@ -44,8 +44,9 @@ import queue
 import sys
 import threading
 import time
+from collections.abc import Callable
 from pathlib import Path
-from typing import ClassVar
+from typing import Any, ClassVar, TextIO
 
 from greenlint_api import greenlint_version, load_greenlint, missing_api
 from scan_cache import DEFAULT_CACHE_ENTRIES, FindingCache, ProjectScan, digest, mtime
@@ -61,6 +62,7 @@ from server_ops import (
     op_scan_text,
     op_write_baseline,
 )
+from types_ import Config, Finding, Request, Response, StatStamp
 
 # How often a project scan looks up from the files to answer the editor. Small
 # enough that typing stays responsive during a full scan, large enough that the
@@ -70,50 +72,59 @@ INTERLEAVE_EVERY = 16
 PROGRESS_INTERVAL_S = 0.5
 
 
+# What makes a cached config stale: the two files' stamps and the client's
+# exclude list.
+ConfigKey = tuple[int | None, int | None, int]
+
+
 class Server:
-    def __init__(self, gl, out, cache_entries=DEFAULT_CACHE_ENTRIES):
+    def __init__(self, gl: Any, out: TextIO, cache_entries: int = DEFAULT_CACHE_ENTRIES) -> None:
         self.gl = gl
         self.out = out
         self.out_lock = threading.Lock()
-        self.inbox = queue.Queue()
+        self.inbox: queue.Queue[str | None] = queue.Queue()
         self.cache = FindingCache(cache_entries)
-        self.configs = {}
-        self.config_fingerprint = None
+        # Per workspace root: the key that says whether it is still current,
+        # and the config it produced.
+        self.configs: dict[str, tuple[ConfigKey, Config]] = {}
+        self.config_fingerprint: str | None = None
         # Scans asked to stop, and the one currently walking. The set is pruned
         # to what can still be cancelled every time it is added to, so a cancel
         # that arrives after its scan has finished is dropped rather than kept
         # for the life of the process.
-        self.cancelled = set()
-        self.active_scan = None
-        self.deferred = []
+        # Ids are whatever the client put in `id`, so they are compared and
+        # never interpreted.
+        self.cancelled: set[Any] = set()
+        self.active_scan: Any = None
+        self.deferred: list[Request] = []
         # Ignore globs the client adds on top of `.greenlint.toml` — the
         # editor's own exclude list, which greenlint has no way to know about.
-        self.extra_ignore = []
+        self.extra_ignore: list[str] = []
         self.ignore_generation = 0
 
     # --- transport -------------------------------------------------------
 
-    def send(self, payload):
+    def send(self, payload: Response) -> None:
         line = json.dumps(payload, default=str)
         with self.out_lock:
             self.out.write(line + "\n")
             self.out.flush()
 
-    def read_stdin(self):
+    def read_stdin(self) -> None:
         """Feed stdin lines to the inbox from a thread.
 
         A thread rather than `select()` because select cannot watch a pipe on
         Windows, and blocking readline releases the GIL anyway.
         """
-        for line in sys.stdin:
-            line = line.strip()
+        for raw in sys.stdin:
+            line = raw.strip()
             if line:
                 self.inbox.put(line)
         self.inbox.put(None)
 
     # --- config ----------------------------------------------------------
 
-    def config_for(self, root):
+    def config_for(self, root: str | None) -> Config:
         """Config for a workspace root, re-read when `.greenlint.toml` changes.
 
         Stat-gated rather than cached outright: one stat per request is free
@@ -127,15 +138,15 @@ class Server:
         base_path = Path(root) / self.gl.BASELINE_FILENAME if root else None
         stamp = mtime(cfg_path)
         key = (stamp, mtime(base_path), self.ignore_generation)
-        cached = self.configs.get(root)
+        cached = self.configs.get(root or "")
         if cached is not None and cached[0] == key:
             return cached[1]
         config = self.merged_config(cfg_path, stamp, base_path)
         self.drop_cache_if_rules_moved(config)
-        self.configs[root] = (key, config)
+        self.configs[root or ""] = (key, config)
         return config
 
-    def merged_config(self, cfg_path, stamp, base_path):
+    def merged_config(self, cfg_path: Path | None, stamp: int | None, base_path: Path | None) -> Config:
         """`.greenlint.toml` plus the client's excludes, plus the baseline.
 
         The client's excludes are merged in rather than applied separately, so
@@ -146,7 +157,7 @@ class Server:
         if cfg_path is not None and stamp is not None:
             config = self.gl.load_config(str(cfg_path))
         else:
-            config = {"disable": set(), "ignore": []}
+            config: Config = {"disable": set(), "ignore": []}
         return {
             "disable": config["disable"],
             "ignore": [*config["ignore"], *self.extra_ignore],
@@ -157,7 +168,7 @@ class Server:
             "baseline_root": base_path.parent if base_path else None,
         }
 
-    def drop_cache_if_rules_moved(self, config):
+    def drop_cache_if_rules_moved(self, config: Config) -> None:
         """Empty the finding cache when what a scan would report has changed."""
         fingerprint = digest(
             json.dumps(
@@ -171,11 +182,11 @@ class Server:
 
     # --- scanning --------------------------------------------------------
 
-    def accepted(self, findings, config):
+    def accepted(self, findings: list[Finding], config: Config) -> list[Finding]:
         """Findings the baseline has not already accepted."""
         return self.gl.apply_baseline(findings, config["baseline"], config["baseline_root"])
 
-    def scan_text(self, path, text, config):
+    def scan_text(self, path: Path, text: str, config: Config) -> list[Finding]:
         if self.gl.is_ignored(path, config):
             return []
         key = str(path)
@@ -183,13 +194,13 @@ class Server:
         cached = self.cache.by_hash(key, content_hash)
         if cached is not None:
             return cached
-        findings = sorted(
-            self.gl.scan_file(path, config["disable"], text=text), key=self.gl.finding_sort_key
-        )
+        findings = sorted(self.gl.scan_file(path, config["disable"], text=text), key=self.gl.finding_sort_key)
         self.cache.put(key, content_hash, findings)
         return findings
 
-    def scan_path(self, path, config, max_bytes):
+    def scan_path(  # noqa: PLR0911 — one arm per cache layer: skip, stat, hash, scan
+        self, path: Path, config: Config, max_bytes: int
+    ) -> tuple[list[Finding], str]:
         """Scan one file on disk, going no further down than a hit allows.
 
         Returns (findings, how) where `how` is stat/hash/scan/skip — the
@@ -208,7 +219,7 @@ class Server:
         except OSError:
             self.cache.drop(key)
             return [], "skip"
-        stamp = [info.st_mtime_ns, info.st_size]
+        stamp: StatStamp = (info.st_mtime_ns, info.st_size)
         cached = self.cache.by_stat(key, stamp)
         if cached is not None:
             return cached, "stat"
@@ -224,13 +235,11 @@ class Server:
         cached = self.cache.by_hash(key, content_hash, stat_stamp=stamp)
         if cached is not None:
             return cached, "hash"
-        findings = sorted(
-            self.gl.scan_file(path, config["disable"], text=text), key=self.gl.finding_sort_key
-        )
+        findings = sorted(self.gl.scan_file(path, config["disable"], text=text), key=self.gl.finding_sort_key)
         self.cache.put(key, content_hash, findings, stat_stamp=stamp)
         return findings, "scan"
 
-    def report_progress(self, scan):
+    def report_progress(self, scan: ProjectScan) -> None:
         """Say how far the walk has got, and hand over the batch when streaming.
 
         Not just for the progress bar: silence is the difference between a
@@ -248,7 +257,7 @@ class Server:
         )
         scan.batch.clear()
 
-    def walk(self, scan, config, max_bytes):
+    def walk(self, scan: ProjectScan, config: Config, max_bytes: int) -> bool:
         """Scan every file under the request's paths. True if it was cancelled."""
         for path in self.gl.iter_files(scan.paths, config):
             scan.seen += 1
@@ -267,7 +276,7 @@ class Server:
             scan.add(self.accepted(found, config))
         return False
 
-    def scan_project(self, request):
+    def scan_project(self, request: Request) -> Response:
         """Walk the tree, reporting findings as they are made.
 
         `stream: true` turns the progress events into the delivery mechanism
@@ -299,7 +308,7 @@ class Server:
     # a function in `server_ops` and a row here. `scanProject` is the method
     # above rather than an import: it drives the cache, the walk and the
     # progress events, which is the server itself and not an operation on it.
-    OPS: ClassVar[dict] = {
+    OPS: ClassVar[dict[str, Callable[["Server", Request], Response]]] = {
         "ping": op_ping,
         "languages": op_languages,
         "scanText": op_scan_text,
@@ -311,36 +320,35 @@ class Server:
         "cancel": op_cancel,
     }
 
-    def handle(self, request):
+    def handle(self, request: Request) -> Response:
         """Run the callable implementing this request's `op`."""
-        op = request.get("op")
-        try:
-            handler = self.OPS[op]
-        except (KeyError, TypeError):  # missing, misspelled, or not a string
-            raise ValueError(f"unknown op: {op!r}") from None
+        op: object = request.get("op")
+        handler = self.OPS.get(op) if isinstance(op, str) else None
+        if handler is None:  # missing, misspelled, or not a string
+            raise ValueError(f"unknown op: {op!r}")
         return handler(self, request)
 
-    def parse(self, line):
+    def parse(self, line: str) -> Request | None:
         try:
             return json.loads(line)
         except ValueError as exc:
             self.send({"id": None, "ok": False, "error": f"malformed request: {exc}"})
             return None
 
-    def dispatch(self, request):
+    def dispatch(self, request: Request) -> None:
         try:
             response = self.handle(request)
         # A bad config raises SystemExit by design in the CLI, where exiting is
         # the right answer. Here it is one failed request, not the end of the
         # session, so it comes back as an error the extension can surface.
-        except (Exception, SystemExit) as exc:  # noqa: BLE001 - reported, not swallowed
+        except (Exception, SystemExit) as exc:
             self.send({"id": request.get("id"), "ok": False, "error": f"{exc}"})
             return
         response["id"] = request.get("id")
         response["ok"] = True
         self.send(response)
 
-    def pump(self):
+    def pump(self) -> None:
         """Answer whatever is waiting, without blocking. Called between batches
         of a project scan so interactive requests jump the queue; another
         project scan is deferred rather than nested.
@@ -361,7 +369,7 @@ class Server:
                 continue
             self.dispatch(request)
 
-    def serve(self):
+    def serve(self) -> None:
         threading.Thread(target=self.read_stdin, daemon=True).start()
         self.send({"id": 0, "ok": True, "event": "ready", "protocol": PROTOCOL_VERSION})
         while True:
@@ -376,7 +384,19 @@ class Server:
                 self.dispatch(request)
 
 
-def main(argv=None):
+def _refuse_incompatible(gl: Any, missing: list[str]) -> None:
+    """The greenlint on this machine predates the API the extension needs."""
+    msg = (
+        f"greenlint {greenlint_version(gl)} at {getattr(gl, '__file__', '?')} is too old "
+        f"for this extension: it has no {', '.join(missing)}. Upgrade it with "
+        "`pip install -U git+https://github.com/fabiocicerchia/greenlint` "
+        "(or `pipx install --force ...` if that is how it was installed), or point "
+        "`greenlint.greenlintPath` at a checkout."
+    )
+    raise ImportError(msg)
+
+
+def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="greenlint_server")
     parser.add_argument("--greenlint", help="path to greenlint.py or its directory")
     args = parser.parse_args(argv)
@@ -391,14 +411,8 @@ def main(argv=None):
         gl = load_greenlint(args.greenlint or os.environ.get("GREENLINT_MODULE"))
         missing = missing_api(gl)
         if missing:
-            raise ImportError(
-                f"greenlint {greenlint_version(gl)} at {getattr(gl, '__file__', '?')} is too old "
-                f"for this extension: it has no {', '.join(missing)}. Upgrade it with "
-                "`pip install -U git+https://github.com/fabiocicerchia/greenlint` "
-                "(or `pipx install --force ...` if that is how it was installed), or point "
-                "`greenlint.greenlintPath` at a checkout."
-            )
-    except Exception as exc:  # noqa: BLE001 - the extension turns this into a prompt
+            _refuse_incompatible(gl, missing)
+    except Exception as exc:
         out.write(json.dumps({"id": 0, "ok": False, "fatal": True, "error": f"{exc}"}) + "\n")
         out.flush()
         return 1

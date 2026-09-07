@@ -6,21 +6,21 @@
 //
 // `vscode` is external because the editor injects it at runtime — bundling it
 // is impossible and asking is a build error, which is the useful behaviour.
-import { context, build } from 'esbuild';
+import { context, build } from "esbuild";
 
-const watch = process.argv.includes('--watch');
+const watch = process.argv.includes("--watch");
 const options = {
-  entryPoints: ['src/extension.ts'],
+  entryPoints: ["src/extension.ts"],
   bundle: true,
-  outfile: 'out/extension.js',
-  external: ['vscode'],
-  format: 'cjs',
-  platform: 'node',
+  outfile: "out/extension.js",
+  external: ["vscode"],
+  format: "cjs",
+  platform: "node",
   // The floor VS Code 1.85 ships; anything newer risks syntax it cannot parse.
-  target: 'node18',
-  sourcemap: !watch ? false : 'inline',
+  target: "node18",
+  sourcemap: !watch ? false : "inline",
   minify: !watch,
-  logLevel: 'info',
+  logLevel: "info",
 };
 
 if (watch) {
