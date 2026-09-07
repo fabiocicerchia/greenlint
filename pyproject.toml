@@ -106,3 +106,18 @@ reportPrivateUsage = false
 # An execution environment resolves imports from its own root, so the repo root
 # and the server directory have to be named again here.
 extraPaths = [".", "extensions/vscode/server"]
+
+[[tool.basedpyright.executionEnvironments]]
+# greenlint is one unit that happens to be spread over several files. A leading
+# underscore here means "private to the package", which is the usual Python
+# convention -- but the checker scopes it to the *file*, so every helper the
+# package shares between its own modules reads as private-used-elsewhere and as
+# unaccessed. Both reports are about the file boundary, not about the code.
+#
+# Anything reaching in from outside the package is still caught: this scope is
+# the package directory and nothing else.
+root = "greenlint"
+reportPrivateUsage = false
+reportUnusedFunction = false
+reportUnusedClass = false
+extraPaths = ["."]

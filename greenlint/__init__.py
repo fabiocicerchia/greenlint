@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """greenlint — static analysis for energy-wasteful patterns.
 
 Rules are regex+context based and language-tagged; the rule set is the
@@ -17,7 +16,6 @@ from __future__ import annotations
 
 import argparse
 import ast
-import bisect
 import fnmatch
 import functools
 import hashlib
@@ -26,16 +24,37 @@ import os
 import re
 import sys
 import tomllib
-from collections import deque
-from collections.abc import Callable, Iterable, Iterator, Sequence
+from collections.abc import Iterator, Sequence
 from pathlib import Path, PurePath
-from typing import Any, cast
+from typing import Any
+
+from .astindex import SCOPE_BOUNDARIES as SCOPE_BOUNDARIES
+from .astindex import Collector as Collector
+from .astindex import Loops as Loops
+from .astindex import PythonIndex, _parse_python, index_python
 from .base import BASELINE_FILENAME, CONFIG_FILENAME, Config, Finding, Matcher, Rule
-from .carbon import BUSY_CORE_WATTS, CO2E_HINTS, GRID_INTENSITY_G_PER_KWH, G_CO2E_PER_GB, KWH_PER_GB_TRANSFERRED, PAIR, _HOT_PATH, core_seconds_per_gram
-from .rules import AST_RULE_IDS, PATTERN_RULES_BY_LANG, RULES, RULES_BY_ID, SCANNABLE_LANGS, _pattern_rules_by_lang
-from .findings import TEST_FILENAME, _LineIndex, _finding, _is_test_file
-from .astindex import Collector, Loops, PythonIndex, SCOPE_BOUNDARIES, _COLLECTORS, _collect_class, _collect_for, _collect_function, _collect_lambda, _collect_try, _collect_while, _loop_can_exit, _nearest_loop, _parse_python, _walk_own, _walk_own_loops, index_python
-from .pyrules import NUMERIC_ONLY_OPS, PROBE_CALLS, SCALAR_CALLS, SCALAR_OPS, _accumulating_add, _ast_bubble_sort_findings, _ast_busy_loop_findings, _ast_dict_iterator_findings, _ast_nested_loop_findings, _ast_quadratic_rebuild_findings, _ast_try_in_loop_findings, _calls_sleep, _classify_binding, _has_cheap_alternative, _is_scalar_expr, _is_sequence_rebuild, _is_tuple_swap, _names_bound_to_lists, _names_used_as_numbers, _note_numeric, _numeric_operands, _scalar_assign_targets
+from .carbon import BUSY_CORE_WATTS as BUSY_CORE_WATTS
+from .carbon import CO2E_HINTS as CO2E_HINTS
+from .carbon import G_CO2E_PER_GB as G_CO2E_PER_GB
+from .carbon import GRID_INTENSITY_G_PER_KWH as GRID_INTENSITY_G_PER_KWH
+from .carbon import KWH_PER_GB_TRANSFERRED as KWH_PER_GB_TRANSFERRED
+from .carbon import PAIR as PAIR
+from .carbon import core_seconds_per_gram as core_seconds_per_gram
+from .findings import TEST_FILENAME as TEST_FILENAME
+from .findings import _finding, _is_test_file, _LineIndex
+from .pyrules import NUMERIC_ONLY_OPS as NUMERIC_ONLY_OPS
+from .pyrules import PROBE_CALLS as PROBE_CALLS
+from .pyrules import SCALAR_CALLS as SCALAR_CALLS
+from .pyrules import SCALAR_OPS as SCALAR_OPS
+from .pyrules import (
+    _ast_bubble_sort_findings,
+    _ast_busy_loop_findings,
+    _ast_dict_iterator_findings,
+    _ast_nested_loop_findings,
+    _ast_quadratic_rebuild_findings,
+    _ast_try_in_loop_findings,
+)
+from .rules import AST_RULE_IDS, PATTERN_RULES_BY_LANG, RULES, RULES_BY_ID, SCANNABLE_LANGS
 
 # --------------------------------------------------------- configuration ---
 
@@ -1173,4 +1192,5 @@ def main(argv: list[str] | None = None) -> int:
 
 if __name__ == "__main__":
     sys.exit(main())
+
 

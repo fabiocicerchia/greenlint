@@ -7,7 +7,6 @@ import re
 from collections.abc import Callable
 from typing import Any
 
-
 # A rule as the RULES table declares it, and a finding as the reporters consume
 # it. Both are dicts because the table is written as literals and every reader
 # does a `.get` on the optional keys.
