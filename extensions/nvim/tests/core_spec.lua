@@ -21,7 +21,8 @@ describe('the command line', function()
   end)
 
   it('passes the project config and baseline when they exist', function()
-    local argv = core.scan_argv(cfg, { '/p' }, { config = '/p/.greenlint.toml', baseline = '/p/.greenlint-baseline.json' })
+    local opts = { config = '/p/.greenlint.toml', baseline = '/p/.greenlint-baseline.json' }
+    local argv = core.scan_argv(cfg, { '/p' }, opts)
     assert.is_true(vim.tbl_contains(argv, '--config'))
     assert.is_true(vim.tbl_contains(argv, '/p/.greenlint.toml'))
     assert.is_true(vim.tbl_contains(argv, '--baseline'))

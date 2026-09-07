@@ -5,10 +5,10 @@
 // reason to change: framing, ids and timeouts belong to the pipe, while which
 // interpreter to start and what to ask it belong to the server.
 
-import * as vscode from 'vscode';
+import * as vscode from "vscode";
 
-import { share } from './share';
-import type { Finding, ScanStats } from './types';
+import { share } from "./share";
+import type { Finding, ScanStats } from "./types";
 
 const REQUEST_TIMEOUT_MS = 120_000;
 
@@ -34,14 +34,17 @@ interface Pending {
 export class ScanServerError extends Error {
   /** Set only when no interpreter could run greenlint at all — the failure
    * `INSTALL_COMMAND` actually fixes. A mid-session crash must not offer it. */
-  constructor(message: string, readonly install?: string) {
+  constructor(
+    message: string,
+    readonly install?: string,
+  ) {
     super(message);
   }
 }
 
 /** Framing and id correlation for one server process. */
 export class LineProtocol {
-  private buffer = '';
+  private buffer = "";
   /** How much of `buffer` is known to hold no newline — see `consume`. */
   private searched = 0;
   private nextId = 1;
@@ -57,7 +60,7 @@ export class LineProtocol {
 
   /** Forget the half-line and the callbacks belonging to a dead process. */
   reset(): void {
-    this.buffer = '';
+    this.buffer = "";
     this.searched = 0;
     this.onReady = undefined;
     this.onFailed = undefined;
@@ -69,7 +72,7 @@ export class LineProtocol {
     // a streamed batch is a single line of a hundred kilobytes arriving in many
     // chunks, and re-scanning everything received so far for each of them is
     // quadratic in the size of the message.
-    let index = this.buffer.indexOf('\n', this.searched);
+    let index = this.buffer.indexOf("\n", this.searched);
     while (index >= 0) {
       const line = this.buffer.slice(0, index).trim();
       this.buffer = this.buffer.slice(index + 1);
@@ -77,7 +80,7 @@ export class LineProtocol {
         this.handleLine(line);
       }
       // What is left has not been looked at yet, so this one starts over.
-      index = this.buffer.indexOf('\n');
+      index = this.buffer.indexOf("\n");
     }
     this.searched = this.buffer.length;
   }
@@ -90,11 +93,11 @@ export class LineProtocol {
       this.log.appendLine(`[greenlint] unparsable line from the scan server: ${line}`);
       return;
     }
-    if (message.event === 'ready') {
+    if (message.event === "ready") {
       this.onReady?.();
       return;
     }
-    if (message.event === 'progress') {
+    if (message.event === "progress") {
       // Liveness, not an answer: a scan that is still walking must not time
       // out, and must not resolve either.
       const pending = this.pending.get(message.id as number);
@@ -124,10 +127,8 @@ export class LineProtocol {
         ? ` files=${stats.files} scanned=${stats.scanned} stat=${stats.reusedFromStat} hash=${stats.reusedFromHash} skip=${stats.skipped}`
         : message.source
           ? ` source=${String(message.source)}`
-          : '';
-      this.log.appendLine(
-        `[greenlint] ${pending.op} took ${Date.now() - pending.startedAt}ms${detail}`,
-      );
+          : "";
+      this.log.appendLine(`[greenlint] ${pending.op} took ${Date.now() - pending.startedAt}ms${detail}`);
     }
     if (message.ok === false) {
       pending.reject(new ScanServerError(String(message.error)));
@@ -143,9 +144,7 @@ export class LineProtocol {
     pending.timer = setTimeout(() => {
       this.pending.delete(id);
       pending.reject(
-        new ScanServerError(
-          `${pending.op} timed out after ${REQUEST_TIMEOUT_MS / 1000}s with no progress`,
-        ),
+        new ScanServerError(`${pending.op} timed out after ${REQUEST_TIMEOUT_MS / 1000}s with no progress`),
       );
     }, REQUEST_TIMEOUT_MS);
   }
