@@ -232,5 +232,3 @@ def _nearest_loop(root: ast.AST, target: ast.AST) -> ast.AST:
             nxt = child if isinstance(child, (ast.For, ast.While)) else owner
             stack.append((child, nxt))
     return found
-
-

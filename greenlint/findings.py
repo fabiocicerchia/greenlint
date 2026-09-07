@@ -75,5 +75,3 @@ def _finding(rule: Rule, path: Path, line: int) -> Finding:
         "suggestion": rule["suggestion"],
         "co2e_estimate": CO2E_HINTS.get(rule["id"], ""),
     }
-
-

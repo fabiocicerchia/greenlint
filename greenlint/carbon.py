@@ -170,4 +170,3 @@ CO2E_HINTS = {
     "GL049": f"one round trip and one remote query plan per row; {_HOT_PATH}",
     "GL050": f"an intermediate collection allocated and discarded; {_HOT_PATH}",
 }
-

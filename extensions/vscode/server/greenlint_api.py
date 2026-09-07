@@ -5,7 +5,7 @@ and is it new enough -- is settled once at startup and has nothing to do with
 scanning or with the wire protocol.
 """
 
-import importlib.util
+import importlib
 import inspect
 import sys
 from importlib import metadata
@@ -21,16 +21,15 @@ def load_greenlint(module_path: str | None = None) -> Any:
     """
     if module_path:
         path = Path(module_path)
-        if path.is_dir():
-            path = path / "greenlint.py"
-        spec = importlib.util.spec_from_file_location("greenlint", path)
-        if spec is None or spec.loader is None:
-            raise ImportError(f"cannot load greenlint from {path}")
-        module = importlib.util.module_from_spec(spec)
-        # Registered before exec so a module that imports itself finds it.
-        sys.modules["greenlint"] = module
-        spec.loader.exec_module(module)
-        return module
+        # greenlint is a package now, so it cannot be loaded straight off a
+        # file path: `from .base import ...` needs the package on sys.path to
+        # resolve. Put the directory that *contains* it there and import by
+        # name, which works for a package and for a plain module file alike.
+        directory = path.parent if path.is_file() else path
+        if str(directory) not in sys.path:
+            sys.path.insert(0, str(directory))
+        sys.modules.pop("greenlint", None)
+        return importlib.import_module("greenlint")
     # Imported here, not at the top: the point of this function is to find
     # greenlint wherever the extension was installed alongside it.
     import greenlint  # noqa: PLC0415

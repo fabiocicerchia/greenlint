@@ -377,5 +377,3 @@ def _ast_try_in_loop_findings(path: Path, index: PythonIndex) -> Iterator[Findin
         if swallowed and _has_cheap_alternative(stmt.body):
             seen.add(stmt.lineno)
             yield _finding(rule, path, stmt.lineno)
-
-

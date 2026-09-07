@@ -711,5 +711,3 @@ PATTERN_RULES_BY_LANG = _pattern_rules_by_lang()
 
 # Every language tag any rule mentions, for `scannable()`.
 SCANNABLE_LANGS: frozenset[str] = frozenset(lang for rule in RULES for lang in cast("list[str]", rule["langs"]))
-
-
