@@ -1,6 +1,7 @@
 # Architecture
 
-greenlint is a single module (`greenlint.py`) with no runtime dependencies.
+greenlint is one package (`greenlint/`) with no runtime dependencies: base,
+carbon, findings, rules, astindex and pyrules, plus the cli in `__init__`.
 
 `ARCHITECTURE.md` at the repository root is a different document: a map derived
 from the source by `automap`, regenerated rather than written. `automap check`
