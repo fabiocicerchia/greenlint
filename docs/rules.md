@@ -472,3 +472,22 @@ energy rationale are the most valuable contribution.
 - **Triggers on:** `.map { … }.flatten` or `.map(&:x).compact`.
 - **Fix:** `flat_map` or `filter_map`. The intermediate array is allocated and
   walked only to be thrown away.
+
+## GL051 — spin-wait on a clock (busy loop until a deadline)
+
+- **Languages:** `.py` `.js` `.ts` `.jsx` `.tsx` `.sh` `.go` `.rs` `.java`
+  `.php` `.rb` `.c` `.h` `.cpp` `.cc` `.hpp` `.kt` `.swift` `.cs` ·
+  **Severity:** high · **Mechanism:** regex
+- **Triggers on:** a loop whose *condition* reads a clock — `Date.now()`,
+  `performance.now()`, `time.monotonic()`, `time.Now()`,
+  `System.currentTimeMillis()`, `date +%s` and the equivalents — with nothing
+  in the next few lines that gives the core back.
+- **Example:** `const until = Date.now() + 250; while (Date.now() < until) {}`
+- **Fix:** sleep for the remaining time, or wait on the event you are actually
+  waiting for. A loop that only re-reads the clock holds a core at 100% for the
+  whole wait and produces nothing.
+- **Does not trigger on:** a poll loop that sleeps, awaits, yields or blocks on
+  I/O within a few lines of the condition — that is polling, and its cost is
+  [GL002](#gl002--sub-100ms-polling-interval)'s business.
+  [GL001](#gl001--busy-loop-without-sleep) is the same defect without a
+  deadline: `while True:` with no way out.

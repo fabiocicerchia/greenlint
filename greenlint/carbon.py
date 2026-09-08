@@ -96,6 +96,10 @@ CO2E_HINTS = {
     #   a typical instance here is 4-16 vCPU; a cluster node 8-32
     # Each hint is then (watts freed) x (hours) x 0.48 gCO2e/Wh.
     "GL001": "~150-200 gCO2e/day per instance (one core pegged continuously)",  # 15 W x 24 h
+    # Same pegged core as GL001, but bounded by the deadline rather than the
+    # process: 15 W for the length of the wait, so ~1 gCO2e per 500 core-seconds
+    # spun. A 250 ms spin on a route served 100k times/day is ~7 core-hours.
+    "GL051": "~1 gCO2e per 500 core-seconds spun (15 W for the whole wait)",
     # Polling denies the core its deep C-states without loading it, so the cost
     # sits inside the 1.6 -> 7.5 W idle-to-busy span; 1-3 W x 24 h.
     "GL002": "~10-40 gCO2e/day per instance (wake-ups blocking CPU idle states)",
