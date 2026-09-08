@@ -4,7 +4,7 @@ Guidance for Claude Code (and other AI agents) working in this repo.
 
 ## Project
 
-greenlint is a single-module Python 3.11+ CLI (`greenlint.py`) that statically
+greenlint is a Python 3.11+ CLI (the `greenlint` package) that statically
 analyses source and config files for **energy-wasteful patterns** (busy loops,
 sub-100ms polling, every-minute crons, `SELECT *`, full-history CI clones,
 etc.). Rules are regex + context based and language-tagged; the rule set *is*
