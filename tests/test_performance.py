@@ -27,6 +27,7 @@ from typing import Any
 import pytest
 
 import greenlint
+import greenlint.discovery
 
 # The line GL005 fires on, as a plain literal rather than something built per
 # row: a formatted string containing SELECT is what secret and injection
@@ -98,7 +99,7 @@ def test_the_ignore_list_costs_the_same_at_five_globs_and_at_250(
 
         return wrapped
 
-    monkeypatch.setattr(greenlint, "_ignore_matcher", counting)
+    monkeypatch.setattr(greenlint.discovery, "_ignore_matcher", counting)
     for index in range(60):
         write(tmp_path, f"pkg{index % 6}/m{index}.py", "x = 1\n")
 
