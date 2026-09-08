@@ -88,12 +88,6 @@ Or with pip:
 pip install git+https://github.com/fabiocicerchia/greenlint
 ```
 
-Or the one-line installer:
-
-```sh
-curl -fsSL https://raw.githubusercontent.com/fabiocicerchia/greenlint/main/install.sh | bash
-```
-
 ## Usage
 
 ```sh
