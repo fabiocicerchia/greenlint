@@ -8,7 +8,7 @@ from typing import Any
 import pytest
 
 import greenlint
-from greenlint import _blank_strings, load_config, main, scan, scan_file
+from greenlint import _blank_strings, load_config, main, scan, scan_file, scanning
 
 
 def write(tmp_path: Path, name: str, content: str) -> Path:
@@ -1125,7 +1125,7 @@ def test_python_file_is_parsed_once(tmp_path: Path, monkeypatch: pytest.MonkeyPa
         calls.append(path)
         return original(path, text)
 
-    monkeypatch.setattr(greenlint, "_parse_python", recording)
+    monkeypatch.setattr(scanning, "_parse_python", recording)
     list(greenlint.scan_file(f))
     assert len(calls) == 1
 
