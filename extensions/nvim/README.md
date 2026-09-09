@@ -22,7 +22,7 @@ interpreter start included, which is what makes that affordable.
 ## Requirements
 
 - Neovim **0.11+**
-- the `greenlint` CLI (`pip install greenlint`), or a `greenlint.py` checkout
+- the `greenlint` CLI (`pip install greenlint`), or a greenlint checkout
 - [plenary.nvim](https://github.com/nvim-lua/plenary.nvim) — for `make test` only
 
 `:checkhealth greenlint` reports on all of it, including how many rules your
@@ -57,7 +57,7 @@ require('greenlint').setup({})
 Against a checkout rather than an installed release:
 
 ```lua
-require('greenlint').setup({ cmd = { 'python3', '/path/to/greenlint.py' } })
+require('greenlint').setup({ cmd = { 'python3', '-m', 'greenlint' } })
 ```
 
 ## Configuration
@@ -156,7 +156,8 @@ The consequences, stated rather than hidden:
 
 The plugin sorts findings, because it merges results from several scans and no
 single greenlint run covers that. But *which* order that is belongs to
-greenlint, so `tests/severity_order_spec.lua` reads `greenlint.py` and fails if
+greenlint, so `tests/severity_order_spec.lua` imports the `greenlint` package
+and fails if
 the copy here ever stops matching `SEVERITY_ORDER`.
 
 ## Development

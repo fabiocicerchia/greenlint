@@ -172,7 +172,8 @@ config that looks applied and is not is worse than no config.
 [`extensions/vscode/`](extensions/vscode/) is a VS Code extension running the same
 rule set as you type: squiggles with a hover explaining what to do instead, a
 Findings panel scoped to the file or the whole project, and an HTML report. It
-drives `greenlint.py` itself through a warm scan server with a stat+hash cache,
+drives the `greenlint` package itself through a warm scan server with a
+stat+hash cache,
 so an unchanged file is never opened and an unchanged tree is never read.
 
 ```sh
@@ -232,7 +233,7 @@ long-lived-loop rules (GL001, GL002, GL007) by design.
 ## References
 
 The gram figures are order-of-magnitude steers built from four published
-numbers. Their derivations are in the header of `greenlint.py`; these are the
+numbers. Their derivations are in the header of `greenlint/carbon.py`; these are the
 sources:
 
 - [Ember, *Global Electricity Review 2024*](https://ember-energy.org/latest-insights/global-electricity-review-2024/electricity-transition-in-2023/)

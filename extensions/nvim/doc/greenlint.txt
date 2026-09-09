@@ -32,7 +32,7 @@ repository, interpreter start included, which is what makes that affordable.
 2. REQUIREMENTS                                        *greenlint-requirements*
 
   - Neovim 0.11 or newer
-  - the `greenlint` CLI (`pip install greenlint`), or a `greenlint.py` checkout
+  - the `greenlint` CLI (`pip install greenlint`), or a greenlint checkout
   - plenary.nvim, for running the test suite only
 
 |:checkhealth| greenlint reports on all of it, including how many rules the
@@ -48,7 +48,7 @@ setup() is optional -- every command works on the defaults. >lua
 Against a checkout rather than an installed release: >lua
 
     require('greenlint').setup({
-      cmd = { 'python3', '/path/to/greenlint.py' },
+      cmd = { 'python3', '-m', 'greenlint' },
     })
 <
 With lazy.nvim: >lua

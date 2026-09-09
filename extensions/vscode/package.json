@@ -99,7 +99,7 @@
         "greenlint.greenlintPath": {
           "type": "string",
           "default": "",
-          "description": "Path to greenlint.py or the directory holding it. Empty means a greenlint.py in the workspace root if there is one, then the installed greenlint package."
+          "description": "Path to a greenlint checkout, or the directory holding it. Empty means a greenlint checkout in the workspace root if there is one, then the installed greenlint package."
         },
         "greenlint.scanProjectOnStartup": {
           "type": "boolean",

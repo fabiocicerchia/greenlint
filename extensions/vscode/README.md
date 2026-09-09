@@ -9,7 +9,8 @@ while you type.
 ![The greenlint Findings panel, grouped by file: seven findings across Kubernetes manifests and Compose files, each with its rule id and line](https://raw.githubusercontent.com/fabiocicerchia/greenlint/main/extensions/vscode/media/screenshots/findings-panel.png)
 
 Every rule the CLI knows, the editor knows: there is no second implementation
-here. The extension drives `greenlint.py` itself through a small scan server, so
+here. The extension drives the `greenlint` package itself through a small scan
+server, so
 a rule added to the linter shows up in the editor with no change on this side.
 
 > **greenlint itself is a separate install.** This extension runs the linter; it
@@ -80,7 +81,7 @@ It looks for greenlint in this order, and logs the list it will try:
 1. `greenlint.greenlintPath`, if you set it — the only candidate, because a
    typo there should be an error rather than a silent fallback to some other
    greenlint whose rules you never asked for;
-2. a `greenlint.py` in a workspace root, so a checkout of the linter is linted
+2. a greenlint checkout in a workspace root, so a checkout of the linter is linted
    by its own working copy;
 3. `import greenlint` from `python3`, then `python` (`python` then `py` on
    Windows), then the interpreter that owns the `greenlint` command — read
@@ -266,7 +267,7 @@ repository has immutable releases: once published, a release's assets are
 frozen, so the `.vsix` has to be attached before that.
 
 One version for both matters more here than it looks: the extension drives
-`greenlint.py` and needs a greenlint new enough to have the scan API, so
+the `greenlint` package and needs a greenlint new enough to have the scan API, so
 "the extension and the CLI are the same version" is a claim worth being true by
 construction rather than by remembering.
 
