@@ -60,14 +60,27 @@ export function dedupe(values: string[]): string[] {
   return [...new Set(values)];
 }
 
-/** Workspace folders that contain a greenlint.py, for contributors working on
- * the rules themselves — their checkout should win over an installed release. */
+/** Workspace folders that hold a greenlint checkout, for contributors working
+ * on the rules themselves — their checkout should win over an installed
+ * release.
+ *
+ * Since the package split a checkout has `greenlint/__init__.py`, not a
+ * top-level `greenlint.py`; looking only for the latter meant no workspace
+ * candidate was ever produced and a contributor silently got the installed
+ * release instead of their own edits.
+ *
+ * What goes back is the directory *containing* the package, not the package or
+ * its `__init__.py`: `load_greenlint` puts exactly this on `sys.path` and then
+ * imports by name, which is what a package needs and what a single-file module
+ * tolerates. */
 function workspaceGreenlintModules(): string[] {
   const found: string[] = [];
   for (const folder of vscode.workspace.workspaceFolders ?? []) {
-    const candidate = path.join(folder.uri.fsPath, "greenlint.py");
-    if (fs.existsSync(candidate)) {
-      found.push(candidate);
+    const root = folder.uri.fsPath;
+    const hasPackage = fs.existsSync(path.join(root, "greenlint", "__init__.py"));
+    const hasLegacyModule = fs.existsSync(path.join(root, "greenlint.py"));
+    if (hasPackage || hasLegacyModule) {
+      found.push(root);
     }
   }
   return found;

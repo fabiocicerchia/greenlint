@@ -2,28 +2,28 @@
 -- single greenlint run covers. But the *order* is greenlint's, and this spec is
 -- what stops the copy here from quietly becoming a second answer.
 --
--- It reads greenlint.py and compares. Skipped when there is no interpreter or
--- no checkout to read, so the suite still runs anywhere.
+-- It imports the greenlint package and compares. Skipped when there is no
+-- interpreter or no checkout to read, so the suite still runs anywhere — but
+-- the skip must stay rare: this spec pointed at a top-level greenlint.py for a
+-- while after the package split, so it silently pended instead of comparing.
 
 local core = require('greenlint.core')
 
 local function greenlint_severity_order()
   local root = vim.fn.fnamemodify(vim.fn.resolve(debug.getinfo(1, 'S').source:sub(2)), ':p:h:h:h:h')
-  local module = vim.fs.joinpath(root, 'greenlint.py')
-  if vim.fn.executable('python3') ~= 1 or not vim.uv.fs_stat(module) then
+  local package_init = vim.fs.joinpath(root, 'greenlint', '__init__.py')
+  if vim.fn.executable('python3') ~= 1 or not vim.uv.fs_stat(package_init) then
     return nil
   end
   local out = vim.system({
     'python3',
     '-c',
     ([[
-import importlib.util, json, sys
-spec = importlib.util.spec_from_file_location("greenlint", %q)
-module = importlib.util.module_from_spec(spec)
-sys.modules["greenlint"] = module
-spec.loader.exec_module(module)
-print(json.dumps(module.SEVERITY_ORDER))
-]]):format(module),
+import json, sys
+sys.path.insert(0, %q)
+from greenlint import SEVERITY_ORDER
+print(json.dumps(SEVERITY_ORDER))
+]]):format(root),
   }, { text = true }):wait(20000)
   if out.code ~= 0 then
     return nil

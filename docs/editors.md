@@ -26,7 +26,7 @@ pipx install git+https://github.com/fabiocicerchia/greenlint
 ```
 
 Then install the extension. It finds Python and greenlint on its own, falling
-back to a `greenlint.py` in the workspace root — so a checkout of this
+back to a greenlint checkout in the workspace root — so a checkout of this
 repository is linted by its own working copy.
 
 It is on the [VS Code
