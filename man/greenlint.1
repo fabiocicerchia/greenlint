@@ -1,0 +1,71 @@
+.TH GREENLINT 1 "2026-09" "greenlint" "User Commands"
+.SH NAME
+greenlint \- static linter for carbon-inefficient code and CI
+.SH SYNOPSIS
+.B greenlint
+.RI [ options ]
+.RI [ path ...]
+.SH DESCRIPTION
+Scans source and CI configuration for patterns that waste energy \(em work
+repeated that could be cached, polling where an event would do, containers
+and jobs larger than the work in them \(em and reports each finding with the
+reason it costs power.
+.PP
+With no paths it scans the current directory.
+.SH OPTIONS
+.TP
+.B \-\-list\-rules
+Print every rule with its energy rationale, then exit.
+.TP
+.BI \-\-format " FORMAT"
+.B text
+for humans,
+.B json
+for tooling,
+.B github
+for workflow annotations (default text).
+.TP
+.B \-\-fail\-on\-findings
+Exit 1 when anything is found. This is the CI gate.
+.TP
+.BI \-\-config " FILE"
+Path to the config file.
+.TP
+.BI \-\-exclude " GLOB"
+Skip paths matching this glob. Repeatable, and added to the config's own
+.B ignore
+list.
+.TP
+.BI \-\-baseline " FILE"
+Accept the findings recorded in FILE, so that only new ones fail. This is
+how an existing codebase adopts the linter without a flag day.
+.TP
+.BR \-\-write\-baseline " [\fIFILE\fR]"
+Record every current finding as accepted, and exit.
+.SH EXIT STATUS
+.TP
+.B 0
+No findings, or findings without
+.BR \-\-fail\-on\-findings .
+.TP
+.B 1
+Findings, with
+.BR \-\-fail\-on\-findings .
+.SH EXAMPLES
+.PP
+Scan this repository:
+.PP
+.RS
+.B greenlint
+.RE
+.PP
+Gate a pull request, ignoring what was already there:
+.PP
+.RS
+.B greenlint \-\-baseline .greenlint-baseline.json \-\-fail\-on\-findings
+.RE
+.SH SEE ALSO
+.BR carbon-badge (1),
+.BR sci (1).
+Project documentation:
+https://github.com/fabiocicerchia/greenlint
