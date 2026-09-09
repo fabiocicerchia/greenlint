@@ -668,6 +668,57 @@ RULES: list[Rule] = [
         ),
     },
     {
+        "id": "GL051",
+        # Code shape, not embedded content: a match inside a string literal is
+        # documentation or a fixture, not the pattern. See _blank_strings.
+        "code_only": True,
+        "langs": {
+            ".py",
+            ".js",
+            ".ts",
+            ".jsx",
+            ".tsx",
+            ".sh",
+            ".go",
+            ".rs",
+            ".java",
+            ".php",
+            ".rb",
+            ".c",
+            ".h",
+            ".cpp",
+            ".cc",
+            ".hpp",
+            ".kt",
+            ".swift",
+            ".cs",
+        },
+        "severity": "high",
+        # A loop whose *condition* reads a clock, with nothing in the next few
+        # lines that yields the core. GL001 covers `while True:` in Python; this
+        # is the other busy loop — the one that spins until a deadline, which is
+        # the same pegged core with an end date.
+        #
+        # The lookahead is the whole precision of the rule: `while (Date.now() <
+        # until) { await sleep(50) }` is polling, not spinning, and polling is
+        # GL002's business. Bounded at 240 characters so it cannot backtrack far.
+        "pattern": re.compile(
+            r"\b(?:while\s*\(?|for\s+)[^\n;{]*"
+            r"(?:Date\.now\(\)|performance\.now\(\)"
+            r"|time\.(?:time|monotonic|perf_counter)\(\)"
+            r"|time\.(?:Now\(\)|Since\()"
+            r"|System\.(?:currentTimeMillis|nanoTime)\(\)"
+            r"|Instant\.now\(\)|DateTime\.(?:Now|UtcNow)|Stopwatch\."
+            r"|microtime\(|hrtime|Time\.now|date\s+\+%s|clock_gettime\(|CFAbsoluteTimeGetCurrent\()"
+            r"(?![\s\S]{0,240}?\b(?:sleep|Sleep|usleep|delay|setTimeout|yield|await|select|poll|recv|read)\b)"
+        ),
+        "message": "spin-wait on a clock (busy loop until a deadline)",
+        "suggestion": (
+            "a loop that only re-reads the clock pegs a core for the whole wait; sleep for the remaining time, or "
+            "wait on the event you are actually waiting for"
+        ),
+    },
+    {
         "id": "GL038",
         # Code shape, not embedded content: a match inside a string literal is
         # documentation or a fixture, not the pattern. See _blank_strings.

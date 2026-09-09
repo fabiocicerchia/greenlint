@@ -1667,6 +1667,31 @@ class TestSwiftRules:
         assert "GL047" not in scan_one(tmp_path, "f.swift", "let s = URLSession.shared\n")
 
 
+class TestSpinWaitRule:
+    """GL051 — the busy loop with a deadline, in whatever language it is written."""
+
+    def test_javascript_spin_wait(self, tmp_path: Path) -> None:
+        src = "const until = Date.now() + 250\nwhile (Date.now() < until) { /* burn */ }\n"
+        assert "GL051" in scan_one(tmp_path, "a.js", src)
+
+    def test_python_spin_wait(self, tmp_path: Path) -> None:
+        src = "until = time.monotonic() + 1\nwhile time.monotonic() < until:\n    pass\n"
+        assert "GL051" in scan_one(tmp_path, "b.py", src)
+
+    def test_go_spin_wait(self, tmp_path: Path) -> None:
+        assert "GL051" in scan_one(tmp_path, "c.go", "for time.Now().Before(deadline) {\n}\n")
+
+    def test_a_poll_loop_that_sleeps_is_not_a_spin_wait(self, tmp_path: Path) -> None:
+        # Polling has its own rule (GL002) and its own cost. Flagging it here
+        # would make the two indistinguishable in a report.
+        src = "while (Date.now() < until) {\n  await sleep(100)\n}\n"
+        assert "GL051" not in scan_one(tmp_path, "d.js", src)
+
+    def test_a_clock_read_outside_a_loop_is_not_flagged(self, tmp_path: Path) -> None:
+        src = "const started = Date.now()\nrender()\nlog(Date.now() - started)\n"
+        assert "GL051" not in scan_one(tmp_path, "e.js", src)
+
+
 class TestRubyRules:
     def test_string_built_with_plus_equals_in_a_loop(self, tmp_path: Path) -> None:
         assert "GL048" in scan_one(tmp_path, "a.rb", "items.each do |i|\n  out += i.to_s\nend\n")
