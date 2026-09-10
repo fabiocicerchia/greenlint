@@ -12,7 +12,7 @@ Each item fired because a measurement crossed a threshold. The numbers and the e
 | Minor | 1 |
 | Notes | 1 |
 
-### Worth attention · 2 module(s) are more than 4× the median size (136 lines); the largest is 2583 lines.
+### Worth attention · 2 module(s) are more than 4× the median size (142 lines); the largest is 764 lines.
 
 **Why it matters.** A file this far from the median is rarely one idea. It cannot be reviewed in one sitting, it produces merge conflicts between people working on unrelated things, and it hides its internal structure from every tool that works at file granularity — including this one, which sees it as a single node.
 
@@ -22,8 +22,8 @@ Each item fired because a measurement crossed a threshold. The numbers and the e
 
 <details><summary>Evidence</summary>
 
-- `greenlint.py` — 2583 lines
-- `extensions/vscode/src/extension.ts` — 765 lines
+- `greenlint/rules.py` — 764 lines
+- `extensions/vscode/src/extension.ts` — 735 lines
 
 </details>
 
@@ -40,11 +40,11 @@ Each item fired because a measurement crossed a threshold. The numbers and the e
 <details><summary>Evidence</summary>
 
 - `extensions/vscode/esbuild.mjs` — 31 lines
-- `extensions/vscode/server/greenlint_api.py` — 86 lines
-- `extensions/vscode/server/greenlint_server.py` — 411 lines
-- `extensions/vscode/server/scan_cache.py` — 192 lines
-- `extensions/vscode/server/server_ops.py` — 112 lines
-- `extensions/vscode/src/extension.ts` — 765 lines
+- `extensions/vscode/server/greenlint_api.py` — 92 lines
+- `extensions/vscode/server/greenlint_server.py` — 425 lines
+- `extensions/vscode/server/scan_cache.py` — 208 lines
+- `extensions/vscode/server/server_ops.py` — 119 lines
+- `extensions/vscode/src/extension.ts` — 735 lines
 
 </details>
 
@@ -84,8 +84,8 @@ The section above reasons about the import graph, where an edge either exists or
 
 <details><summary>Evidence</summary>
 
-- `extensions/vscode/src/excludes.ts:46` — `exec(`
-- `extensions/vscode/src/interpreters.ts:96` — `exec(`
+- `extensions/vscode/src/excludes.ts:45` — `exec(`
+- `extensions/vscode/src/interpreters.ts:105` — `exec(`
 
 </details>
 
@@ -100,10 +100,10 @@ The section above reasons about the import graph, where an edge either exists or
 <details><summary>Evidence</summary>
 
 - `extensions/vscode/src/diagnostics.ts:38` — ``${finding.rule} ${`
-- `extensions/vscode/src/diagnostics.ts:79` — ``${SEVERITY_ICON[finding.severity]} **${`
-- `extensions/vscode/src/diagnostics.ts:80` — ``[${finding.rule}](${ruleDocsUrl(finding)}) · ${`
-- `extensions/vscode/src/diagnostics.ts:81` — ``**Do instead:** ${`
-- `extensions/vscode/src/diagnostics.ts:82` — ``\n**Rough cost:** ${`
+- `extensions/vscode/src/diagnostics.ts:77` — ``${SEVERITY_ICON[finding.severity]} **${`
+- `extensions/vscode/src/diagnostics.ts:78` — ``[${finding.rule}](${ruleDocsUrl(finding)}) · ${`
+- `extensions/vscode/src/diagnostics.ts:79` — ``**Do instead:** ${`
+- `extensions/vscode/src/diagnostics.ts:80` — ``\n**Rough cost:** ${`
 - `extensions/vscode/src/engine.ts:100` — ``[greenlint] looking for greenlint in order: ${`
 
 </details>
@@ -118,7 +118,7 @@ The section above reasons about the import graph, where an edge either exists or
 
 <details><summary>Evidence</summary>
 
-- `greenlint.py:286` — `SELECT\s+\*\s+FROM`
+- `greenlint/rules.py:99` — `SELECT\s+\*\s+FROM`
 
 </details>
 
@@ -132,13 +132,13 @@ The section above reasons about the import graph, where an edge either exists or
 
 <details><summary>Evidence</summary>
 
-- `greenlint.py:2110` — `sha1(`
+- `greenlint/baselines.py:55` — `sha1(`
 
 </details>
 
 ### Performance
 
-**Worth attention · PERF-SYNCIO** — 4 occurrence(s) across 1 file(s).
+**Worth attention · PERF-SYNCIO** — 5 occurrence(s) across 1 file(s).
 
 *Why it matters.* Synchronous I/O blocks the event loop, which in a single-threaded runtime means every other request waits, not just this one. Throughput collapses under concurrency even though each individual operation looks fast.
 
@@ -148,10 +148,11 @@ The section above reasons about the import graph, where an edge either exists or
 
 <details><summary>Evidence</summary>
 
-- `extensions/vscode/src/interpreters.ts:73` — `existsSync(`
-- `extensions/vscode/src/interpreters.ts:97` — `readFileSync(`
-- `extensions/vscode/src/interpreters.ts:114` — `existsSync(`
-- `extensions/vscode/src/interpreters.ts:130` — `existsSync(`
+- `extensions/vscode/src/interpreters.ts:80` — `existsSync(`
+- `extensions/vscode/src/interpreters.ts:81` — `existsSync(`
+- `extensions/vscode/src/interpreters.ts:106` — `readFileSync(`
+- `extensions/vscode/src/interpreters.ts:123` — `existsSync(`
+- `extensions/vscode/src/interpreters.ts:139` — `existsSync(`
 
 </details>
 
@@ -165,8 +166,8 @@ The section above reasons about the import graph, where an edge either exists or
 
 <details><summary>Evidence</summary>
 
-- `greenlint.py:783` — `3 levels of loop nesting`
 - `extensions/vscode/src/excludes.ts:22` — `4 levels of loop nesting`
+- `greenlint/astindex.py:130` — `3 levels of loop nesting`
 
 </details>
 
@@ -180,9 +181,9 @@ The section above reasons about the import graph, where an edge either exists or
 
 <details><summary>Evidence</summary>
 
-- `greenlint.py:1134` — `SELECT * FROM`
-- `greenlint.py:1162` — `SELECT * FROM`
 - `examples/basic/sample.py:10` — `SELECT * FROM`
+- `greenlint/comments.py:313` — `SELECT * FROM`
+- `greenlint/comments.py:341` — `SELECT * FROM`
 
 </details>
 
@@ -199,8 +200,8 @@ The section above reasons about the import graph, where an edge either exists or
 <details><summary>Evidence</summary>
 
 - `extensions/vscode/esbuild.mjs:11` — `.includes(`
-- `extensions/vscode/src/protocol.ts:72` — `.indexOf(`
-- `extensions/vscode/src/protocol.ts:80` — `.indexOf(`
+- `extensions/vscode/src/protocol.ts:75` — `.indexOf(`
+- `extensions/vscode/src/protocol.ts:83` — `.indexOf(`
 
 </details>
 
@@ -214,7 +215,7 @@ The section above reasons about the import graph, where an edge either exists or
 
 <details><summary>Evidence</summary>
 
-- `greenlint.py:2514` — `sorted(`
+- `greenlint/cli.py:73` — `sorted(`
 
 </details>
 
@@ -230,13 +231,13 @@ The section above reasons about the import graph, where an edge either exists or
 
 <details><summary>Evidence</summary>
 
-- `extensions/vscode/src/interpreters.ts:104` — `catch {`
+- `extensions/vscode/src/interpreters.ts:113` — `catch {`
 
 </details>
 
 ### Readability
 
-**Worth attention · RDB-NESTING** — 2 of 134 Python functions (1%) nest control flow 4 levels or deeper.
+**Worth attention · RDB-NESTING** — 2 of 135 Python functions (1%) nest control flow 4 levels or deeper.
 
 *Why it matters.* Each level of nesting is a condition the reader must keep true in their head for everything inside it. Depth compounds: at four levels the reader is tracking four simultaneous invariants to understand one line. Nesting correlates with defects more strongly than length does.
 
@@ -246,8 +247,8 @@ The section above reasons about the import graph, where an edge either exists or
 
 <details><summary>Evidence</summary>
 
-- `greenlint.py:2393` — `walk_files`, depth 6
-- `greenlint.py:1363` — `index_python`, depth 5
+- `greenlint/discovery.py:126` — `walk_files`, depth 6
+- `greenlint/astindex.py:112` — `index_python`, depth 5
 
 </details>
 
@@ -262,14 +263,14 @@ What was read, and where every import went. Third-party means the target is expe
 | Language | Fidelity | Files | Imports | Internal | Third-party | Unaccounted |
 |---|---|---:|---:|---:|---:|---:|
 | JavaScript | structural | 1 | 1 | 1 | 0 | 0 |
-| Python | parsed | 6 | 53 | 1 | 52 | 0 |
+| Python | parsed | 21 | 235 | 118 | 117 | 0 |
 | TypeScript | structural | 12 | 43 | 27 | 16 | 0 |
 
 ## Shape
 
-- 19 modules across 3 components
-- 28 internal import edges, 1 component couplings
-- 5762 lines
+- 34 modules across 3 components
+- 114 internal import edges, 1 component couplings
+- 6206 lines
 - propagation cost 17% — the share of other components an average component can reach through import paths
 
 ## Component graph
@@ -277,8 +278,8 @@ What was read, and where every import went. Third-party means the target is expe
 ```mermaid
 graph LR
   examples["examples<br/><small>Python · 1 mod · 10 loc</small>"]
-  extensions["extensions<br/><small>JavaScript/Python+ · 17 mod · 3169 loc</small>"]
-  greenlint["greenlint<br/><small>Python · 1 mod · 2583 loc</small>"]
+  extensions["extensions<br/><small>JavaScript/Python+ · 18 mod · 3179 loc</small>"]
+  greenlint["greenlint<br/><small>Python · 15 mod · 3017 loc</small>"]
   extensions -->|1| greenlint
 ```
 
@@ -298,13 +299,13 @@ Components a route can touch by following imports, to a depth of four. This is t
 
 | Entry | Handler | Components reached |
 |---|---|---:|
-| `ON close` | `extensions/vscode/src/engine.ts:190` | 0  |
-| `ON data` | `extensions/vscode/src/engine.ts:149` | 0  |
-| `ON error` | `extensions/vscode/src/engine.ts:185` | 0  |
+| `ON close` | `extensions/vscode/src/engine.ts:185` | 0  |
+| `ON data` | `extensions/vscode/src/engine.ts:147` | 0  |
+| `ON error` | `extensions/vscode/src/engine.ts:180` | 0  |
 
 ## The nouns
 
-22 types declared: 0 inheritance and 11 composition relationships between types defined in this tree. Relationships to types declared elsewhere are omitted rather than guessed, so this is a lower bound. 6 types were read with a real parser; the rest come from declaration syntax, which is reliable for the declaration and weaker for the member lists.
+23 types declared: 0 inheritance and 13 composition relationships between types defined in this tree. Relationships to types declared elsewhere are omitted rather than guessed, so this is a lower bound. 7 types were read with a real parser; the rest come from declaration syntax, which is reliable for the declaration and weaker for the member lists.
 
 ### `extensions`
 
@@ -317,13 +318,18 @@ classDiagram
     +scannableExtensions: Set<string>
     +lastStats: ScanStats
     +lastSummary: ScanSummary
-    +… 14 more fields
+    +… 11 more fields
     +constructor(1)
     +start(0)
     +dispose(0)
     +register(0)
     +commands(0)
     +… 24 more methods
+  }
+  class Entry {
+    +hash: str|None
+    +stat: StatStamp|None
+    +findings: list[Finding]
   }
   class Finding {
     <<interface>>
@@ -336,6 +342,8 @@ classDiagram
     +… 1 more fields
   }
   class FindingCache {
+    +entries: OrderedDict[str,Entry]
+    +limit: int
     +__init__(1)
     +_touch(1)
     +by_stat(2)
@@ -360,6 +368,18 @@ classDiagram
     +icon: vscode.ThemeIcon
     +resource: vscode.Uri
     +children: Finding[]
+  }
+  class ProjectScan {
+    +__slots__
+    +id: str|None
+    +paths: list[str]
+    +counts: dict[str,int]
+    +batch: list[Finding]
+    +findings: list[Finding]
+    +… 1 more fields
+    +__init__(1)
+    +add(1)
+    +result(1)
   }
   class ReportMeta {
     <<interface>>
@@ -401,11 +421,7 @@ classDiagram
     +… 1 more fields
   }
   class ScanSummary {
-    <<interface>>
-    +total: number
-    +bySeverity: Record<Severity,number>
-    +byRule: Record<string,number>
-    +files: number
+    <<extensions.vscode.src.types>>
   }
   class ServerInfo {
     <<interface>>
@@ -417,19 +433,15 @@ classDiagram
     +severityOrder: Record<string,number>
   }
   class Settings {
-    <<interface>>
-    +enable: boolean
-    +run: RunMode
-    +debounceMs: number
-    +pythonPath: string
-    +greenlintPath: string
-    +scanProjectOnStartup: boolean
-    +… 4 more fields
+    <<extensions.vscode.src.config>>
   }
   Controller *-- ScanStats : lastStats
   Controller *-- ScanSummary : lastSummary
+  Entry *-- Finding : findings
+  FindingCache *-- Entry : entries
   FindingStore *-- Finding : flattened
   Group *-- Finding : children
+  ProjectScan *-- Finding : batch
   ReportMeta *-- ScanStats : stats
   ScanProgress *-- Finding : batch
   ScanServer *-- ServerInfo : info
@@ -442,10 +454,18 @@ classDiagram
 classDiagram
   class PythonIndex {
     +__slots__
+    +fors: list[tuple[ast.For,Loops
+    +whiles: list[tuple[ast.While,Loo
+    +tries: list[tuple[ast.Try,Loops
+    +functions: list[ast.FunctionDef|ast
+    +classes: list[ast.ClassDef]
+    +… 2 more fields
     +__init__(1)
   }
   class _LineIndex {
     +__slots__
+    +_starts: list[int]|None
+    +text: str
     +__init__(1)
     +line_of(1)
   }
@@ -468,6 +488,24 @@ Row depends on column; the number is how many import sites hold it. Components a
 ## Reachability from entry points
 
 What each root actually pulls in, to a depth of three. Nothing imports these modules, so they are where a reader has to start.
+
+**greenlint/__main__.py**
+
+```
+greenlint.__main__  (Python)
+└─ greenlint.cli  (Python)
+   ├─ greenlint.base  (Python)
+   ├─ greenlint.baselines  (Python)
+   │  └─ greenlint.base  (Python)
+   ├─ greenlint.config  (Python)
+   │  └─ greenlint.base  (Python)
+   ├─ greenlint.discovery  (Python)
+   │  ├─ greenlint.base  (Python)
+   │  ├─ greenlint.baselines  (Python)  ↑ shown above
+   │  └─ greenlint.scanning  (Python)
+   └─ greenlint.rules  (Python)
+      └─ greenlint.base  (Python)
+```
 
 **extensions/vscode/src/extension.ts**
 
@@ -507,19 +545,13 @@ extensions.vscode.src.extension  (TypeScript)
 extensions.vscode.server.greenlint_server  (Python)
 ```
 
-**extensions/vscode/server/scan_cache.py**
-
-```
-extensions.vscode.server.scan_cache  (Python)
-```
-
 ## Coupling
 
 | Component | Languages | Modules | LOC | Fan-in | Fan-out | Instability |
 |---|---|---:|---:|---:|---:|---:|
 | `examples` | Python | 1 | 10 | 0 | 0 | 0.0 |
-| `extensions` | JavaScript, Python, TypeScript | 17 | 3169 | 0 | 1 | 1.0 |
-| `greenlint` | Python | 1 | 2583 | 1 | 0 | 0.0 |
+| `extensions` | JavaScript, Python, TypeScript | 18 | 3179 | 0 | 1 | 1.0 |
+| `greenlint` | Python | 15 | 3017 | 1 | 0 | 0.0 |
 
 Instability is fan-out / (fan-in + fan-out). A component many things depend on that itself depends widely propagates change in both directions.
 
@@ -533,12 +565,14 @@ Third-party packages. Standard-library imports are counted separately below, bec
 
 | Package | Sites | Components | First site |
 |---|---:|---:|---|
-| `server_ops` | 10 | 1 | extensions/vscode/server/greenlint_server.py:52 |
+| `types_` | 11 | 1 | extensions/vscode/server/greenlint_server.py:65 |
+| `server_ops` | 10 | 1 | extensions/vscode/server/greenlint_server.py:53 |
 | `vscode` | 9 | 1 | extensions/vscode/src/config.ts:1 |
-| `scan_cache` | 5 | 1 | extensions/vscode/server/greenlint_server.py:51 |
-| `greenlint_api` | 4 | 1 | extensions/vscode/server/greenlint_server.py:50 |
+| `scan_cache` | 5 | 1 | extensions/vscode/server/greenlint_server.py:52 |
+| `greenlint_api` | 4 | 1 | extensions/vscode/server/greenlint_server.py:51 |
+| `greenlint_server` | 1 | 1 | extensions/vscode/server/server_ops.py:17 |
 
-22 standard-library modules imported; most used: `path` (5), `pathlib` (5), `sys` (4), `argparse` (2), `collections` (2), `hashlib` (2), `importlib` (2), `json` (2), `os` (2), `time` (2), `ast` (1), `bisect` (1).
+23 standard-library modules imported; most used: `pathlib` (15), `__future__` (13), `collections` (12), `typing` (12), `re` (6), `path` (5), `sys` (4), `ast` (3), `json` (3), `argparse` (2), `functools` (2), `hashlib` (2).
 
 ## Churn against size
 
@@ -546,21 +580,21 @@ Most-changed files in the last 12 months. This is where any map you carry in you
 
 | File | Lines touched | LOC | Language |
 |---|---:|---:|---|
-| `greenlint.py` | 4121 | 2583 | Python |
-| `extensions/vscode/server/greenlint_server.py` | 1573 | 411 | Python |
-| `extensions/vscode/src/engine.ts` | 994 | 320 | TypeScript |
-| `extensions/vscode/src/extension.ts` | 831 | 765 | TypeScript |
-| `extensions/vscode/src/findingsView.ts` | 239 | 231 | TypeScript |
-| `extensions/vscode/src/report.ts` | 194 | 194 | TypeScript |
-| `extensions/vscode/server/scan_cache.py` | 192 | 192 | Python |
-| `extensions/vscode/src/protocol.ts` | 184 | 184 | TypeScript |
-| `extensions/vscode/src/store.ts` | 140 | 138 | TypeScript |
-| `extensions/vscode/src/interpreters.ts` | 136 | 136 | TypeScript |
-| `extensions/vscode/src/diagnostics.ts` | 126 | 98 | TypeScript |
-| `extensions/vscode/server/server_ops.py` | 112 | 112 | Python |
-| `extensions/vscode/src/types.ts` | 110 | 96 | TypeScript |
-| `extensions/vscode/server/greenlint_api.py` | 86 | 86 | Python |
-| `extensions/vscode/src/excludes.ts` | 81 | 81 | TypeScript |
+| `extensions/vscode/server/greenlint_server.py` | 1371 | 425 | Python |
+| `extensions/vscode/src/engine.ts` | 1081 | 315 | TypeScript |
+| `extensions/vscode/src/extension.ts` | 1041 | 735 | TypeScript |
+| `greenlint/rules.py` | 764 | 764 | Python |
+| `greenlint/comments.py` | 385 | 385 | Python |
+| `greenlint/pyrules.py` | 379 | 379 | Python |
+| `extensions/vscode/src/findingsView.ts` | 295 | 225 | TypeScript |
+| `extensions/vscode/server/scan_cache.py` | 272 | 208 | Python |
+| `greenlint/astindex.py` | 234 | 234 | Python |
+| `extensions/vscode/src/report.ts` | 222 | 188 | TypeScript |
+| `extensions/vscode/src/protocol.ts` | 217 | 183 | TypeScript |
+| `greenlint/infra.py` | 213 | 213 | Python |
+| `extensions/vscode/src/interpreters.ts` | 197 | 145 | TypeScript |
+| `greenlint/discovery.py` | 185 | 185 | Python |
+| `greenlint/carbon.py` | 176 | 176 | Python |
 
 ## Public surface
 
@@ -574,47 +608,48 @@ Most-changed files in the last 12 months. This is where any map you carry in you
 
 </details>
 
-<details><summary><code>extensions</code> — 63 exported</summary>
+<details><summary><code>extensions</code> — 64 exported</summary>
 
 
-_Showing 40 of 63; `--full` lists them all._
+_Showing 40 of 64; `--full` lists them all._
 
 
 `extensions.vscode.server.greenlint_api`
 
-- const REQUIRED_API:44
-- def greenlint_version:72
-- def load_greenlint:15
-- def missing_api:62
+- const REQUIRED_API:50
+- def greenlint_version:78
+- def load_greenlint:16
+- def missing_api:68
 
 `extensions.vscode.server.greenlint_server`
 
-- class Server:73
-- const INTERLEAVE_EVERY:68
-- const PROGRESS_INTERVAL_S:70
-- def main:379
+- class Server:80
+- const INTERLEAVE_EVERY:70
+- const PROGRESS_INTERVAL_S:72
+- def main:399
 
 `extensions.vscode.server.scan_cache`
 
-- class FindingCache:32
-- class ProjectScan:130
-- class RunningSummary:91
-- const DEFAULT_CACHE_ENTRIES:12
-- def digest:15
-- def mtime:22
+- class Entry:36
+- class FindingCache:46
+- class ProjectScan:146
+- class RunningSummary:107
+- const DEFAULT_CACHE_ENTRIES:16
+- def digest:19
+- def mtime:26
 
 `extensions.vscode.server.server_ops`
 
-- const DEFAULT_MAX_FILE_BYTES:15
-- const PROTOCOL_VERSION:14
-- def op_cancel:97
-- def op_configure:57
-- def op_invalidate:85
-- def op_languages:34
-- def op_ping:18
-- def op_scan_file:49
-- def op_scan_text:41
-- def op_write_baseline:68
+- const DEFAULT_MAX_FILE_BYTES:20
+- const PROTOCOL_VERSION:19
+- def op_cancel:104
+- def op_configure:62
+- def op_invalidate:92
+- def op_languages:39
+- def op_ping:23
+- def op_scan_file:54
+- def op_scan_text:46
+- def op_write_baseline:74
 
 `extensions.vscode.src.config`
 
@@ -626,9 +661,9 @@ _Showing 40 of 63; `--full` lists them all._
 
 `extensions.vscode.src.diagnostics`
 
-- class GreenlintHoverProvider:85
+- class GreenlintHoverProvider:83
 - const SOURCE:6
-- function describe:72
+- function describe:70
 - function toDiagnostics:46
 
 `extensions.vscode.src.engine`
@@ -639,64 +674,96 @@ _Showing 40 of 63; `--full` lists them all._
 `extensions.vscode.src.excludes`
 
 - function editorExcludeGlobs:4
-- function expandBraces:42
-- function toIgnoreGlobs:56
+- function expandBraces:41
+- function toIgnoreGlobs:55
 
 `extensions.vscode.src.extension`
 
-- function activate:33
-- function deactivate:39
+- function activate:27
 
 </details>
 
-<details><summary><code>greenlint</code> — 48 exported</summary>
+<details><summary><code>greenlint</code> — 44 exported</summary>
 
 
-_Showing 40 of 48; `--full` lists them all._
+_Showing 40 of 44; `--full` lists them all._
 
 
-`greenlint`
+`greenlint.astindex`
 
-- class PythonIndex:1284
-- const AST_FINDERS:2167
-- const AST_RULE_IDS:771
-- const BASELINE_FILENAME:29
-- const BLOCK_FINDERS:2179
-- const BUSY_CORE_WATTS:93
-- const CO2E_HINTS:113
-- const COMMENT_SYNTAX:844
-- const CONFIG_FILENAME:28
-- const GRID_INTENSITY_G_PER_KWH:92
-- const G_CO2E_PER_GB:95
-- const KWH_PER_GB_TRANSFERRED:94
-- const NEEDS_FULL_HISTORY:1974
-- const NUMERIC_ONLY_OPS:1604
-- const PATTERN_RULES_BY_LANG:791
-- const PROBE_CALLS:1810
-- const PRUNED_DIR_NAMES:2373
-- const RULES:199
-- const RULES_BY_ID:768
-- const SCALAR_CALLS:1595
-- const SCALAR_OPS:1599
-- const SCANNABLE_LANGS:794
-- const SCOPE_BOUNDARIES:1408
-- const SEVERITY_ORDER:2068
-- const TEST_FILENAME:1206
-- const _COLLECTORS:1352
-- const _HOT_PATH:111
-- const _NOT_NEWLINE:885
-- const _SLASH:843
-- const _STRING_LANGS:1043
-- const _STRING_OPEN:1069
-- def applicable:2080
-- def apply_baseline:2129
-- def core_seconds_per_gram:98
-- def finding_sort_key:2071
-- def fingerprint:2087
-- def index_python:1363
-- def is_ignored:2321
-- def iter_files:2425
-- def load_baseline:2113
+- class PythonIndex:24
+- const SCOPE_BOUNDARIES:157
+- def index_python:112
+
+`greenlint.base`
+
+- const BASELINE_FILENAME:21
+- const CONFIG_FILENAME:20
+
+`greenlint.baselines`
+
+- const SEVERITY_ORDER:13
+- def applicable:25
+- def apply_baseline:74
+- def finding_sort_key:16
+- def fingerprint:32
+- def load_baseline:58
+- def write_baseline:81
+
+`greenlint.carbon`
+
+- const BUSY_CORE_WATTS:70
+- const CO2E_HINTS:90
+- const GRID_INTENSITY_G_PER_KWH:69
+- const G_CO2E_PER_GB:72
+- const KWH_PER_GB_TRANSFERRED:71
+- const PAIR:67
+- const _HOT_PATH:88
+- def core_seconds_per_gram:75
+
+`greenlint.cli`
+
+- def main:110
+
+`greenlint.comments`
+
+- const _NOT_NEWLINE:57
+- const _STRING_LANGS:224
+- const _STRING_OPEN:250
+
+`greenlint.config`
+
+- def load_config:31
+
+`greenlint.discovery`
+
+- const PRUNED_DIR_NAMES:106
+- def is_ignored:54
+- def iter_files:158
+- def prunable_bases:74
+- def scan:178
+- def walk_files:126
+
+`greenlint.findings`
+
+- const TEST_FILENAME:15
+
+`greenlint.infra`
+
+- const NEEDS_FULL_HISTORY:125
+
+`greenlint.pyrules`
+
+- const NUMERIC_ONLY_OPS:127
+- const PROBE_CALLS:331
+- const SCALAR_CALLS:120
+- const SCALAR_OPS:122
+
+`greenlint.rules`
+
+- const AST_RULE_IDS:740
+- const PATTERN_RULES_BY_LANG:761
+- const RULES_BY_ID:737
 
 </details>
 
