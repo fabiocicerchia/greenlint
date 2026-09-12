@@ -30,6 +30,32 @@ src/db.py:44: [GL005/medium] SELECT * query
 greenlint: 2 finding(s)
 ```
 
+## Features
+
+- Flags **energy-wasteful patterns** across languages and configs: busy loops,
+  sub-100ms polling, every-minute crons, `SELECT *`, full-history CI clones,
+  full-fat base images, peak-sized instances, oversized autoscaling groups,
+  missing Kubernetes and compose resource limits, N+1 calls, manual O(n²)
+  sorts.
+- Every finding says **why it wastes energy** and what to do instead, rather
+  than just naming a rule.
+- One pass over the tree: no build, no execution, `.git` and `node_modules`
+  pruned before descending.
+- **AST rules for Python** where shape alone cannot decide — a `while True:`
+  with a sleep is not the same as one without.
+- **Regex rules for the file types that waste the most energy** and have no
+  parser worth a dependency: CI configs, Terraform, Kubernetes manifests,
+  Dockerfiles.
+- Comments and string literals are blanked with offsets preserved, so
+  `SELECT *` in a docstring stops being a finding while line numbers still
+  point at the real file.
+- **Baseline support**: findings you have already accepted are fingerprinted
+  and dropped, so an existing tree can adopt the rules without a flag day.
+- Output as text, `json`, or `github` annotations; findings sorted high,
+  medium, low.
+- Honest about its own precision — every hint is an order of magnitude, not a
+  measurement, and the rule set is still growing, so pin a version in CI.
+
 ## How it works
 
 One pass over the tree, no build, no execution:
