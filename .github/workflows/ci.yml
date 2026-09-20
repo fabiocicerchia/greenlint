@@ -16,8 +16,6 @@ concurrency:
 
 jobs:
   test:
-    # A github-actions bump touches workflow files only, never the code under test.
-    if: ${{ !startsWith(github.head_ref, 'dependabot/github_actions/') }}
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
