@@ -114,7 +114,7 @@ test("an explicitly configured pair is the only candidate", async () => {
   server.dispose();
 });
 
-test("a workspace greenlint.py is tried before the installed package", async () => {
+test("a workspace greenlint checkout is tried before the installed package", async () => {
   const root = mkdtempSync(path.join(tmpdir(), "greenlint-engine-"));
   writeFileSync(path.join(root, "greenlint.py"), "");
   shim.workspace.workspaceFolders = [{ uri: { fsPath: root, scheme: "file" } }];
@@ -122,8 +122,11 @@ test("a workspace greenlint.py is tried before the installed package", async () 
     const log = recordingLog();
     const server = new ScanServer("/nonexistent/server.py", settings(), log.channel);
     await assert.rejects(server.start());
+    // The candidate is the directory holding the checkout, not the module file:
+    // load_greenlint puts this on sys.path and imports by name, which is what
+    // the package form needs and what a single-file module still tolerates.
     assert.deepEqual(searchOrder(log.lines).split(", "), [
-      `/nonexistent/python-9c1f + ${path.join(root, "greenlint.py")}`,
+      `/nonexistent/python-9c1f + ${root}`,
       "/nonexistent/python-9c1f + installed package",
     ]);
     server.dispose();
