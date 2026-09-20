@@ -59,6 +59,11 @@ jobs:
         # `release-type: python` is still the strategy; it bumps `version` in
         # pyproject.toml and maintains CHANGELOG.md.
         with:
+          # Same token as phase 2, for a different reason: creating the release
+          # with GITHUB_TOKEN has failed on every push since #97 merged with
+          # "Resource not accessible by integration" on create-a-release, which
+          # is the error an app installation token gets. A PAT is not one.
+          token: ${{ secrets.RELEASE_PLEASE_TOKEN || secrets.GITHUB_TOKEN }}
           skip-github-pull-request: true # phase 2 opens it, once the tag exists
 
   build:
