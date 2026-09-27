@@ -3,5 +3,5 @@
 Open items only. Completed work is dropped from here — the CHANGELOG
 is the record of what shipped.
 
-- [ ] Broader AST-based rules beyond Python (regex has false-positive limits
-      for JS/Go/Rust/etc.)
+Nothing open. The remaining work is tracked in
+[the issue list](https://github.com/fabiocicerchia/greenlint/issues).
