@@ -44,21 +44,26 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  publish:
+  # Builds the VSIX with no secrets and a read-only token: install and build
+  # run third-party code, so they never share a runner with the registry PATs.
+  package:
     runs-on: ubuntu-latest
     permissions:
-      contents: write  # attach the VSIX to the release
+      contents: read
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      vsix: ${{ steps.version.outputs.vsix }}
     env:
       EXT: extensions/vscode
       VSIX_NAME: greenlint
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false
 
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1  # v7.1.0
         with:
           node-version: "22"
-          cache: npm
-          cache-dependency-path: extensions/vscode/package-lock.json
 
       - name: Resolve the version
         id: version
@@ -92,13 +97,34 @@ jobs:
 
       - name: Install
         run: |
-          npm --prefix "$EXT" ci
+          npm --prefix "$EXT" ci --ignore-scripts
 
       # `package` runs vscode:prepublish first — typecheck, the tests, the
       # production bundle, then the licence and changelog the VSIX has to carry.
       # A red test never reaches a registry.
       - name: Package
         run: npm --prefix "$EXT" run package
+
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9  # v7.0.2
+        with:
+          name: vsix
+          path: ${{ env.EXT }}/${{ steps.version.outputs.vsix }}
+          if-no-files-found: error
+          retention-days: 1
+
+  publish:
+    needs: package
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write  # attach the VSIX to the release
+    env:
+      EXT: vsix
+      VSIX_NAME: greenlint
+    steps:
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333  # v8.0.2
+        with:
+          name: vsix
+          path: vsix
 
       # `secrets` cannot be read from a job-level `if`, so which registries are
       # reachable is decided here and read back as step outputs.
@@ -117,7 +143,7 @@ jobs:
         if: steps.tokens.outputs.marketplace == 'true'
         env:
           VSCE_PAT: ${{ secrets.VSCE_PAT }}
-          VSIX: ${{ steps.version.outputs.vsix }}
+          VSIX: ${{ needs.package.outputs.vsix }}
         run: npx --yes @vscode/vsce@3.9.2 publish --no-dependencies --packagePath "$EXT/$VSIX"
 
       # Where VSCodium and Cursor look. A separate registry with its own
@@ -126,7 +152,7 @@ jobs:
         if: steps.tokens.outputs.openvsx == 'true'
         env:
           OVSX_PAT: ${{ secrets.OVSX_PAT }}
-          VSIX: ${{ steps.version.outputs.vsix }}
+          VSIX: ${{ needs.package.outputs.vsix }}
         run: npx --yes ovsx@1.1.1 publish "$EXT/$VSIX" -p "$OVSX_PAT"
 
       - name: Attach the VSIX to the release
@@ -134,14 +160,14 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ inputs.tag }}
-          VSIX: ${{ steps.version.outputs.vsix }}
-        run: gh release upload "$TAG" "$EXT/$VSIX" --clobber
+          VSIX: ${{ needs.package.outputs.vsix }}
+        run: gh release upload "$TAG" "$EXT/$VSIX" --clobber --repo "$GITHUB_REPOSITORY"
 
       # A run that publishes nowhere still has to say so, or "green" and
       # "published" become the same colour.
       - name: Say what happened
         env:
-          VERSION: ${{ steps.version.outputs.version }}
+          VERSION: ${{ needs.package.outputs.version }}
           MARKETPLACE: ${{ steps.tokens.outputs.marketplace }}
           OPENVSX: ${{ steps.tokens.outputs.openvsx }}
         run: |
