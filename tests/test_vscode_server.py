@@ -136,7 +136,7 @@ def test_files_no_rule_targets_are_never_opened(server: "Server", tmp_path: Path
 
 
 def test_oversized_files_are_skipped(server: "Server", tmp_path: Path) -> None:
-    path = write(tmp_path, "big.sql", "SELECT * FROM t;\n" * 100)
+    path = write(tmp_path, "big.sql", "SELECT * FROM t;\n" * 100)  # nosec B608 - fixture text, not a query
     response = ask(server, op="scanFile", path=str(path), maxFileBytes=10)
     assert response["source"] == "skip"
     assert response["findings"] == []
@@ -250,7 +250,7 @@ def test_an_old_greenlint_refuses_to_start_and_says_why(tmp_path: Path) -> None:
         "def load_config(path=None): return {}\n"
         "def scan_file(path, disabled=frozenset()): return []\n",
     )
-    result = subprocess.run(
+    result = subprocess.run(  # nosec B603 - fixed argv: this interpreter and the test's own files
         [sys.executable, str(SERVER_PATH), "--greenlint", str(stub)],
         input="",
         capture_output=True,
