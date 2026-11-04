@@ -100,9 +100,9 @@ def _context_findings(
     # real `fetch-depth: 0` from one being discussed in a comment above it.
     if path.suffix in (".yml", ".yaml") and "GL004" not in disabled:
         yield from _fetch_depth_findings(path, text)
-    for rule_id, finder in BLOCK_FINDERS.get(_lang_key(path), ()):
+    for rule_id, block_finder in BLOCK_FINDERS.get(_lang_key(path), ()):
         if rule_id not in disabled:
-            yield from finder(path, code)
+            yield from block_finder(path, code)
 
 
 def _pattern_findings(path: Path, code: str, disabled: frozenset[str]) -> Iterator[Finding]:

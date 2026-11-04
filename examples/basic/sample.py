@@ -6,7 +6,7 @@ def poll_forever() -> None:
         check_queue()  # GL001: busy loop without sleep
 
 
-def load_users(db: object) -> object:
+def load_users(db) -> object:
     return db.query("SELECT * FROM users")  # GL005: SELECT * query
 
 
