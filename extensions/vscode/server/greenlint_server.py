@@ -155,9 +155,9 @@ class Server:
         somewhere else.
         """
         if cfg_path is not None and stamp is not None:
-            config = self.gl.load_config(str(cfg_path))
+            config: Config = self.gl.load_config(str(cfg_path))
         else:
-            config: Config = {"disable": set(), "ignore": []}
+            config = {"disable": set(), "ignore": []}
         return {
             "disable": config["disable"],
             "ignore": [*config["ignore"], *self.extra_ignore],

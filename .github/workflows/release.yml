@@ -64,7 +64,7 @@ jobs:
           # "Resource not accessible by integration" on create-a-release, which
           # is the error an app installation token gets. A PAT is not one.
           token: ${{ secrets.RELEASE_PLEASE_TOKEN || secrets.GITHUB_TOKEN }}
-          skip-github-pull-request: true # phase 2 opens it, once the tag exists
+          skip-github-pull-request: true  # phase 2 opens it, once the tag exists
 
   build:
     needs: release-please
@@ -172,7 +172,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
-      pull-requests: write # open/update the release PR
+      pull-requests: write  # open/update the release PR
     steps:
       # Same configuration as phase 1 — the two invocations must agree, and
       # both read release-please-config.json by default.

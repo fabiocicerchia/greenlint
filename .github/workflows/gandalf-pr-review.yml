@@ -13,7 +13,7 @@ on:
   pull_request:
 
 permissions:
-  actions: read # private repo: upload-sarif reads this run's metadata
+  actions: read  # private repo: upload-sarif reads this run's metadata
   contents: read
 
 concurrency:
@@ -26,9 +26,9 @@ jobs:
     if: github.actor != 'dependabot[bot]'
     # read the code, post the review, and upload code-scanning results.
     permissions:
-      actions: read # private repo: upload-sarif reads this run's metadata
+      actions: read  # private repo: upload-sarif reads this run's metadata
       contents: read
-      packages: read # pull the ghcr scanner image
+      packages: read  # pull the ghcr scanner image
       pull-requests: write
       security-events: write
     name: gandalf inline review
@@ -36,7 +36,7 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
-          fetch-depth: 0 # need base + head + their merge-base for the PR diff
+          fetch-depth: 0  # need base + head + their merge-base for the PR diff
 
       - uses: fabiocicerchia/gandalf@393b3111f238187ee22351ab0ed73303b6404c25  # v0.14.1
         with:

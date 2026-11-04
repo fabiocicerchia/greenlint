@@ -256,6 +256,7 @@ def _accumulating_add(stmt: ast.stmt) -> tuple[ast.Name, ast.expr] | tuple[None,
     Only `x += <expr>` and `x = x + <expr>`: `x = y + z` rebinds rather than
     accumulates, and a non-name target (`d[k] += …`) is not a name to track.
     """
+    target: ast.expr
     if isinstance(stmt, ast.AugAssign) and isinstance(stmt.op, ast.Add):
         target, value = stmt.target, stmt.value
     elif (

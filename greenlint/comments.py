@@ -203,6 +203,7 @@ def _blank_comments(text: str, path: Path) -> str:
     # per interesting position, and the decisions it makes are unchanged.
     outside, inside = _comment_scanners(line_tok, block)
     spans: list[tuple[int, int]] = []
+    i: int | None
     i, n, quote = 0, len(text), None
     while i < n:
         if quote:
@@ -323,6 +324,7 @@ def _blank_strings(code: str, path: Path) -> str:
     if _no_strings_to_blank(code, path):
         return code
     spans: list[tuple[int, int]] = []
+    i: int | None
     i, n = 0, len(code)
     while i < n:
         i, span = _step_to_string_end(code, i)
