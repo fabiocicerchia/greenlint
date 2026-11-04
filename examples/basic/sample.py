@@ -1,12 +1,18 @@
 """Deliberately wasteful sample for `greenlint examples/basic/` to flag."""
 
+from typing import Protocol
+
+
+class Database(Protocol):
+    def query(self, sql: str) -> object: ...
+
 
 def poll_forever() -> None:
     while True:
         check_queue()  # GL001: busy loop without sleep
 
 
-def load_users(db) -> object:
+def load_users(db: Database) -> object:
     return db.query("SELECT * FROM users")  # GL005: SELECT * query
 
 
