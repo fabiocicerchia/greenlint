@@ -52,6 +52,7 @@ def fingerprint(finding: Finding, root: Path | str) -> str:
     except ValueError:
         relative = Path(finding["file"]).as_posix()
     key = f"{relative}|{finding['rule']}|{finding['message']}"
+    # nosemgrep - an id, not a signature; another hash would orphan every saved baseline
     return hashlib.sha1(key.encode("utf-8", "replace"), usedforsecurity=False).hexdigest()
 
 
