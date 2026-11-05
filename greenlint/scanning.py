@@ -6,7 +6,7 @@ from collections.abc import Iterator
 from pathlib import Path
 
 from .astindex import PythonIndex, _parse_python, index_python
-from .base import Finding
+from .base import Finding, lang_key
 from .comments import _blank_comments, _blank_python_docstrings, _blank_strings
 from .findings import _finding, _is_test_file, _LineIndex
 from .infra import (
@@ -45,7 +45,7 @@ def scannable(path: Path) -> bool:
     A set lookup rather than a pass over `RULES`: this is asked once per file in
     a walk, and the answer only ever depended on the set of tags.
     """
-    return path.suffix in SCANNABLE_LANGS or (path.name == "Dockerfile" and "Dockerfile" in SCANNABLE_LANGS)
+    return lang_key(path) in SCANNABLE_LANGS
 
 
 # The AST rules, in the order their findings come out, wired to the ids
@@ -80,11 +80,6 @@ BLOCK_FINDERS[".yaml"] = BLOCK_FINDERS[".yml"]
 BLOCK_FINDERS[".dockerfile"] = BLOCK_FINDERS["Dockerfile"]
 
 
-def _lang_key(path: Path) -> str:
-    """The tag the rule indexes are keyed by: the suffix, or `Dockerfile` by name."""
-    return "Dockerfile" if path.name == "Dockerfile" else path.suffix
-
-
 def _context_findings(
     path: Path, text: str, code: str, index: PythonIndex | None, disabled: frozenset[str]
 ) -> Iterator[Finding]:
@@ -100,7 +95,7 @@ def _context_findings(
     # real `fetch-depth: 0` from one being discussed in a comment above it.
     if path.suffix in (".yml", ".yaml") and "GL004" not in disabled:
         yield from _fetch_depth_findings(path, text)
-    for rule_id, block_finder in BLOCK_FINDERS.get(_lang_key(path), ()):
+    for rule_id, block_finder in BLOCK_FINDERS.get(lang_key(path), ()):
         if rule_id not in disabled:
             yield from block_finder(path, code)
 
@@ -114,7 +109,7 @@ def _pattern_findings(path: Path, code: str, disabled: frozenset[str]) -> Iterat
     # it — blanking strings costs a pass over the file, and most languages have
     # no code_only rule at all.
     code_no_strings = None
-    for rule in PATTERN_RULES_BY_LANG.get(_lang_key(path), ()):
+    for rule in PATTERN_RULES_BY_LANG.get(lang_key(path), ()):
         if rule["id"] in disabled:
             continue
         view = code

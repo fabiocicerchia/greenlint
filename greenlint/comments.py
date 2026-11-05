@@ -8,10 +8,11 @@ import re
 from pathlib import Path
 
 from .astindex import PythonIndex
+from .base import lang_key
 
 # ----------------------------------------------------- comment stripping ---
 
-# Line- and block-comment syntax per extension. Dockerfile/unknown default to `#`.
+# Line- and block-comment syntax per language tag (see `lang_key`).
 _SLASH: tuple[str | None, tuple[str, str] | None] = ("//", ("/*", "*/"))
 COMMENT_SYNTAX: dict[str, tuple[str | None, tuple[str, str] | None]] = {
     # CSS and HTML carry rules but had no entry at all. Both are listed with a
@@ -49,6 +50,7 @@ COMMENT_SYNTAX: dict[str, tuple[str | None, tuple[str, str] | None]] = {
     ".toml": ("#", None),
     ".pl": ("#", None),
     ".dockerfile": ("#", None),
+    "Dockerfile": ("#", None),
 }
 
 
@@ -183,8 +185,7 @@ def _blank_comments(text: str, path: Path) -> str:
     gets blanked. That is a false negative, which is the safe direction: this
     whole pass exists because a linter that cries wolf gets switched off.
     """
-    default: tuple[str | None, tuple[str, str] | None] = ("#", None) if path.name == "Dockerfile" else (None, None)
-    line_tok, block = COMMENT_SYNTAX.get(path.suffix, default)
+    line_tok, block = COMMENT_SYNTAX.get(lang_key(path), (None, None))
     if not line_tok:
         return text
     # Two C-speed substring searches before any character-at-a-time work: a
