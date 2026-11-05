@@ -8,16 +8,33 @@ already owns the cache, the config and the pump.
 
 import sys
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import Any, Protocol
 
 from greenlint_api import greenlint_version
-from types_ import Finding, Request, Response
-
-if TYPE_CHECKING:  # the server imports these ops, so the arrow only points one way
-    from greenlint_server import Server
+from scan_cache import FindingCache
+from types_ import Config, Finding, Request, Response
 
 PROTOCOL_VERSION = 1
 DEFAULT_MAX_FILE_BYTES = 1_000_000
+
+
+class Server(Protocol):
+    """What the ops use of `greenlint_server.Server`, stated here so the arrow
+    only points one way: the server imports the ops, never the reverse."""
+
+    gl: Any
+    cache: FindingCache
+    configs: dict[str, Any]
+    cancelled: set[Any]
+    active_scan: Any
+    deferred: list[Request]
+    extra_ignore: list[str]
+    ignore_generation: int
+
+    def config_for(self, root: str | None) -> Config: ...
+    def accepted(self, findings: list[Finding], config: Config) -> list[Finding]: ...
+    def scan_text(self, path: Path, text: str, config: Config) -> list[Finding]: ...
+    def scan_path(self, path: Path, config: Config, max_bytes: int) -> tuple[list[Finding], str]: ...
 
 
 def op_ping(server: "Server", request: Request) -> Response:
