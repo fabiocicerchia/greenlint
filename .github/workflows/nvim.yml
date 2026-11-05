@@ -3,9 +3,9 @@ name: nvim
 on:
   push:
     branches: [main, master]
-    paths: ["extensions/nvim/**", "greenlint.py", ".github/workflows/nvim.yml"]
+    paths: ["extensions/nvim/**", "greenlint/**", ".github/workflows/nvim.yml"]
   pull_request:
-    paths: ["extensions/nvim/**", "greenlint.py", ".github/workflows/nvim.yml"]
+    paths: ["extensions/nvim/**", "greenlint/**", ".github/workflows/nvim.yml"]
   workflow_dispatch:
 
 permissions:
@@ -20,7 +20,7 @@ jobs:
   # and this plugin is deliberately on the 0.11 API surface (vim.system,
   # vim.fs.relpath, vim.validate's callable form).
   #
-  # Python is here for severity_order_spec, which reads greenlint.py and fails
+  # Python is here for severity_order_spec, which imports greenlint and fails
   # if the plugin's copy of SEVERITY_ORDER stops matching it.
   test:
     runs-on: ubuntu-latest
