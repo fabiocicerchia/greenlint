@@ -43,6 +43,9 @@ jobs:
           github-token: ${{ github.token }}
 
       - name: Post to boneyard
+        # Telemetry to an external dashboard: a boneyard outage or a missing
+        # BONEYARD_TOKEN is not this repository failing. Drop this once
+        # app.boneyard.run has an uptime commitment and the secret is set.
         continue-on-error: true
         env:
           TOKEN: ${{ secrets.BONEYARD_TOKEN }}
