@@ -26,6 +26,9 @@ class EventEmitter<T> {
 /** Set by a test to decide what `getConfiguration(section).get('exclude')` returns. */
 export const configuration: Record<string, Record<string, unknown>> = {};
 
+/** Set by a test to override `getConfiguration('greenlint').get(key)`, per key. */
+export const greenlintSettings: Record<string, unknown> = {};
+
 class ThemeIcon {
   static readonly File = new ThemeIcon("file");
   constructor(
@@ -61,12 +64,18 @@ export const recorded = {
   executed: [] as unknown[][],
   /** Labels of the disposables that were disposed, in order. */
   disposed: [] as string[],
+  /** The handler behind each registered command id, so a test can run it. */
+  handlers: new Map<string, () => unknown>(),
+  /** What `DiagnosticCollection.set` last published, per file path. */
+  diagnostics: new Map<string, unknown[]>(),
 };
 
 export function resetRecorded(): void {
   recorded.commands.length = 0;
   recorded.executed.length = 0;
   recorded.disposed.length = 0;
+  recorded.handlers.clear();
+  recorded.diagnostics.clear();
 }
 
 const disposable = (label: string) => ({
@@ -143,8 +152,9 @@ export const vscode = {
   ViewColumn: { Active: -1, Beside: -2, One: 1 },
   env: { clipboard: { writeText: async (_text: string) => undefined } },
   commands: {
-    registerCommand: (name: string, _run: () => unknown) => {
+    registerCommand: (name: string, run: () => unknown) => {
       recorded.commands.push(name);
+      recorded.handlers.set(name, run);
       return disposable(`command:${name}`);
     },
     executeCommand: (name: string, ...args: unknown[]) => {
@@ -155,9 +165,9 @@ export const vscode = {
   languages: {
     createDiagnosticCollection: (name: string) => ({
       name,
-      set: () => undefined,
-      delete: () => undefined,
-      clear: () => undefined,
+      set: (uri: { fsPath: string }, diagnostics: unknown[]) => void recorded.diagnostics.set(uri.fsPath, diagnostics),
+      delete: (uri: { fsPath: string }) => void recorded.diagnostics.delete(uri.fsPath),
+      clear: () => recorded.diagnostics.clear(),
       dispose: () => recorded.disposed.push("diagnosticCollection"),
     }),
     registerHoverProvider: (_selector: unknown, _provider: unknown) => disposable("hoverProvider"),
@@ -205,7 +215,10 @@ export const vscode = {
   },
   workspace: {
     getConfiguration: (section: string) => ({
-      get: <T>(_key: string, fallback?: T) => (configuration[section] ?? fallback ?? {}) as T,
+      get: <T>(key: string, fallback?: T) =>
+        (section === "greenlint" && key in greenlintSettings
+          ? greenlintSettings[key]
+          : (configuration[section] ?? fallback ?? {})) as T,
     }),
     asRelativePath: (uri: { fsPath: string }) => uri.fsPath.replace(/^\/proj\//, ""),
     getWorkspaceFolder: (_uri: unknown) => undefined,
