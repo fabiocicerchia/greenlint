@@ -166,6 +166,17 @@ def test_apt_and_pip_cleanup_flags_not_flagged(tmp_path: Path) -> None:
     assert "GL010" not in ids
 
 
+def test_detects_very_large_instance_type(tmp_path: Path) -> None:
+    write(tmp_path, "main.tf", 'resource "aws_instance" "db" {\n  instance_type = "m5.16xlarge"\n}\n')
+    write(tmp_path, "main.tofu", 'instance_type = "c6.24xlarge"\n')
+    assert [f["rule"] for f in scan([str(tmp_path)])].count("GL008") == 2
+
+
+def test_modest_instance_type_not_flagged(tmp_path: Path) -> None:
+    write(tmp_path, "main.tf", 'instance_type = "m5.large"\ninstance_type = "m5.4xlarge"\n')
+    assert "GL008" not in rule_ids(scan([str(tmp_path)]))
+
+
 def test_detects_img_missing_lazy_loading(tmp_path: Path) -> None:
     write(tmp_path, "page.html", '<img src="hero.png">\n')
     assert "GL011" in rule_ids(scan([str(tmp_path)]))
