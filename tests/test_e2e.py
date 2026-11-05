@@ -60,3 +60,16 @@ def test_a_written_baseline_silences_the_gate_on_the_next_run(tmp_path: Path) ->
     run = greenlint(tmp_path, ".", "--fail-on-findings")
     assert run.returncode == 0
     assert "accepted by" in run.stdout
+
+
+def test_getting_started_config_example_does_what_it_says(tmp_path: Path) -> None:
+    """The `.greenlint.toml` in docs/getting-started.md, copied verbatim, must
+    disable the rules and ignore the paths it lists — that is what a reader pastes."""
+    doc = (ROOT / "docs" / "getting-started.md").read_text()
+    (tmp_path / ".greenlint.toml").write_text(doc.split("```toml\n", 1)[1].split("```", 1)[0])
+    (tmp_path / "poll.py").write_text("import time\ntime.sleep(0.05)\nfor i in xs: out = out + [i]\n")
+    (tmp_path / "vendor").mkdir()
+    (tmp_path / "vendor" / "q.sql").write_text("SELECT * FROM t;\n")
+    (tmp_path / "q.sql").write_text("SELECT * FROM t;\n")
+    findings = json.loads(greenlint(tmp_path, ".", "--format", "json").stdout)
+    assert {(f["rule"], f["file"]) for f in findings} == {("GL005", "q.sql")}
