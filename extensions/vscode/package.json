@@ -269,6 +269,7 @@
     "watch": "node esbuild.mjs --watch",
     "typecheck": "tsc -p ./ --noEmit",
     "test": "tsc -p ./ && node --test --require ./out-tsc/test/hook.js \"out-tsc/test/*.test.js\"",
+    "coverage": "tsc -p ./ && node --test --enable-source-maps --experimental-test-coverage --test-coverage-exclude=\"src/test/**\" --test-reporter=spec --test-reporter-destination=stdout --test-reporter=lcov --test-reporter-destination=coverage/lcov.info --require ./out-tsc/test/hook.js \"out-tsc/test/*.test.js\"",
     "copy-legal": "node -e \"const f=require('node:fs');for(const n of ['LICENSE','CHANGELOG.md'])f.copyFileSync('../../'+n,n)\"",
     "vscode:prepublish": "npm run typecheck && npm test && npm run build && npm run copy-legal",
     "package": "npx --yes @vscode/vsce@3.9.2 package --no-dependencies",
