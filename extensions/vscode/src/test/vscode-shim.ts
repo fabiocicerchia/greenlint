@@ -221,7 +221,7 @@ export const vscode = {
           : (configuration[section] ?? fallback ?? {})) as T,
     }),
     asRelativePath: (uri: { fsPath: string }) => uri.fsPath.replace(/^\/proj\//, ""),
-    getWorkspaceFolder: (_uri: unknown) => undefined,
+    getWorkspaceFolder: (_uri: unknown): unknown => undefined,
     createFileSystemWatcher: (_glob: string) => ({
       onDidChange: emitter("watcher.onDidChange"),
       onDidCreate: emitter("watcher.onDidCreate"),
