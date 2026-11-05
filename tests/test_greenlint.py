@@ -1594,6 +1594,21 @@ def test_rule_anchors_are_unique() -> None:
     assert len(set(anchors)) == len(anchors)
 
 
+@pytest.mark.parametrize(
+    ("rule_id", "name"), [("GL001", "a.py"), ("GL007", "a.py"), ("GL031", "a.py"), ("GL051", "a.js")]
+)
+def test_documented_example_triggers_its_rule(tmp_path: Path, rule_id: str, name: str) -> None:
+    """A rules-reference example that no longer fires teaches the reader the
+    wrong pattern. Multi-line examples are written `a` / `b` / `c`; every line
+    after the first sits one level inside it."""
+    doc = (Path(__file__).resolve().parent.parent / "docs" / "rules.md").read_text()
+    section = doc.split(f"## {rule_id} — ", 1)[1].split("\n## ", 1)[0]
+    example = re.search(r"\*\*Example:\*\* (.+)", section)
+    assert example, f"{rule_id} has no Example line in docs/rules.md"
+    lines = re.findall(r"`([^`]+)`", example.group(1))
+    assert rule_id in scan_one(tmp_path, name, "\n    ".join(lines) + "\n")
+
+
 # --- Coverage added for C#, Kotlin, Swift and Ruby (issue #34) ---------------
 #
 # Every rule gets both halves: a true positive, and a near-miss that must NOT
