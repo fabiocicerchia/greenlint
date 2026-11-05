@@ -9,6 +9,7 @@ import { editorExcludeGlobs } from "./excludes";
 import { FindingsProvider, type Grouping, type Scope, workspaceRelative } from "./findingsView";
 import { ErrorNotifier } from "./notify";
 import { renderReport } from "./report";
+import { ReportPanel } from "./reportPanel";
 import { paintStatus } from "./status";
 import { FindingStore } from "./store";
 import type { ScanStats, ScanSummary } from "./types";
@@ -20,9 +21,6 @@ const EXTERNAL_CHANGE_DEBOUNCE_MS = 1_500;
 /** Past this many changed files, one project scan is cheaper than the batch —
  * it walks with the stat cache and only reads what actually changed. */
 const BATCH_TO_PROJECT_SCAN = 50;
-/** The report is a document with a section per finding; it is worth building
- * once the findings stop moving, not on every batch and every keystroke. */
-const REPORT_RENDER_DEBOUNCE_MS = 400;
 
 let controller: Controller | undefined;
 
@@ -57,8 +55,7 @@ class Controller implements vscode.Disposable {
   private readonly scannedVersion = new Map<string, number>();
   private readonly pendingExternal = new Set<string>();
   private externalTimer?: NodeJS.Timeout;
-  private reportPanel?: vscode.WebviewPanel;
-  private reportTimer?: NodeJS.Timeout;
+  private readonly report: ReportPanel;
   private scannableExtensions?: Set<string>;
   private lastStats?: ScanStats;
   private lastSummary?: ScanSummary;
@@ -83,6 +80,7 @@ class Controller implements vscode.Disposable {
     });
     this.status.command = "greenlint.findings.focus";
     this.status.name = "greenlint";
+    this.report = new ReportPanel(context.extensionUri, () => this.reportHtml());
   }
 
   async start(): Promise<void> {
@@ -107,8 +105,7 @@ class Controller implements vscode.Disposable {
       clearTimeout(timer);
     }
     clearTimeout(this.externalTimer);
-    clearTimeout(this.reportTimer);
-    this.reportPanel?.dispose();
+    this.report.dispose();
     vscode.Disposable.from(...this.disposables).dispose();
     this.tree.dispose();
     this.status.dispose();
@@ -141,7 +138,7 @@ class Controller implements vscode.Disposable {
         return this.scanDocument(editor.document);
       }),
       command("greenlint.scanProject", () => this.scanProject()),
-      command("greenlint.showReport", () => this.showReport()),
+      command("greenlint.showReport", () => this.report.show()),
       command("greenlint.showScopeFile", () => this.setScope("file")),
       command("greenlint.showScopeProject", () => this.setScope("project")),
       command("greenlint.setGrouping", () => this.pickGrouping()),
@@ -523,27 +520,7 @@ class Controller implements vscode.Disposable {
         ? `No findings — ${this.lastStats.files} file(s) scanned in ${this.lastStats.ms} ms.`
         : undefined;
     paintStatus(this.status, this.findings, total, this.lastStats, this.lastSummary);
-    this.refreshReport();
-  }
-
-  /**
-   * Re-render the report, at most once per quiet moment.
-   *
-   * A full re-render per batch would undo the point of streaming, and one per
-   * keystroke — which is what a repaint is, with the panel open — rebuilds a
-   * document with a section per finding for a webview that may not even be the
-   * visible tab. Both are answered by waiting for the typing to stop.
-   */
-  private refreshReport(): void {
-    clearTimeout(this.reportTimer);
-    if (!this.reportPanel?.visible || this.scanning) {
-      return;
-    }
-    this.reportTimer = setTimeout(() => {
-      if (this.reportPanel?.visible) {
-        this.reportPanel.webview.html = this.reportHtml();
-      }
-    }, REPORT_RENDER_DEBOUNCE_MS);
+    this.report.refresh(this.scanning);
   }
 
   /**
@@ -606,31 +583,6 @@ class Controller implements vscode.Disposable {
     void this.context.workspaceState.update("scope", scope);
     void vscode.commands.executeCommand("setContext", "greenlint.scope", scope);
     this.repaint();
-  }
-
-  private showReport(): void {
-    if (!this.reportPanel) {
-      this.reportPanel = vscode.window.createWebviewPanel(
-        "greenlint.report",
-        "greenlint report",
-        { viewColumn: vscode.ViewColumn.Beside, preserveFocus: true },
-        {},
-      );
-      this.reportPanel.iconPath = vscode.Uri.joinPath(this.context.extensionUri, "media", "leaf.svg");
-      this.reportPanel.onDidDispose(() => {
-        clearTimeout(this.reportTimer);
-        this.reportPanel = undefined;
-      });
-      // Nothing is rendered into a hidden webview, so it is stale by the time
-      // it comes back — this is where it catches up.
-      this.reportPanel.onDidChangeViewState((event) => {
-        if (event.webviewPanel.visible) {
-          event.webviewPanel.webview.html = this.reportHtml();
-        }
-      });
-    }
-    this.reportPanel.webview.html = this.reportHtml();
-    this.reportPanel.reveal(vscode.ViewColumn.Beside, true);
   }
 
   private reportHtml(): string {
