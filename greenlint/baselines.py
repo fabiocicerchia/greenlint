@@ -6,7 +6,7 @@ import hashlib
 import json
 from pathlib import Path
 
-from .base import Finding, Rule
+from .base import Finding, Rule, lang_key
 
 # ------------------------------------------------ ordering and baselines ---
 
@@ -24,9 +24,7 @@ def finding_sort_key(finding: Finding) -> tuple[int, str, int]:
 
 def applicable(rule: Rule, path: Path) -> bool:
     """Return True if the rule targets the file's language/extension."""
-    if path.name == "Dockerfile" and "Dockerfile" in rule["langs"]:
-        return True
-    return path.suffix in rule["langs"]
+    return lang_key(path) in rule["langs"]
 
 
 def fingerprint(finding: Finding, root: Path | str) -> str:
