@@ -12,6 +12,7 @@ import json
 import os
 import subprocess
 import sys
+import threading
 import types
 from collections.abc import Iterator
 from pathlib import Path
@@ -280,10 +281,14 @@ def test_one_warm_process_answers_over_real_pipes(tmp_path: Path) -> None:
         stdout=subprocess.PIPE,
         text=True,
     )
-    assert proc.stdin is not None and proc.stdout is not None
+    assert proc.stdin is not None
+    assert proc.stdout is not None
+    # readline() has no timeout; killing a stalled server makes it return "" and fail the test.
+    watchdog = threading.Timer(60, proc.kill)
+    watchdog.start()
     try:
         assert json.loads(proc.stdout.readline())["event"] == "ready"
-        answers = []
+        answers: list[dict[str, Any]] = []
         for request_id, request in enumerate(
             [{"op": "ping"}, {"op": "scanFile", "path": str(path)}, {"op": "scanFile", "path": str(path)}], 1
         ):
@@ -293,6 +298,7 @@ def test_one_warm_process_answers_over_real_pipes(tmp_path: Path) -> None:
         proc.stdin.close()
         assert proc.wait(timeout=60) == 0
     finally:
+        watchdog.cancel()
         proc.kill()
     ping, first, second = answers
     assert ping["rules"] == len(greenlint.RULES)

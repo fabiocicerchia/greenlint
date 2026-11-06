@@ -17,7 +17,7 @@ EXAMPLE = ROOT / "examples" / "basic"
 
 def greenlint(cwd: Path, *args: str) -> subprocess.CompletedProcess[str]:
     env = {**os.environ, "PYTHONPATH": str(ROOT)}
-    return subprocess.run(
+    return subprocess.run(  # nosec B603 - fixed argv: this interpreter and the repo's own package
         [sys.executable, "-m", "greenlint", *args],
         cwd=cwd,
         env=env,
