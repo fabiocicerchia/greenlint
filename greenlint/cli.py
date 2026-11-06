@@ -70,7 +70,7 @@ def _build_parser() -> argparse.ArgumentParser:
 def _print_rules() -> None:
     """`--list-rules`: every rule, with the language tags it targets."""
     for r in RULES:
-        print(f"{r['id']} [{r['severity']:6s}] ({', '.join(sorted(r['langs']))}): {r['message']}")  # noqa: T201 — the tool's output
+        sys.stdout.write(f"{r['id']} [{r['severity']:6s}] ({', '.join(sorted(r['langs']))}): {r['message']}\n")
 
 
 def _print_github(findings: list[Finding]) -> None:
@@ -78,21 +78,21 @@ def _print_github(findings: list[Finding]) -> None:
     # https://docs.github.com/actions/using-workflows/workflow-commands-for-github-actions#setting-a-notice-message
     level = {"high": "error", "medium": "warning", "low": "notice"}
     for f in findings:
-        print(  # noqa: T201 — the tool's output
+        sys.stdout.write(
             f"::{level[f['severity']]} file={f['file']},line={f['line']},"
-            f"title=greenlint {f['rule']}::{f['message']} — {f['suggestion']}"
+            f"title=greenlint {f['rule']}::{f['message']} — {f['suggestion']}\n"
         )
 
 
 def _print_text(findings: list[Finding], accepted: int, baseline_path: Path) -> None:
     """`--format text`: the human report, and the count a reader looks for."""
     for f in findings:
-        print(f"{f['file']}:{f['line']}: [{f['rule']}/{f['severity']}] {f['message']}")  # noqa: T201 — the tool's output
-        print(f"    ↳ {f['suggestion']}")  # noqa: T201 — the tool's output
+        sys.stdout.write(f"{f['file']}:{f['line']}: [{f['rule']}/{f['severity']}] {f['message']}\n")
+        sys.stdout.write(f"    ↳ {f['suggestion']}\n")
         if f["co2e_estimate"]:
-            print(f"    ~ {f['co2e_estimate']}")  # noqa: T201 — the tool's output
+            sys.stdout.write(f"    ~ {f['co2e_estimate']}\n")
     accepted_note = f" ({accepted} accepted by {baseline_path})" if accepted else ""
-    print(f"\ngreenlint: {len(findings)} finding(s){accepted_note}")  # noqa: T201 — the tool's output
+    sys.stdout.write(f"\ngreenlint: {len(findings)} finding(s){accepted_note}\n")
 
 
 def _resolve_baseline(explicit: str | None) -> Path:
@@ -123,7 +123,7 @@ def main(argv: list[str] | None = None) -> int:
     if args.write_baseline:
         path = Path(args.write_baseline)
         count = write_baseline(path, findings, path.parent)
-        print(f"greenlint: {count} finding(s) accepted in {path}")  # noqa: T201 — the tool's output
+        sys.stdout.write(f"greenlint: {count} finding(s) accepted in {path}\n")
         return 0
 
     baseline_path = _resolve_baseline(args.baseline)
