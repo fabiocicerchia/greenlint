@@ -36,7 +36,7 @@ describe("greenlint's severity order", function()
   it('is the order this plugin sorts by', function()
     local theirs = greenlint_severity_order()
     if not theirs then
-      pending('no python3 or no greenlint.py to compare against')
+      pending('no python3 or no greenlint package to compare against')
       return
     end
     -- Same words, and the same relative order -- both, since comparing the two

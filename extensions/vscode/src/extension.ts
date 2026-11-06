@@ -5,10 +5,12 @@ import * as vscode from "vscode";
 import { readSettings, requiresRestart } from "./config";
 import { GreenlintHoverProvider, SOURCE, toDiagnostics } from "./diagnostics";
 import { ScanServer } from "./engine";
-import { ScanServerError } from "./protocol";
 import { editorExcludeGlobs } from "./excludes";
-import { countBySeverity, FindingsProvider, type Grouping, type Scope, workspaceRelative } from "./findingsView";
+import { FindingsProvider, type Grouping, type Scope, workspaceRelative } from "./findingsView";
+import { ErrorNotifier } from "./notify";
 import { renderReport } from "./report";
+import { ReportPanel } from "./reportPanel";
+import { paintStatus } from "./status";
 import { FindingStore } from "./store";
 import type { ScanStats, ScanSummary } from "./types";
 
@@ -19,9 +21,6 @@ const EXTERNAL_CHANGE_DEBOUNCE_MS = 1_500;
 /** Past this many changed files, one project scan is cheaper than the batch —
  * it walks with the stat cache and only reads what actually changed. */
 const BATCH_TO_PROJECT_SCAN = 50;
-/** The report is a document with a section per finding; it is worth building
- * once the findings stop moving, not on every batch and every keystroke. */
-const REPORT_RENDER_DEBOUNCE_MS = 400;
 
 let controller: Controller | undefined;
 
@@ -39,6 +38,7 @@ export function deactivate(): void {
 class Controller implements vscode.Disposable {
   private settings = readSettings();
   private readonly log = vscode.window.createOutputChannel("greenlint");
+  private readonly errors = new ErrorNotifier(this.log);
   private readonly diagnostics = vscode.languages.createDiagnosticCollection(SOURCE);
   private readonly store = new FindingStore();
   private readonly server: ScanServer;
@@ -55,12 +55,10 @@ class Controller implements vscode.Disposable {
   private readonly scannedVersion = new Map<string, number>();
   private readonly pendingExternal = new Set<string>();
   private externalTimer?: NodeJS.Timeout;
-  private reportPanel?: vscode.WebviewPanel;
-  private reportTimer?: NodeJS.Timeout;
+  private readonly report: ReportPanel;
   private scannableExtensions?: Set<string>;
   private lastStats?: ScanStats;
   private lastSummary?: ScanSummary;
-  private lastErrorShown?: string;
   private appliedExcludes = "";
   private scanning = false;
 
@@ -82,6 +80,7 @@ class Controller implements vscode.Disposable {
     });
     this.status.command = "greenlint.findings.focus";
     this.status.name = "greenlint";
+    this.report = new ReportPanel(context.extensionUri, () => this.reportHtml());
   }
 
   async start(): Promise<void> {
@@ -106,8 +105,7 @@ class Controller implements vscode.Disposable {
       clearTimeout(timer);
     }
     clearTimeout(this.externalTimer);
-    clearTimeout(this.reportTimer);
-    this.reportPanel?.dispose();
+    this.report.dispose();
     vscode.Disposable.from(...this.disposables).dispose();
     this.tree.dispose();
     this.status.dispose();
@@ -140,7 +138,7 @@ class Controller implements vscode.Disposable {
         return this.scanDocument(editor.document);
       }),
       command("greenlint.scanProject", () => this.scanProject()),
-      command("greenlint.showReport", () => this.showReport()),
+      command("greenlint.showReport", () => this.report.show()),
       command("greenlint.showScopeFile", () => this.setScope("file")),
       command("greenlint.showScopeProject", () => this.setScope("project")),
       command("greenlint.setGrouping", () => this.pickGrouping()),
@@ -290,7 +288,7 @@ class Controller implements vscode.Disposable {
       try {
         this.store.setFile(fsPath, await this.server.scanFile(vscode.Uri.file(fsPath)));
       } catch (error) {
-        return this.reportError(error);
+        return this.errors.report(error);
       }
     }
   }
@@ -334,7 +332,7 @@ class Controller implements vscode.Disposable {
         this.store.setFile(document.uri.fsPath, findings);
       }
     } catch (error) {
-      this.reportError(error);
+      this.errors.report(error);
     }
   }
 
@@ -394,7 +392,7 @@ class Controller implements vscode.Disposable {
         },
       );
     } catch (error) {
-      this.reportError(error);
+      this.errors.report(error);
     } finally {
       this.scanning = false;
       this.repaint();
@@ -521,28 +519,8 @@ class Controller implements vscode.Disposable {
       total === 0 && this.lastStats
         ? `No findings — ${this.lastStats.files} file(s) scanned in ${this.lastStats.ms} ms.`
         : undefined;
-    this.updateStatus(total);
-    this.refreshReport();
-  }
-
-  /**
-   * Re-render the report, at most once per quiet moment.
-   *
-   * A full re-render per batch would undo the point of streaming, and one per
-   * keystroke — which is what a repaint is, with the panel open — rebuilds a
-   * document with a section per finding for a webview that may not even be the
-   * visible tab. Both are answered by waiting for the typing to stop.
-   */
-  private refreshReport(): void {
-    clearTimeout(this.reportTimer);
-    if (!this.reportPanel?.visible || this.scanning) {
-      return;
-    }
-    this.reportTimer = setTimeout(() => {
-      if (this.reportPanel?.visible) {
-        this.reportPanel.webview.html = this.reportHtml();
-      }
-    }, REPORT_RENDER_DEBOUNCE_MS);
+    paintStatus(this.status, this.findings, total, this.lastStats, this.lastSummary);
+    this.report.refresh(this.scanning);
   }
 
   /**
@@ -575,7 +553,7 @@ class Controller implements vscode.Disposable {
       this.scannedVersion.clear();
       await this.scanProject();
     } catch (error) {
-      this.reportError(error);
+      this.errors.report(error);
     }
   }
 
@@ -595,42 +573,6 @@ class Controller implements vscode.Disposable {
     }
   }
 
-  /**
-   * The status bar line, and behind it the end-of-scan aggregate.
-   *
-   * The counts in the bar follow the panel's scope; the tooltip reports the
-   * whole project as the last scan computed it, so "3 findings in this file"
-   * and "412 across the project" are both one glance away.
-   */
-  private updateStatus(total: number): void {
-    const counts = countBySeverity(this.findings.findings());
-    this.status.text =
-      total === 0
-        ? this.lastStats
-          ? "$(check) greenlint"
-          : "$(circle-large-outline) greenlint"
-        : `$(flame) ${counts.high} $(warning) ${counts.medium} $(info) ${counts.low}`;
-    const tooltip = new vscode.MarkdownString(undefined, true);
-    tooltip.appendMarkdown(`**greenlint** — ${this.findings.describeScope()}`);
-    if (this.lastSummary) {
-      const { bySeverity: by, total: all, files } = this.lastSummary;
-      tooltip.appendMarkdown(
-        `\n\nWhole project: ${all} finding${all === 1 ? "" : "s"} in ${files} file${
-          files === 1 ? "" : "s"
-        } — $(flame) ${by.high} · $(warning) ${by.medium} · $(info) ${by.low}`,
-      );
-    }
-    if (this.lastStats) {
-      tooltip.appendMarkdown(
-        `\n\nLast scan: ${this.lastStats.files} files in ${this.lastStats.ms} ms ` +
-          `(${this.lastStats.scanned} scanned, ` +
-          `${this.lastStats.reusedFromStat + this.lastStats.reusedFromHash} cached)`,
-      );
-    }
-    this.status.tooltip = tooltip;
-    this.status.show();
-  }
-
   private setExpanded(expanded: boolean): void {
     this.findings.setExpanded(expanded);
     void vscode.commands.executeCommand("setContext", "greenlint.expanded", expanded);
@@ -643,31 +585,6 @@ class Controller implements vscode.Disposable {
     this.repaint();
   }
 
-  private showReport(): void {
-    if (!this.reportPanel) {
-      this.reportPanel = vscode.window.createWebviewPanel(
-        "greenlint.report",
-        "greenlint report",
-        { viewColumn: vscode.ViewColumn.Beside, preserveFocus: true },
-        {},
-      );
-      this.reportPanel.iconPath = vscode.Uri.joinPath(this.context.extensionUri, "media", "leaf.svg");
-      this.reportPanel.onDidDispose(() => {
-        clearTimeout(this.reportTimer);
-        this.reportPanel = undefined;
-      });
-      // Nothing is rendered into a hidden webview, so it is stale by the time
-      // it comes back — this is where it catches up.
-      this.reportPanel.onDidChangeViewState((event) => {
-        if (event.webviewPanel.visible) {
-          event.webviewPanel.webview.html = this.reportHtml();
-        }
-      });
-    }
-    this.reportPanel.webview.html = this.reportHtml();
-    this.reportPanel.reveal(vscode.ViewColumn.Beside, true);
-  }
-
   private reportHtml(): string {
     return renderReport(this.findings.findings(), {
       scopeLabel: this.findings.scope === "project" ? "whole project" : this.findings.describeScope(),
@@ -676,60 +593,5 @@ class Controller implements vscode.Disposable {
       stats: this.findings.scope === "project" ? this.lastStats : undefined,
       relative: workspaceRelative,
     });
-  }
-
-  private reportError(error: unknown): void {
-    const message = error instanceof Error ? error.message : String(error);
-    this.log.appendLine(`[greenlint] ${message}`);
-    if (this.lastErrorShown === message) {
-      return;
-    }
-    this.lastErrorShown = message;
-    // greenlint missing is the one failure with a one-line fix, so the toast
-    // carries the command itself — a link to the README is one click and one
-    // page of reading away from the same sentence.
-    const install = error instanceof ScanServerError ? error.install : undefined;
-    const headline = message.split("\n")[0];
-    const text = install ? `greenlint: ${headline}\n\nInstall it with: ${install}` : `greenlint: ${headline}`;
-    const actions = install ? ["Install greenlint", "Copy Command", "Show Log"] : ["Show Log"];
-    void vscode.window.showErrorMessage(text, ...actions).then((choice) => {
-      if (choice === "Show Log") {
-        this.log.show(true);
-      } else if (choice === "Install greenlint" && install) {
-        this.runInstall(install);
-      } else if (choice === "Copy Command" && install) {
-        void vscode.env.clipboard
-          .writeText(install)
-          .then(() => vscode.window.showInformationMessage(`Copied: ${install}`));
-      }
-    });
-  }
-
-  /**
-   * Run the install in a terminal the user can see.
-   *
-   * Deliberately not a hidden `child_process`: this installs software, and it
-   * can fail in ways only the output explains — no pipx on PATH, an externally
-   * managed interpreter, a proxy. The terminal is both the progress bar and the
-   * error message. What it cannot do is tell us when it finished, hence the
-   * button rather than an automatic restart.
-   */
-  private runInstall(command: string): void {
-    const terminal = vscode.window.createTerminal("greenlint install");
-    terminal.show();
-    terminal.sendText(command);
-    void vscode.window
-      .showInformationMessage(
-        "Installing greenlint. When the terminal is done, restart the scan server.",
-        "Restart Scan Server",
-      )
-      .then((choice) => {
-        if (choice === "Restart Scan Server") {
-          // The failure that got us here is fixed or not; either way the next
-          // start reports for itself, so the guard must not swallow it.
-          this.lastErrorShown = undefined;
-          void vscode.commands.executeCommand("greenlint.restartServer");
-        }
-      });
   }
 }

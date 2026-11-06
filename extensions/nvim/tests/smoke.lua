@@ -34,8 +34,12 @@ vim.fn.writefile({ 'SELECT * FROM users;' }, project .. '/src/query.sql')
 vim.fn.writefile({ 'clean = 1' }, project .. '/src/ok.py')
 vim.uv.chdir(project)
 
+-- The checkout, uninstalled: `python3 -m greenlint` with the repo on the path.
+if not vim.env.GREENLINT_CMD then
+  vim.env.PYTHONPATH = repo
+end
 local cmd = vim.env.GREENLINT_CMD and vim.split(vim.env.GREENLINT_CMD, ' ')
-  or { 'python3', repo .. '/greenlint.py' }
+  or { 'python3', '-m', 'greenlint' }
 
 print('greenlint.nvim smoke test')
 print('  cmd:     ' .. table.concat(cmd, ' '))

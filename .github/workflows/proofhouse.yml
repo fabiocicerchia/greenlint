@@ -54,6 +54,8 @@ jobs:
       - name: Run gandalf
         # A red verdict is the run most worth recording, so it must not stop the
         # POST below. gandalf-pr-review.yml is where findings gate a change.
+        # A crash that writes no report still fails the job, in the next step.
+        # Drop this once gandalf can exit 0 on a red verdict.
         continue-on-error: true
         env:
           IMAGE: ghcr.io/fabiocicerchia/gandalf-tools:0.14.0
@@ -66,11 +68,9 @@ jobs:
             sh -c 'git config --global --add safe.directory "*" \
               && PYTHONPATH=/gandalf/src python -m gandalf --no-llm --no-html --out-dir reports'
 
-      - name: Post to proofhouse
-        # Telemetry. A dashboard being down is not this repository's problem.
-        continue-on-error: true
-        env:
-          TOKEN: ${{ secrets.PROOFHOUSE_TOKEN }}
+      # Not covered by the escape hatches either side: no report means gandalf
+      # crashed rather than scored, and that should turn the run red.
+      - name: Pack the report
         run: |
           set -euo pipefail
           # Newest report without parsing `ls` output, which shellcheck refuses.
@@ -78,6 +78,16 @@ jobs:
                     | sort -rn | head -1 | cut -d' ' -f2-)"
           echo "posting ${report} ($(wc -c < "${report}") bytes)"
           gzip -c "${report}" > report.json.gz
+
+      - name: Post to proofhouse
+        # Telemetry. A dashboard being down, or PROOFHOUSE_TOKEN unset, is not
+        # this repository's problem. Drop this once app.proofhouse.cloud has an
+        # uptime commitment and the secret is set.
+        continue-on-error: true
+        env:
+          TOKEN: ${{ secrets.PROOFHOUSE_TOKEN }}
+        run: |
+          set -euo pipefail
           curl --fail-with-body --silent --show-error \
             --retry 3 --retry-connrefused --max-time 120 \
             -X POST https://app.proofhouse.cloud/v1/runs \
