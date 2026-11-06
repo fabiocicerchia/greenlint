@@ -306,14 +306,15 @@ a new rule has to show.
 
 - **Languages:** `.py` · **Severity:** low · **Mechanism:** AST
 - **Triggers on:** a loop containing a handler whose whole body is `pass` or
-  `continue` — the exception is expected to fire on ordinary input, so the
+  `continue`, guarding a single lookup (`d[k]`) or numeric conversion
+  (`int(s)`) — the exception is expected to fire on ordinary input, so the
   raise and unwind cost is paid every time round.
 - **Does not trigger on:** a `try` block anywhere inside a loop. Since Python
   3.11 a `try` that does not raise costs nothing at runtime, so the older,
   broader form of this rule measured something that had stopped existing — and
   it fired on every retry loop, per-item error collector and
   `except OSError: break` read loop, all of which need the handler where it is.
-- **Example:** `for x in xs:` / `try: parse(x)` / `except ValueError: continue`
+- **Example:** `for x in xs:` / `try: n = int(x)` / `except ValueError: continue`
 - **Fix:** test the condition instead of catching it.
 
 ## GL032 — heap allocation inside a loop

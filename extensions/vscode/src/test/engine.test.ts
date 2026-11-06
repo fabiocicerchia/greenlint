@@ -250,6 +250,43 @@ test("a project scan streams its findings and ends with the totals", async () =>
   }
 });
 
+test("a written baseline silences what it accepted on disk, and only that", async () => {
+  // writeBaseline and scanFile meet on the real filesystem: the server writes
+  // `.greenlint-baseline.json` into the root, and the next scanFile under that
+  // root must pick it up by its own stat, with nothing told to the client.
+  const root = mkdtempSync(path.join(tmpdir(), "greenlint-baseline-"));
+  const file = path.join(root, "busy.py");
+  writeFileSync(file, "while True:\n    pass\n");
+  const folder = { uri: { fsPath: root, scheme: "file" } } as unknown as vscode.WorkspaceFolder;
+  const getWorkspaceFolder = shim.workspace.getWorkspaceFolder;
+  shim.workspace.getWorkspaceFolder = () => folder;
+  const log = recordingLog();
+  const server = new ScanServer(serverScript, realSettings(), log.channel);
+  try {
+    const uri = { fsPath: file, scheme: "file" } as unknown as vscode.Uri;
+    assert.deepEqual(
+      (await server.scanFile(uri)).map((f) => f.rule),
+      ["GL001"],
+    );
+    const written = await server.writeBaseline(folder);
+    assert.equal(written.path, path.join(root, ".greenlint-baseline.json"));
+    assert.equal(written.accepted, 1);
+    assert.deepEqual(await server.scanFile(uri), []);
+    // A finding the baseline never saw still comes through. A new file, not a
+    // second loop in this one: the baseline is keyed per file and rule.
+    const fresh = path.join(root, "fresh.py");
+    writeFileSync(fresh, "while True:\n    pass\n");
+    assert.deepEqual(
+      (await server.scanFile({ fsPath: fresh, scheme: "file" } as unknown as vscode.Uri)).map((f) => f.rule),
+      ["GL001"],
+    );
+  } finally {
+    server.dispose();
+    shim.workspace.getWorkspaceFolder = getWorkspaceFolder;
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test("an unknown op comes back as a rejection, not a hang", async () => {
   const log = recordingLog();
   const server = new ScanServer(serverScript, realSettings(), log.channel);

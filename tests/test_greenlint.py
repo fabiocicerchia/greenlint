@@ -166,6 +166,17 @@ def test_apt_and_pip_cleanup_flags_not_flagged(tmp_path: Path) -> None:
     assert "GL010" not in ids
 
 
+def test_detects_very_large_instance_type(tmp_path: Path) -> None:
+    write(tmp_path, "main.tf", 'resource "aws_instance" "db" {\n  instance_type = "m5.16xlarge"\n}\n')
+    write(tmp_path, "main.tofu", 'instance_type = "c6.24xlarge"\n')
+    assert [f["rule"] for f in scan([str(tmp_path)])].count("GL008") == 2
+
+
+def test_modest_instance_type_not_flagged(tmp_path: Path) -> None:
+    write(tmp_path, "main.tf", 'instance_type = "m5.large"\ninstance_type = "m5.4xlarge"\n')
+    assert "GL008" not in rule_ids(scan([str(tmp_path)]))
+
+
 def test_detects_img_missing_lazy_loading(tmp_path: Path) -> None:
     write(tmp_path, "page.html", '<img src="hero.png">\n')
     assert "GL011" in rule_ids(scan([str(tmp_path)]))
@@ -1581,6 +1592,21 @@ def test_every_rule_has_a_matching_heading_in_the_docs() -> None:
 def test_rule_anchors_are_unique() -> None:
     anchors = [_docs_anchor(r) for r in greenlint.RULES]
     assert len(set(anchors)) == len(anchors)
+
+
+@pytest.mark.parametrize(
+    ("rule_id", "name"), [("GL001", "a.py"), ("GL007", "a.py"), ("GL031", "a.py"), ("GL051", "a.js")]
+)
+def test_documented_example_triggers_its_rule(tmp_path: Path, rule_id: str, name: str) -> None:
+    """A rules-reference example that no longer fires teaches the reader the
+    wrong pattern. Multi-line examples are written `a` / `b` / `c`; every line
+    after the first sits one level inside it."""
+    doc = (Path(__file__).resolve().parent.parent / "docs" / "rules.md").read_text()
+    section = doc.split(f"## {rule_id} — ", 1)[1].split("\n## ", 1)[0]
+    example = re.search(r"\*\*Example:\*\* (.+)", section)
+    assert example, f"{rule_id} has no Example line in docs/rules.md"
+    lines = re.findall(r"`([^`]+)`", example.group(1))
+    assert rule_id in scan_one(tmp_path, name, "\n    ".join(lines) + "\n")
 
 
 # --- Coverage added for C#, Kotlin, Swift and Ruby (issue #34) ---------------

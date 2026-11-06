@@ -12,6 +12,7 @@ import json
 import os
 import subprocess
 import sys
+import threading
 import types
 from collections.abc import Iterator
 from pathlib import Path
@@ -264,6 +265,45 @@ def test_an_old_greenlint_refuses_to_start_and_says_why(tmp_path: Path) -> None:
     assert "too old" in payload["error"]
     assert "iter_files" in payload["error"]
     assert "pipx install --force" in payload["error"]
+
+
+def test_one_warm_process_answers_over_real_pipes(tmp_path: Path) -> None:
+    """docs/editors.md promises one warm process per session, not one per scan.
+    Every other test here drives `Server` in-process with a StringIO; this one
+    starts it the way the extension does and talks newline-delimited JSON over
+    its real stdin/stdout, so the reader thread, the ready event and the
+    stdout redirect are all on the path."""
+    path = write(tmp_path, "q.sql", "SELECT * FROM t;\n")
+    checkout = Path(greenlint.__file__).resolve().parent.parent
+    proc = subprocess.Popen(  # nosec B603 - fixed argv: this interpreter and the repo's own server
+        [sys.executable, str(SERVER_PATH), "--greenlint", str(checkout)],
+        stdin=subprocess.PIPE,
+        stdout=subprocess.PIPE,
+        text=True,
+    )
+    assert proc.stdin is not None
+    assert proc.stdout is not None
+    # readline() has no timeout; killing a stalled server makes it return "" and fail the test.
+    watchdog = threading.Timer(60, proc.kill)
+    watchdog.start()
+    try:
+        assert json.loads(proc.stdout.readline())["event"] == "ready"
+        answers: list[dict[str, Any]] = []
+        for request_id, request in enumerate(
+            [{"op": "ping"}, {"op": "scanFile", "path": str(path)}, {"op": "scanFile", "path": str(path)}], 1
+        ):
+            proc.stdin.write(json.dumps({"id": request_id, **request}) + "\n")
+            proc.stdin.flush()
+            answers.append(json.loads(proc.stdout.readline()))
+        proc.stdin.close()
+        assert proc.wait(timeout=60) == 0
+    finally:
+        watchdog.cancel()
+        proc.kill()
+    ping, first, second = answers
+    assert ping["rules"] == len(greenlint.RULES)
+    assert [f["rule"] for f in first["findings"]] == ["GL005"]
+    assert (first["source"], second["source"]) == ("scan", "stat")
 
 
 def responses(server: "Server") -> list[dict[str, Any]]:
