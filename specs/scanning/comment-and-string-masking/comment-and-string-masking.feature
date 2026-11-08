@@ -19,7 +19,7 @@ Feature: Ignoring prose, comments and quoted examples when scanning
       | a.go       | /* SELECT * FROM users */ spanning three lines | GL005 |
       | d.yml      | # not a cron: * * * * * schedule               | GL003 |
       | Dockerfile | # FROM ubuntu:22.04                            | GL006 |
-      | page.html  | <!-- <img src="old.gif"> -->                   | GL017 |
+      | e.js       | // setInterval(poll, 10)                       | GL002 |
 
   @id:scanning.comment-and-string-masking.002 @rule:scanning.masking.python-docstrings-never-produce-findings @verified @source:greenlint/comments.py#_blank_python_docstrings @test:tests/test_greenlint.py#test_pattern_in_a_docstring_is_not_a_finding
   Scenario: A wasteful pattern described in a Python docstring is not reported

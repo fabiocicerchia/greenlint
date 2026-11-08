@@ -3,7 +3,7 @@ Feature: Troubleshooting the Neovim plugin
   Tells a developer whether greenlint can run in their editor and what the plugin has been doing, so setup problems can be fixed without guesswork.
 
   Background:
-    Given Given the greenlint plugin is installed in Neovim
+    Given the greenlint plugin is installed in Neovim
 
   @id:neovim-integration.health-and-logging.001 @rule:nvim.health.command-runs @verified @source:extensions/nvim/lua/greenlint/health.lua#check_command @test:extensions/nvim/tests/health_spec.lua#errors, with the install advice, when the command is not executable @test:extensions/nvim/tests/health_spec.lua#errors with the exit code when the command runs and fails @test:extensions/nvim/tests/health_spec.lua#warns when the command runs but is not greenlint @test:extensions/nvim/tests/health_spec.lua#counts the rules the command reports, first line included
   Scenario Outline: The health check reports whether the configured command is a working greenlint
@@ -33,6 +33,5 @@ Feature: Troubleshooting the Neovim plugin
   Scenario: The log shows the plugin's recent activity, timestamped and bounded
     Given the plugin has run scans this session
     When the developer runs :GreenlintLog
-    Then a window lists one "[HH:MM:SS]" line per event, including each command run
+    Then a window lists one "[HH:MM:SS]" line per event, including each greenlint command line the plugin ran
     And only the latest 500 lines are kept
-    And before anything happened it reads "nothing logged yet"

@@ -47,7 +47,7 @@ Feature: Accepting existing findings with a baseline
   @id:configuration.baselines.006 @rule:config.baselines.shared-across-path-styles @verified @source:greenlint/baselines.py#fingerprint @test:tests/test_greenlint.py#test_fingerprint_is_the_same_for_absolute_and_relative_paths
   Scenario: The same baseline is honoured whether files are reported by relative or absolute path
     Given a baseline written from the project root that accepts the SELECT * finding in src/q.sql
-    When the editor scans /home/dev/proj/src/q.sql by its absolute path
+    When the editor scans /home/dev/proj/src/q.sql by its absolute path, running greenlint from the project root
     Then the SELECT * finding in src/q.sql is not reported
 
   @id:configuration.baselines.007 @rule:config.baselines.named-baseline-must-exist @verified @source:greenlint/cli.py#_resolve_baseline @test:tests/test_greenlint.py#test_cli_rejects_a_baseline_path_that_is_not_there
@@ -65,7 +65,7 @@ Feature: Accepting existing findings with a baseline
     And no accepted count is shown in the summary
 
     Examples:
-      | state                               |
-      | is absent                           |
-      | contains text that is not JSON      |
-      | is JSON without a fingerprints list |
+      | state                                        |
+      | is absent                                    |
+      | contains text that is not JSON               |
+      | is a JSON object without a fingerprints list |

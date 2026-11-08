@@ -8,6 +8,7 @@ Feature: Installing greenlint from the failure notification
 
   @id:vscode.scan-engine.install-and-compatibility.004 @rule:engine.install.notification-offers-install-command @verified @source:extensions/vscode/src/notify.ts#ErrorNotifier @test:extensions/vscode/src/test/engine.test.ts#a workspace greenlint checkout is tried before the installed package
   Scenario Outline: When greenlint cannot be started the notification carries the install command
+    Given the interpreters tried did not all fail for the same reason
     When the user is notified that the scan server could not start
     Then the notification reads "greenlint: <headline>" followed by "Install it with: pipx install git+https://github.com/fabiocicerchia/greenlint"
     And the notification offers "Install greenlint", "Copy Command" and "Show Log"

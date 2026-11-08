@@ -33,7 +33,7 @@ Feature: Flagging full-history clones in CI
     Given a workflow with a "secrets" job that clones with fetch-depth: 0 and runs gitleaks
     And a "build" job in the same workflow that clones with fetch-depth: 0 and runs make build
     When the developer scans the project
-    Then the scan reports GL004 only on the build job's fetch-depth line (line 13)
+    Then the scan reports GL004 only on the build job's fetch-depth line
 
   @id:infrastructure-checks.ci-pipelines.004 @rule:infra.ci.commented-setting-ignored @verified @source:greenlint/infra.py#_fetch_depth_findings @test:tests/test_greenlint.py#test_full_history_clone_in_a_comment_not_flagged
   Scenario: A full-history setting that only appears in a comment is not flagged

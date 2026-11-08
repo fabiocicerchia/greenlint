@@ -34,15 +34,15 @@ Feature: Running a scan from the command line
 
   @id:developer-tooling.command-line-entry.004 @rule:reporting.github.workflow-annotations-by-severity @verified @source:greenlint/cli.py#_print_github @test:tests/test_e2e.py#test_json_output_is_machine_readable
   Scenario Outline: GitHub output annotates each finding at a level matching its severity
-    Given the tree has a <severity> finding from rule <rule> in q.sql on line 1
+    Given the tree has a <severity> finding from rule <rule> in <file> on line 1
     When the operator scans the tree with --format github
-    Then the output has a line "::<level> file=q.sql,line=1,title=greenlint <rule>::<message> — <suggestion>"
+    Then the output has a line "::<level> file=<file>,line=1,title=greenlint <rule>::<message> — <suggestion>"
 
     Examples:
-      | severity | rule  | level   |
-      | high     | GL001 | error   |
-      | medium   | GL005 | warning |
-      | low      | GL012 | notice  |
+      | severity | rule  | file    | level   |
+      | high     | GL003 | ci.yml  | error   |
+      | medium   | GL005 | q.sql   | warning |
+      | low      | GL002 | poll.py | notice  |
 
   @id:developer-tooling.command-line-entry.005 @rule:configuration.path-exclusion.exclude-flag-adds-to-config @verified @source:greenlint/cli.py#main @test:tests/test_greenlint.py#test_cli_exclude_is_repeatable_and_adds_to_the_config @test:tests/test_greenlint.py#test_cli_exclude_flag_skips_matching_paths
   Scenario: Paths excluded on the command line are skipped on top of the project's ignore list
@@ -56,6 +56,6 @@ Feature: Running a scan from the command line
   Scenario: Listing the rules prints the catalogue and scans nothing
     Given greenlint ships its rule catalogue
     When the operator runs greenlint with --list-rules
-    Then each rule is printed as "<id> [<severity>] (<languages>): <message>", for example "GL005 [medium] (sql): ..."
+    Then each rule is printed as "<id> [<severity>] (<languages>): <message>", with the severity padded to six characters and the language tags sorted and comma-separated, for example "GL001 [medium] (.py): busy loop without sleep"
     And no files are scanned
     And the command exits with code 0

@@ -21,7 +21,7 @@ Feature: Finding the Python and greenlint to scan with
 
   @id:vscode.scan-engine.interpreter-discovery.002 @rule:engine.discovery.workspace-checkout-before-installed-release @inferred @source:extensions/vscode/src/interpreters.ts#workspaceGreenlintModules
   Scenario Outline: A greenlint checkout in the workspace is tried before the installed release
-    Given no greenlint path or Python interpreter is configured
+    Given no greenlint path or Python interpreter is configured and the editor runs on Linux or macOS
     And a workspace root "/home/dev/greenlint" contains <layout>
     And greenlint is also installed as a package
     When the extension looks for greenlint
@@ -36,7 +36,7 @@ Feature: Finding the Python and greenlint to scan with
   @id:vscode.scan-engine.interpreter-discovery.003 @rule:engine.discovery.default-interpreters-per-platform @inferred @source:extensions/vscode/src/interpreters.ts#candidates @questionable
   Scenario Outline: Without a configured interpreter the platform's usual Python commands are tried in order
     Given no greenlint path or Python interpreter is configured
-    And no greenlint checkout is in the workspace and no greenlint command is on PATH
+    And no greenlint checkout is in the workspace, no greenlint command is on PATH and there is no pipx greenlint venv
     And the editor runs on <platform>
     When the extension looks for greenlint
     Then the output log lists: <tried>
@@ -64,6 +64,7 @@ Feature: Finding the Python and greenlint to scan with
     Given no greenlint path or Python interpreter is configured
     And the greenlint command on PATH is a pyenv shim starting with "#!/usr/bin/env bash"
     And greenlint has no pipx venv
+    And no greenlint checkout is in the workspace
     When the extension looks for greenlint
     Then the output log lists only python3 and python with the installed package
     And no bash or env entry appears among the candidates

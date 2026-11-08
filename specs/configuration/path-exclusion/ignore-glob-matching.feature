@@ -3,7 +3,7 @@ Feature: Matching ignore globs against scanned paths
   Operators who exclude paths in .greenlint.toml or with --exclude get those paths left out however the scan was invoked, so ignore lists behave as written.
 
   @id:configuration.path-exclusion.001 @rule:configuration.exclusion.globs-match-relative-scan-paths @verified @source:greenlint/discovery.py#_matches_any @test:tests/test_greenlint.py#test_relative_ignore_glob_applies @test:tests/test_greenlint.py#test_config_ignores_path @test:tests/test_greenlint.py#test_multiline_ignore_array_is_parsed
-  Scenario Outline: An anchored ignore glob also excludes files when the project is scanned by a relative path
+  Scenario Outline: An anchored ignore glob excludes files whether the project is scanned by a relative or an absolute path
     Given a project with tests/q.sql containing SELECT * FROM users
     And its .greenlint.toml sets ignore = ["*/tests/*"]
     When the operator runs greenlint <target> from the project directory

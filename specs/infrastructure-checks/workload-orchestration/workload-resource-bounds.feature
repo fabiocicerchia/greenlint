@@ -1,6 +1,6 @@
 @domain:infrastructure-checks @area:workload-orchestration @from:greenlint/infra
 Feature: Flagging unbounded and non-elastic workloads
-  Flags Kubernetes and docker-compose workloads that have no resource bounds or cannot scale down, so operators right-size hosts and stop idling at peak capacity.
+  Flags Kubernetes and docker-compose workloads that have no resource bounds or cannot scale down, so developers right-size hosts and stop idling at peak capacity.
 
   Background:
     Given a project containing YAML manifests

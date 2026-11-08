@@ -10,7 +10,7 @@ Feature: Cancelling a workspace scan
     Given a workspace scan is <state>
     When the developer cancels that scan
     Then the scan ends marked as cancelled
-    And the scan reports no findings
+    And the scan's final result carries no findings
 
     Examples:
       | state                                |

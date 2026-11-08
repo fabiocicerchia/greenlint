@@ -10,7 +10,7 @@ Feature: Accepting current findings as a baseline
     Given the folder has 1 finding, a busy loop in busy.py
     When the developer writes a baseline for the folder
     Then a file named .greenlint-baseline.json is written at the root of the folder
-    And the developer is told that 1 finding was accepted and where the baseline was written
+    And the greenlint output channel logs that 1 finding was accepted and where the baseline was written
 
   @id:vscode.configuration.baselines.002 @rule:baselines.writing.records-files-on-disk @inferred @source:extensions/vscode/server/server_ops.py#op_write_baseline
   Scenario: The baseline records the files as saved on disk, not what the editor is showing
@@ -21,9 +21,9 @@ Feature: Accepting current findings as a baseline
     And the busy loop in the unsaved edit is still reported
 
   @id:vscode.configuration.baselines.003 @rule:baselines.writing.ignores-max-file-size-setting @inferred @source:extensions/vscode/server/server_ops.py#op_write_baseline @questionable
-  Scenario: A baseline never accepts findings in files over 1 MB, whatever the file size limit is set to
-    Given the developer has raised the maximum file size to scan to 5 MB
+  Scenario: A baseline skips files over 1 MB that the scan engine has not already scanned, whatever the file size limit is set to
+    Given the developer has raised greenlint.maxFileBytes to 5000000
     And the folder contains a 2 MB file big.sql with a SELECT *
+    And the scan engine has not scanned big.sql since it started
     When the developer writes a baseline for the folder
     Then the SELECT * in big.sql is not accepted
-    And the SELECT * in big.sql is still reported by the next workspace scan

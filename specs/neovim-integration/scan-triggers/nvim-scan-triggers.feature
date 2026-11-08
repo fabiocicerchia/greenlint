@@ -3,7 +3,7 @@ Feature: Scanning files as you edit
   Keeps a developer's findings current without asking, by scanning on the editor events their chosen run mode allows.
 
   Background:
-    Given Given the greenlint plugin is set up in a project
+    Given the greenlint plugin is set up in a project
 
   @id:neovim-integration.scan-triggers.001 @rule:nvim.triggers.run-mode-decides-automatic-scans @verified @source:extensions/nvim/lua/greenlint/triggers.lua#on_open @test:extensions/nvim/tests/triggers_spec.lua#scans a file nothing is known about @test:extensions/nvim/tests/triggers_spec.lua#leaves an unknown file alone when scanning is manual
   Scenario Outline: The run mode decides whether saving or opening a file scans it
@@ -56,13 +56,12 @@ Feature: Scanning files as you edit
     When the developer runs :GreenlintScanAll
     Then app/old.py shows no findings
     And app/new.py shows its findings
-    And if the scan fails, the findings already shown are kept
 
   @id:neovim-integration.scan-triggers.006 @rule:nvim.triggers.project-settings-respected @verified @source:extensions/nvim/lua/greenlint/core.lua#M.scan_argv @test:extensions/nvim/tests/core_spec.lua#passes the project config and baseline when they exist @test:extensions/nvim/tests/core_spec.lua#repeats --exclude rather than joining, since a glob may contain a comma
   Scenario: Editor scans honour the project's config, baseline and editor-only excludes
     Given the nearest folder holding .greenlint.toml, .git or .hg is the project root
     And the project root holds .greenlint.toml and .greenlint-baseline.json
-    And the plugin excludes */dist/*
+    And the plugin's exclude option lists */dist/*
     When the developer saves a file
     Then rules opted out in .greenlint.toml are not reported
     And findings accepted in the baseline are not reported
@@ -78,4 +77,4 @@ Feature: Scanning files as you edit
       | cmd                                                  | message                                                           |
       | a tool that prints [{"hello": 1}]                    | greenlint: unexpected output — is `cmd` pointing at greenlint?    |
       | a tool that prints nothing and writes boom to stderr | greenlint: boom                                                   |
-      | a program that is not installed                      | greenlint: could not run `greenlint` — see :checkhealth greenlint |
+      | greenlint, not installed, on the first scan this session | greenlint: could not run `greenlint` — see :checkhealth greenlint |

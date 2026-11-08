@@ -3,7 +3,7 @@ Feature: Reviewing and managing findings from Neovim
   Gives a developer commands to read, explain, navigate and accept the findings in their project without leaving the editor.
 
   Background:
-    Given Given the greenlint plugin is set up in a project
+    Given the greenlint plugin is set up in a project
 
   @id:neovim-integration.editor-commands.001 @rule:nvim.commands.report-grouped @verified @source:extensions/nvim/lua/greenlint/core.lua#M.report_lines @test:extensions/nvim/tests/commands_spec.lua#opens a float that leads with the totals @test:extensions/nvim/tests/commands_spec.lua#scans the project first when nothing is known yet @test:extensions/nvim/tests/commands_spec.lua#regroups the report by what was chosen @test:extensions/nvim/tests/commands_spec.lua#offers the three groupings with a blurb each @test:extensions/nvim/tests/core_spec.lua#groups by file @test:extensions/nvim/tests/core_spec.lua#groups by rule @test:extensions/nvim/tests/core_spec.lua#groups by severity, worst first
   Scenario Outline: The report leads with the totals and groups findings as chosen
@@ -12,7 +12,6 @@ Feature: Reviewing and managing findings from Neovim
     When the developer opens :GreenlintReport
     Then the report's first line reads "2 finding(s) — 1 high · 1 medium · 0 low"
     And findings are grouped <groups>
-    And when nothing had been scanned yet, the project is scanned first
 
     Examples:
       | grouping | groups                                                            |

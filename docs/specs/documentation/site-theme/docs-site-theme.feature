@@ -9,7 +9,7 @@ Feature: Branding the documentation site
   Scenario: The docs and the splash page share the GreenOps green accent pair
     Given the theme's accent pair is the GreenOps pair #34d399 and #059669
     When a reader opens the splash page and then the rendered docs
-    Then the header chrome and links in the light scheme use #059669
+    Then links in the light scheme use #059669
     And the primary buttons and the home hero title show a gradient from #34d399 to #059669
     And the splash page title and button show the same two colours
 

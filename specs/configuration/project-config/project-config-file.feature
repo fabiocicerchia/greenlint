@@ -7,15 +7,15 @@ Feature: Tuning a scan with .greenlint.toml
 
   @id:configuration.project-config.001 @rule:configuration.project-config.disabled-rules-not-reported @verified @source:greenlint/config.py#load_config @test:tests/test_greenlint.py#test_config_disables_rule @test:tests/test_greenlint.py#test_ast_busy_loop_respects_disable
   Scenario Outline: Rules listed under disable are not reported
-    Given a project containing "q.sql" with "SELECT * FROM users;"
+    Given a project containing "<file>" with "<content>"
     And a .greenlint.toml with disable = ["<rule>"]
     When the operator scans the project
     Then no finding for rule <rule> is reported
 
     Examples:
-      | rule  |
-      | GL005 |
-      | GL001 |
+      | rule  | file  | content                     |
+      | GL005 | q.sql | SELECT * FROM users;        |
+      | GL001 | a.py  | while True:\n    check()\n |
 
   @id:configuration.project-config.002 @rule:configuration.project-config.ignore-list-honoured @verified @source:greenlint/config.py#load_config @test:tests/test_greenlint.py#test_config_ignores_path @test:tests/test_greenlint.py#test_config_array_may_span_lines @test:tests/test_greenlint.py#test_multiline_ignore_actually_excludes_files @test:tests/test_greenlint.py#test_multiline_ignore_array_is_parsed
   Scenario Outline: Paths matching the config's ignore list are not scanned, however the list is laid out

@@ -13,10 +13,10 @@ Feature: Talking to the scan server
     Then the request <outcome>
 
     Examples:
-      | operation    | behaviour                                        | outcome                                                        |
-      | project scan | reports progress at least once every two minutes | is still running and has not failed                            |
-      | project scan | has said nothing since the request was sent      | fails with "scanProject timed out after 120s with no progress" |
-      | file scan    | has said nothing since the request was sent      | fails with "scanFile timed out after 120s with no progress"    |
+      | operation       | behaviour                                        | outcome                                                        |
+      | project scan    | reports progress at least once every two minutes | is still running and has not failed                            |
+      | project scan    | has said nothing since the request was sent      | fails with "scanProject timed out after 120s with no progress" |
+      | saved-file scan | has said nothing since the request was sent      | fails with "scanFile timed out after 120s with no progress"    |
 
   @id:vscode.scan-engine.request-protocol.002 @rule:scan-engine.request-protocol.findings-stream-during-project-scan @verified @source:extensions/vscode/src/protocol.ts#LineProtocol @test:extensions/vscode/src/test/engine.test.ts#a project scan streams its findings and ends with the totals
   Scenario: A project scan delivers findings in batches while it is still running

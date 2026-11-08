@@ -1,6 +1,6 @@
 @domain:infrastructure-checks @area:container-images @from:greenlint/rules
 Feature: Checking Dockerfiles for bloated images
-  Platform teams see which images pull and store more than they need, so that they can shrink transfer, storage and cold-start energy.
+  Developers see which images pull and store more than they need, so that they can shrink transfer, storage and cold-start energy.
 
   @id:infrastructure-checks.container-images.004 @rule:infra.container-images.bloated-or-eol-base-flagged @verified @source:greenlint/rules.py#RULES @test:tests/test_greenlint.py#test_detects_select_star_and_fat_base @test:tests/test_greenlint.py#test_detects_eol_docker_base_image
   Scenario Outline: A full-fat or end-of-life base image is flagged

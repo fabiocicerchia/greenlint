@@ -22,9 +22,9 @@ Feature: Flagging energy-costly idioms in C#, Kotlin, Swift, Ruby and JSX
       | a.swift  | let s = URLSession(configuration: .default)                    | GL047 | a new URLSession per request                              | low      |
       | a.rb     | if h.keys.include?(k)                                          | GL036 | Hash membership check via keys/values.include?            | low      |
       | a.rb     | list.select(&:active?).map(&:name)                             | GL037 | select().map() chain (two passes over the collection)     | low      |
-      | a.rb     | items.each do |i|\n  out += i.to_s                             | GL048 | string built with += inside a loop                        | medium   |
-      | a.rb     | orders.each do |o|\n  o.customer = Customer.find_by(id: o.cid) | GL049 | query inside an each loop (N+1)                           | medium   |
-      | a.rb     | rows.map { |r| r.tags }.flatten                                | GL050 | map().flatten() / map().compact() (an intermediate array) | low      |
+      | a.rb     | items.each do \|i\|\n  out += i.to_s                           | GL048 | string built with += inside a loop                        | medium   |
+      | a.rb     | orders.each do \|o\|\n  o.customer = Customer.find_by(id: o.cid) | GL049 | query inside an each loop (N+1)                         | medium   |
+      | a.rb     | rows.map { \|r\| r.tags }.flatten                              | GL050 | map().flatten() / map().compact() (an intermediate array) | low      |
       | Comp.jsx | <Foo onClick={() => doThing()} />                              | GL038 | inline function or object literal passed as a JSX prop    | low      |
 
   @id:code-energy-rules.other-language-idioms.002 @rule:code-rules.other-languages.recommended-fix-allowed @verified @source:greenlint/rules.py#RULES @test:tests/test_greenlint.py#test_linq_any_not_flagged @test:tests/test_greenlint.py#test_ruby_hash_key_predicate_not_flagged @test:tests/test_greenlint.py#test_ruby_filter_map_not_flagged @test:tests/test_greenlint.py#test_hoisted_jsx_prop_not_flagged
@@ -46,8 +46,8 @@ Feature: Flagging energy-costly idioms in C#, Kotlin, Swift, Ruby and JSX
       | a.swift  | DispatchQueue.main.async { render() }                                | GL046 |
       | a.swift  | let s = URLSession.shared                                            | GL047 |
       | a.rb     | if h.key?(k)                                                         | GL036 |
-      | a.rb     | list.filter_map { |x| x.name if x.active? }                          | GL037 |
-      | a.rb     | items.each do |i|\n  out << i.to_s                                   | GL048 |
-      | a.rb     | Order.includes(:customer).each do |o|\n  puts o.customer.name        | GL049 |
-      | a.rb     | rows.flat_map { |r| r.tags }                                         | GL050 |
+      | a.rb     | list.filter_map { \|x\| x.name if x.active? }                        | GL037 |
+      | a.rb     | items.each do \|i\|\n  out << i.to_s                                 | GL048 |
+      | a.rb     | Order.includes(:customer).each do \|o\|\n  puts o.customer.name      | GL049 |
+      | a.rb     | rows.flat_map { \|r\| r.tags }                                       | GL050 |
       | Comp.jsx | <Foo onClick={handleClick} />                                        | GL038 |

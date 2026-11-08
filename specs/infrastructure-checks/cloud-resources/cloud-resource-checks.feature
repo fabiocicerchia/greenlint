@@ -1,6 +1,6 @@
 @domain:infrastructure-checks @area:cloud-resources @from:greenlint/rules
 Feature: Checking Terraform for oversized and inefficient cloud resources
-  Infrastructure owners are told which hard-coded instance and volume choices draw more power than an equivalent alternative.
+  Developers are told which hard-coded instance and volume choices draw more power than an equivalent alternative.
 
   @id:infrastructure-checks.cloud-resources.005 @rule:infra.cloud-resources.inefficient-instance-or-volume-flagged @verified @source:greenlint/rules.py#RULES @test:tests/test_greenlint.py#test_detects_very_large_instance_type @test:tests/test_greenlint.py#test_detects_non_graviton_instance_family @test:tests/test_greenlint.py#test_opentofu_files_use_the_same_terraform_rules @test:tests/test_greenlint.py#test_detects_gp2_volume
   Scenario Outline: Peak-sized, x86-only instances and gp2 volumes are flagged in Terraform and OpenTofu
@@ -28,7 +28,7 @@ Feature: Checking Terraform for oversized and inefficient cloud resources
       | vol.tf  | volume_type = "gp3"          | GL025 |
 
   @id:infrastructure-checks.cloud-resources.007 @rule:infra.cloud-resources.large-modern-families-unchecked @inferred @source:greenlint/rules.py#RULES @questionable
-  Scenario Outline: Very large instances from newer or suffixed families are not flagged as oversized
+  Scenario Outline: Very large instances from newer or suffixed families, or above 24xlarge, are not flagged as oversized
     Given a project containing main.tf with the line <setting>
     When the developer scans the project
     Then greenlint does not report GL008

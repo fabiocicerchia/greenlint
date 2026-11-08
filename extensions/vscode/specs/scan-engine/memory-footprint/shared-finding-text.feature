@@ -10,8 +10,8 @@ Feature: Keeping large result sets light without changing what findings say
     Given a project where rule GL005 fires in "/proj/a.py" and rule GL003 fires in "/proj/b.py"
     And findings from the two files arrive interleaved: a.py, b.py, a.py
     When the developer scans the project
-    Then the GL005 findings read "SELECT * query" with the suggestion "fetch only needed columns"
-    And the GL003 finding reads "every-minute cron"
+    Then the GL005 findings read "SELECT * query" with the suggestion "fetch only needed columns; less I/O, less network, less RAM"
+    And the GL003 finding reads "cron job scheduled every minute"
     And the findings are listed against "/proj/a.py", "/proj/b.py" and "/proj/a.py" in that order
 
   @id:vscode.scan-engine.memory-footprint.002 @rule:engine.memory.rule-wording-follows-running-greenlint @inferred @source:extensions/vscode/src/share.ts#forgetRuleProse

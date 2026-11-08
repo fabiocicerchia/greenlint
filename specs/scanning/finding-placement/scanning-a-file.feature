@@ -35,14 +35,13 @@ Feature: Scanning a file for energy waste
     When the developer scans the project
     Then no GL002 sub-100ms polling finding is reported for "<file>"
     And the busy-loop rule GL001 and the rebuild-in-loop rule GL007 are likewise not applied to "<file>"
-    And every other enabled rule still applies to "<file>"
 
     Examples:
       | file           |
       | proxy_test.go  |
       | test_proxy.py  |
       | tests/proxy.go |
-      | spec/proxy.rb  |
+      | spec/proxy.py  |
       | proxy.spec.js  |
 
   @id:scanning.finding-placement.008 @rule:scanning.rules.disabled-rule-never-reported @verified @source:greenlint/scanning.py#scan_file @test:tests/test_greenlint.py#test_config_disables_rule @test:tests/test_greenlint.py#test_ast_busy_loop_respects_disable

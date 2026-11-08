@@ -46,13 +46,13 @@ Feature: Reading a greenlint report
     And the scan covered 120 files in 340 ms: 20 scanned, 90 reused by modification time, 5 reused by content, 5 skipped
     When the developer opens the report
     Then the meta line shows the generation time in the developer's locale
-    And the meta line shows "<version_text>"
+    And the meta line <version_part>
     And the meta line shows "120 files in 340 ms (20 scanned, 95 reused from cache, 5 skipped)"
 
     Examples:
-      | version   | version_text         |
-      | 0.9.0     | · greenlint 0.9.0    |
-      | (unknown) | no greenlint version |
+      | version   | version_part                         |
+      | 0.9.0     | shows "· greenlint 0.9.0"            |
+      | (unknown) | does not mention a greenlint version |
 
   @id:vscode.reporting.report-content.006 @rule:reporting.content.finding-text-cannot-inject-markup @verified @source:extensions/vscode/src/report.ts#escapeHtml @test:extensions/vscode/src/test/report.test.ts#escapes findings into the page rather than through it
   Scenario: File names and finding text are shown as text and can never inject markup into the report

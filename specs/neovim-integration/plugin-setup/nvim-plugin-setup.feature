@@ -3,7 +3,7 @@ Feature: Configuring the Neovim plugin
   Lets a Neovim user decide how greenlint runs in their editor, and refuses settings it cannot honour instead of silently misbehaving.
 
   Background:
-    Given Given the greenlint plugin is installed in Neovim
+    Given the greenlint plugin is installed in Neovim
 
   @id:neovim-integration.plugin-setup.001 @rule:nvim.setup.defaults-without-options @verified @source:extensions/nvim/lua/greenlint/config.lua#M.defaults @test:extensions/nvim/tests/config_spec.lua#resolves without options @test:extensions/nvim/tests/config_spec.lua#scans on save by default, not on every keystroke
   Scenario Outline: Without options the plugin runs greenlint on save and groups the report by file

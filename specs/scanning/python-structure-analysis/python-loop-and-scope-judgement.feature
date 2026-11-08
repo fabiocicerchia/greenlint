@@ -45,10 +45,9 @@ Feature: Judging Python loops and scopes by their structure
     When the developer scans the project
     Then no busy loop (GL001), quadratic rebuild (GL007), nested loop (GL018), swap sort (GL023), dict iteration (GL030) or try-in-loop (GL031) finding is reported for that file
     And no warning about the syntax error is shown
-    And text-pattern rules for Python still report their findings for that file
 
   @id:scanning.python-structure-analysis.005 @rule:scanning.python-structure.async-loops-not-analysed @inferred @source:greenlint/astindex.py#index_python @questionable
-  Scenario: Async for-loops and try*-blocks are not judged by the structure-based rules
+  Scenario: Async for-loops are not judged by the structure-based loop rules
     Given a Python coroutine that iterates a collection with `async for`
     And inside it, a second `async for` over the same collection
     When the developer scans the project

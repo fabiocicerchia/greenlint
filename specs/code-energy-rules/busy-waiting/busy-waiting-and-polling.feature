@@ -3,7 +3,7 @@ Feature: Flagging busy waiting and tight polling
   Developers learn where their code keeps a CPU core awake for nothing, by spinning on a clock or polling faster than every 100 ms.
 
   @id:code-energy-rules.busy-waiting.004 @rule:code-rules.busy-waiting.sub-100ms-polling-flagged @verified @source:greenlint/rules.py#RULES @test:tests/test_greenlint.py#test_sleep_below_100ms_is_still_flagged @test:tests/test_greenlint.py#test_detects_sub_100ms_polling_across_languages @test:tests/test_greenlint.py#test_detects_kotlin_short_delay @test:tests/test_greenlint.py#test_detects_swift_short_timer_interval
-  Scenario Outline: A polling interval shorter than 100 ms is flagged in every supported language
+  Scenario Outline: A polling interval shorter than 100 ms is flagged across languages
     Given a project containing <file> with the line <code>
     When the developer scans the project
     Then greenlint reports GL002 "sub-100ms polling interval" with severity low on that line
@@ -43,7 +43,8 @@ Feature: Flagging busy waiting and tight polling
 
   @id:code-energy-rules.busy-waiting.007 @rule:code-rules.busy-waiting.clock-spin-wait-flagged @inferred @source:greenlint/rules.py#RULES
   Scenario Outline: A loop that only re-reads the clock until a deadline is flagged as a spin-wait
-    Given a project containing <file> with a loop whose condition is <loop> and nothing in its body that sleeps or waits
+    Given a project containing <file> with a loop whose condition is <loop>
+    And none of sleep, usleep, delay, setTimeout, yield, await, select, poll, recv or read appears within 240 characters after the clock read
     When the developer scans the project
     Then greenlint reports GL051 "spin-wait on a clock (busy loop until a deadline)" with severity high
 

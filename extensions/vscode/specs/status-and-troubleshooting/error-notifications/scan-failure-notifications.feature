@@ -25,8 +25,8 @@ Feature: Telling the user about scan failures without flooding them
 
   @id:vscode.status-and-troubleshooting.error-notifications.003 @rule:troubleshooting.errors.toast-shows-headline-with-log-link @inferred @source:extensions/vscode/src/notify.ts#ErrorNotifier
   Scenario: A failure notification shows only its first line and offers the log
-    Given a scan fails with a multi-line error whose first line is "could not start the scan server"
+    Given a scan fails, for a reason other than greenlint not being installed, with a multi-line error whose first line is "scan failed"
     When the user is notified of the failure
-    Then the notification reads "greenlint: could not start the scan server" without the remaining lines
+    Then the notification reads "greenlint: scan failed" without the remaining lines
     And the notification offers "Show Log"
     And choosing "Show Log" opens the greenlint output log holding the full error

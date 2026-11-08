@@ -20,7 +20,7 @@ Feature: Flagging quadratic work in Python
       | `s = ''` then `s += w`, in a function that also computes `n - 1` on another name |
 
   @id:code-energy-rules.algorithmic-waste.002 @rule:code-energy.algorithmic-waste.python-linear-accumulation-not-flagged @verified @source:greenlint/pyrules.py#_is_sequence_rebuild @test:tests/test_greenlint.py#test_append_in_loop_is_not_flagged @test:tests/test_greenlint.py#test_counter_increment_in_loop_is_not_flagged @test:tests/test_greenlint.py#test_numeric_accumulation_is_not_flagged @test:tests/test_greenlint.py#test_tuple_unpacked_counters_are_not_flagged @test:tests/test_greenlint.py#test_list_extend_via_augmented_assign_is_not_flagged @test:tests/test_greenlint.py#test_list_extend_with_comprehension_is_not_flagged @test:tests/test_greenlint.py#test_extend_of_a_name_known_to_be_a_list_is_not_flagged @test:tests/test_greenlint.py#test_cursor_seeded_from_arithmetic_is_not_flagged @test:tests/test_greenlint.py#test_coordinate_seeded_from_a_parameter_is_not_flagged @test:tests/test_greenlint.py#test_rebinding_from_other_names_is_not_flagged
-  Scenario Outline: Appending, extending a list and adding up numbers in a loop are not reported as rebuilds
+  Scenario Outline: Appending, extending a list, adding up numbers or rebinding from other names in a loop are not reported as rebuilds
     Given a Python file with the loop <code>
     When the developer scans the project
     Then no GL007 finding is reported
