@@ -1,0 +1,217 @@
+{
+ "excluded": {
+  "stylesheets/extra": [
+   {
+    "candidate": "Header is translucent and blurred with a hairline divider and shadow on scroll",
+    "covered_by": "",
+    "reason": "INTERNAL_MECHANISM",
+    "source": "docs/stylesheets/extra.css#.md-header"
+   },
+   {
+    "candidate": "Heading weights, letter-spacing and font ligatures",
+    "covered_by": "",
+    "reason": "TRIVIAL",
+    "source": "docs/stylesheets/extra.css#.md-typeset h1"
+   },
+   {
+    "candidate": "Rounded, bordered code blocks",
+    "covered_by": "",
+    "reason": "TRIVIAL",
+    "source": "docs/stylesheets/extra.css#.md-typeset .highlight"
+   },
+   {
+    "candidate": "Tables styled as cards with uppercase headers; the comment claims they scroll on narrow screens, but the rule sets overflow: hidden (scrolling comes from Material's own wrapper, if at all)",
+    "covered_by": "",
+    "reason": "TRIVIAL",
+    "source": "docs/stylesheets/extra.css#.md-typeset table:not([class])"
+   },
+   {
+    "candidate": "Pill-shaped buttons that lift on hover",
+    "covered_by": "",
+    "reason": "TRIVIAL",
+    "source": "docs/stylesheets/extra.css#.md-typeset .md-button"
+   },
+   {
+    "candidate": "Feature cards lift and tint their border with the accent on hover; card icons in accent",
+    "covered_by": "docs.theme.greenops-accent-palette",
+    "reason": "DUPLICATE_OF",
+    "source": "docs/stylesheets/extra.css#.md-typeset .grid.cards > ul > li"
+   },
+   {
+    "candidate": "Hero layout and tagline sizing",
+    "covered_by": "",
+    "reason": "TRIVIAL",
+    "source": "docs/stylesheets/extra.css#.md-typeset .hero"
+   },
+   {
+    "candidate": "Nav title and active link weights; footer borders and colours; smooth scrolling",
+    "covered_by": "",
+    "reason": "TRIVIAL",
+    "source": "docs/stylesheets/extra.css#.md-nav__title"
+   }
+  ]
+ },
+ "lifted": {
+  "stylesheets/extra": []
+ },
+ "retired": [
+  "docs.documentation.site-theme.001",
+  "docs.documentation.site-theme.003",
+  "docs.documentation.site-theme.004"
+ ],
+ "scenarios": {
+  "docs.documentation.site-theme.002": {
+   "file": "docs/specs/documentation/site-theme/docs-site-theme.feature",
+   "fingerprint": "d8424b84d164",
+   "human": false,
+   "rule": "docs.theme.no-network-assets",
+   "source": "docs/stylesheets/extra.css#:root",
+   "status": "inferred",
+   "test": "",
+   "tests": []
+  }
+ },
+ "taxonomy": {
+  "domains": [
+   {
+    "areas": [
+     {
+      "description": "Rules for busy loops, tight polling and other wasteful constructs in application code.",
+      "slug": "code-patterns",
+      "title": "Code patterns"
+     },
+     {
+      "description": "Rules for wasteful queries such as SELECT * and unbounded fetches.",
+      "slug": "data-access",
+      "title": "Data access"
+     },
+     {
+      "description": "Rules for every-minute crons, full-history clones and other wasteful pipeline or infra settings.",
+      "slug": "infrastructure",
+      "title": "Infrastructure and CI"
+     },
+     {
+      "description": "Rule identities, language tags, severities and the energy rationale shown with each rule.",
+      "slug": "rule-catalogue",
+      "title": "Rule catalogue"
+     }
+    ],
+    "description": "The rule set that spots energy-wasteful patterns in source and config files.",
+    "slug": "detection",
+    "title": "Waste detection"
+   },
+   {
+    "areas": [
+     {
+      "description": "Choosing which files to scan, by language and ignore globs.",
+      "slug": "file-discovery",
+      "title": "File discovery"
+     },
+     {
+      "description": "Silencing individual findings with comments in the scanned source.",
+      "slug": "inline-suppression",
+      "title": "Inline suppression"
+     },
+     {
+      "description": "Recording existing findings so only new ones are reported.",
+      "slug": "baselines",
+      "title": "Baselines"
+     }
+    ],
+    "description": "How greenlint walks a project and turns files into findings.",
+    "slug": "scanning",
+    "title": "Scanning"
+   },
+   {
+    "areas": [
+     {
+      "description": "Human-readable and machine-readable reports of findings.",
+      "slug": "findings-output",
+      "title": "Findings output"
+     },
+     {
+      "description": "Estimating the energy or carbon cost associated with findings.",
+      "slug": "carbon-estimates",
+      "title": "Carbon estimates"
+     },
+     {
+      "description": "Exit codes that let CI gates pass or fail on findings.",
+      "slug": "exit-status",
+      "title": "Exit status"
+     }
+    ],
+    "description": "How results are presented to people and machines.",
+    "slug": "reporting",
+    "title": "Reporting"
+   },
+   {
+    "areas": [
+     {
+      "description": "Reading .greenlint.toml for rule opt-outs and ignore globs.",
+      "slug": "project-config",
+      "title": "Project config file"
+     },
+     {
+      "description": "Flags and subcommands of the greenlint CLI.",
+      "slug": "command-line",
+      "title": "Command line"
+     }
+    ],
+    "description": "How users tune greenlint for their project.",
+    "slug": "configuration",
+    "title": "Configuration"
+   },
+   {
+    "areas": [
+     {
+      "description": "The VS Code extension that surfaces findings in the editor.",
+      "slug": "editor-extension",
+      "title": "Editor extension"
+     },
+     {
+      "description": "Using greenlint as a pre-commit hook or CI step.",
+      "slug": "ci-hooks",
+      "title": "CI and pre-commit"
+     }
+    ],
+    "description": "Running greenlint where developers already work.",
+    "slug": "integrations",
+    "title": "Integrations"
+   },
+   {
+    "areas": [
+     {
+      "description": "The offline-only visual theme, accent palette and typography shared by the docs and splash page.",
+      "slug": "site-theme",
+      "title": "Site theme and branding"
+     },
+     {
+      "description": "Getting-started, rules, editor and architecture pages.",
+      "slug": "guides",
+      "title": "Guides and reference"
+     }
+    ],
+    "description": "The published docs and landing page that explain greenlint.",
+    "slug": "documentation",
+    "title": "Documentation site"
+   },
+   {
+    "areas": [
+     {
+      "description": "Packaging, versioning and publishing the CLI and extension.",
+      "slug": "build-release",
+      "title": "Build and release"
+     },
+     {
+      "description": "Linting, tests, secret scanning and benchmarks run on the project.",
+      "slug": "quality-checks",
+      "title": "Quality checks"
+     }
+    ],
+    "description": "Building, testing, benchmarking and releasing greenlint itself.",
+    "slug": "operations",
+    "title": "Developer tooling"
+   }
+  ]
+ }
+}

@@ -1,0 +1,2705 @@
+{
+ "excluded": {
+  "examples/basic": [
+   {
+    "candidate": "Scanning the example with --fail-on-findings exits 1",
+    "covered_by": "reporting/ci-gate (fail on findings); the CI gate module owns this rule, and the example is only its input data",
+    "reason": "DUPLICATE_OF",
+    "source": "tests/test_e2e.py#test_fail_on_findings_gates_a_dirty_tree_but_not_a_clean_one"
+   },
+   {
+    "candidate": "The README says each finding shows its rule id, severity and what to do instead",
+    "covered_by": "reporting/output-formats (text finding layout)",
+    "reason": "DUPLICATE_OF",
+    "source": "examples/basic/README.md"
+   },
+   {
+    "candidate": "The Database Protocol and the check_queue stub make the sample valid Python",
+    "covered_by": "",
+    "reason": "TRIVIAL",
+    "source": "examples/basic/sample.py#check_queue"
+   }
+  ],
+  "extensions/nvim": [
+   {
+    "candidate": "Makefile targets deps/test/lint/clean for the plugin specs",
+    "covered_by": "",
+    "reason": "TECH_BUILD",
+    "source": "extensions/nvim/Makefile"
+   },
+   {
+    "candidate": "Plugin load guard and lazy loading of the Lua modules",
+    "covered_by": "",
+    "reason": "INTERNAL_MECHANISM",
+    "source": "extensions/nvim/plugin/greenlint.lua"
+   },
+   {
+    "candidate": "Severity order mirrored from greenlint.py and checked by a spec",
+    "covered_by": "",
+    "reason": "INTERNAL_MECHANISM",
+    "source": "extensions/nvim/lua/greenlint/core.lua#M.SEVERITY_ORDER"
+   },
+   {
+    "candidate": "Sorting by severity, file then line; unknown severities last",
+    "covered_by": "nvim.commands.list-worst-first",
+    "reason": "DUPLICATE_OF",
+    "source": "extensions/nvim/lua/greenlint/core.lua#M.compare_findings"
+   },
+   {
+    "candidate": "Output shape check (list of tables with rule and file)",
+    "covered_by": "nvim.triggers.failed-scan-explained",
+    "reason": "DUPLICATE_OF",
+    "source": "extensions/nvim/lua/greenlint/core.lua#M.is_findings"
+   },
+   {
+    "candidate": "Buffer written to a temp dir keeping its basename, then deleted",
+    "covered_by": "nvim.triggers.unsaved-text-scanned",
+    "reason": "INTERNAL_MECHANISM",
+    "source": "extensions/nvim/lua/greenlint/init.lua#write_buffer_to_temp"
+   },
+   {
+    "candidate": "Debounce timer per buffer reset on each keystroke",
+    "covered_by": "nvim.triggers.unsaved-text-scanned",
+    "reason": "INTERNAL_MECHANISM",
+    "source": "extensions/nvim/lua/greenlint/triggers.lua#debounce"
+   },
+   {
+    "candidate": "Empty findings list removes the file's entry from the store",
+    "covered_by": "",
+    "reason": "TECH_PERSISTENCE",
+    "source": "extensions/nvim/lua/greenlint/store.lua#M.put"
+   },
+   {
+    "candidate": "Float window sizing, centring and closing on q/Esc",
+    "covered_by": "",
+    "reason": "TRIVIAL",
+    "source": "extensions/nvim/lua/greenlint/ui.lua#M.float"
+   },
+   {
+    "candidate": "Quickfix never emits line 0",
+    "covered_by": "",
+    "reason": "TRIVIAL",
+    "source": "extensions/nvim/lua/greenlint/ui.lua#M.to_quickfix"
+   },
+   {
+    "candidate": "Whitespace-only line underlined from column 0",
+    "covered_by": "",
+    "reason": "TRIVIAL",
+    "source": "extensions/nvim/lua/greenlint/ui.lua#to_diagnostic"
+   },
+   {
+    "candidate": "timeout_ms gives up on a slow scan",
+    "covered_by": "",
+    "reason": "TRIVIAL",
+    "source": "extensions/nvim/lua/greenlint/init.lua#run"
+   },
+   {
+    "candidate": "Nested options merge with defaults, lists replace wholesale",
+    "covered_by": "",
+    "reason": "INTERNAL_MECHANISM",
+    "source": "extensions/nvim/lua/greenlint/config.lua#merge"
+   },
+   {
+    "candidate": "Project scan on startup",
+    "covered_by": "nvim.setup.defaults-without-options",
+    "reason": "DUPLICATE_OF",
+    "source": "extensions/nvim/lua/greenlint/init.lua#M.setup"
+   },
+   {
+    "candidate": "Rules-reference anchor slug punctuation stripping",
+    "covered_by": "nvim.commands.hover-explains-finding",
+    "reason": "DUPLICATE_OF",
+    "source": "extensions/nvim/lua/greenlint/core.lua#M.docs_url"
+   },
+   {
+    "candidate": "Project root detection (.greenlint.toml, .git, .hg, else cwd)",
+    "covered_by": "nvim.triggers.project-settings-respected",
+    "reason": "DUPLICATE_OF",
+    "source": "extensions/nvim/lua/greenlint/init.lua#M.root"
+   }
+  ],
+  "greenlint/astindex": [
+   {
+    "candidate": "Each Python file is parsed and indexed once per scan and shared by all AST rules",
+    "covered_by": "",
+    "reason": "INTERNAL_MECHANISM",
+    "source": "greenlint/astindex.py#index_python"
+   },
+   {
+    "candidate": "Index is built breadth-first so rules see nodes in ast.walk order",
+    "covered_by": "",
+    "reason": "INTERNAL_MECHANISM",
+    "source": "greenlint/astindex.py#index_python"
+   },
+   {
+    "candidate": "Expressions are not descended into during indexing",
+    "covered_by": "",
+    "reason": "INTERNAL_MECHANISM",
+    "source": "greenlint/astindex.py#index_python"
+   },
+   {
+    "candidate": "loop_scopes lets GL007 skip functions without loops",
+    "covered_by": "",
+    "reason": "INTERNAL_MECHANISM",
+    "source": "greenlint/astindex.py#PythonIndex"
+   },
+   {
+    "candidate": "Each loop is recorded with its stack of enclosing loops",
+    "covered_by": "",
+    "reason": "INTERNAL_MECHANISM",
+    "source": "greenlint/astindex.py#_collect_for"
+   },
+   {
+    "candidate": "Functions and classes collected for docstring blanking",
+    "covered_by": "scanning/comment-and-string-masking (docstring blanking, owned by greenlint/comments)",
+    "reason": "DUPLICATE_OF",
+    "source": "greenlint/astindex.py#_collect_function"
+   },
+   {
+    "candidate": "Collector type aliases and re-exports from the package root",
+    "covered_by": "",
+    "reason": "INTERNAL_MECHANISM",
+    "source": "greenlint/astindex.py#Collector"
+   }
+  ],
+  "greenlint/base": [
+   {
+    "candidate": "Default config file name .greenlint.toml",
+    "covered_by": "Only a constant here; the default lookup that users meet is in greenlint/config.py (configuration/project-config)",
+    "reason": "INTERNAL_MECHANISM",
+    "source": "greenlint/base.py#CONFIG_FILENAME"
+   },
+   {
+    "candidate": "Default baseline file name .greenlint-baseline.json",
+    "covered_by": "Only a constant here; the default lookup and writing are in greenlint/cli.py (configuration/baselines)",
+    "reason": "INTERNAL_MECHANISM",
+    "source": "greenlint/base.py#BASELINE_FILENAME"
+   },
+   {
+    "candidate": "Rule, Finding, Config and Matcher type aliases",
+    "covered_by": "",
+    "reason": "INTERNAL_MECHANISM",
+    "source": "greenlint/base.py#Rule"
+   },
+   {
+    "candidate": "Rules for other languages are picked by file suffix (e.g. q.sql gets SELECT * checks)",
+    "covered_by": "scanning.language.dockerfile-selected-by-exact-name-or-suffix",
+    "reason": "DUPLICATE_OF",
+    "source": "greenlint/base.py#lang_key"
+   }
+  ],
+  "greenlint/baselines": [
+   {
+    "candidate": "applicable(): a rule applies only to files of its language tags",
+    "covered_by": "",
+    "reason": "INTERNAL_MECHANISM",
+    "source": "greenlint/baselines.py#applicable"
+   },
+   {
+    "candidate": "Baseline file format: version 1, sorted fingerprint list, two-space indent",
+    "covered_by": "",
+    "reason": "TECH_PERSISTENCE",
+    "source": "greenlint/baselines.py#write_baseline"
+   },
+   {
+    "candidate": "Fingerprint is SHA-1 of path|rule|message",
+    "covered_by": "",
+    "reason": "INTERNAL_MECHANISM",
+    "source": "greenlint/baselines.py#fingerprint"
+   },
+   {
+    "candidate": "Empty baseline short-circuits filtering",
+    "covered_by": "",
+    "reason": "INTERNAL_MECHANISM",
+    "source": "greenlint/baselines.py#apply_baseline"
+   },
+   {
+    "candidate": "Duplicate fingerprints collapse to one when writing",
+    "covered_by": "config.baselines.one-acceptance-per-file-and-rule",
+    "reason": "DUPLICATE_OF",
+    "source": "greenlint/baselines.py#write_baseline"
+   }
+  ],
+  "greenlint/carbon": [
+   {
+    "candidate": "core_seconds_per_gram returns 500 at defaults and scales with grid intensity and watts",
+    "covered_by": "",
+    "reason": "INTERNAL_MECHANISM",
+    "source": "greenlint/carbon.py#core_seconds_per_gram"
+   },
+   {
+    "candidate": "Exported constants GRID_INTENSITY_G_PER_KWH, BUSY_CORE_WATTS, KWH_PER_GB_TRANSFERRED, G_CO2E_PER_GB",
+    "covered_by": "",
+    "reason": "INTERNAL_MECHANISM",
+    "source": "greenlint/carbon.py#G_CO2E_PER_GB"
+   },
+   {
+    "candidate": "PAIR constant used by Python rules for swap/unpack target counts",
+    "covered_by": "",
+    "reason": "INTERNAL_MECHANISM",
+    "source": "greenlint/carbon.py#PAIR"
+   },
+   {
+    "candidate": "Finding of a rule with no hint gets an empty estimate",
+    "covered_by": "",
+    "reason": "UNVERIFIABLE",
+    "source": "greenlint/findings.py#_finding"
+   },
+   {
+    "candidate": "Individual hint wording for each of the remaining ~45 rules",
+    "covered_by": "reporting.carbon-estimates.every-finding-carries-estimate",
+    "reason": "TRIVIAL",
+    "source": "greenlint/carbon.py#CO2E_HINTS"
+   }
+  ],
+  "greenlint/cli": [
+   {
+    "candidate": "Scanning the current directory when no paths are given",
+    "covered_by": "",
+    "reason": "TRIVIAL",
+    "source": "greenlint/cli.py#_build_parser"
+   },
+   {
+    "candidate": "--config path selects the config file, default ./.greenlint.toml",
+    "covered_by": "configuration/project-config (load_config owns config loading and its refusals)",
+    "reason": "DUPLICATE_OF",
+    "source": "greenlint/cli.py#main"
+   },
+   {
+    "candidate": "Unknown --format value rejected by argparse",
+    "covered_by": "",
+    "reason": "TRIVIAL",
+    "source": "greenlint/cli.py#_build_parser"
+   },
+   {
+    "candidate": "Baseline fingerprints are relative to the baseline file's directory",
+    "covered_by": "",
+    "reason": "INTERNAL_MECHANISM",
+    "source": "greenlint/cli.py#main"
+   },
+   {
+    "candidate": "python -m greenlint / __main__ wiring to sys.exit",
+    "covered_by": "",
+    "reason": "TECH_BUILD",
+    "source": "greenlint/cli.py#main"
+   },
+   {
+    "candidate": "Help text and argparse layout",
+    "covered_by": "",
+    "reason": "TRIVIAL",
+    "source": "greenlint/cli.py#_build_parser"
+   }
+  ],
+  "greenlint/comments": [
+   {
+    "candidate": "Helm/Go-template YAML is detected so manifest presence rules stay silent",
+    "covered_by": "infrastructure-checks/workload-orchestration (enforced in greenlint/infra.py; belongs to that module's resource-limits rule)",
+    "reason": "DUPLICATE_OF",
+    "source": "greenlint/comments.py#_is_go_template"
+   },
+   {
+    "candidate": "Files with no comment token skip the character scan; string blanking only built when a code_only rule is enabled",
+    "covered_by": "",
+    "reason": "INTERNAL_MECHANISM",
+    "source": "greenlint/comments.py#_blank_comments"
+   },
+   {
+    "candidate": "Per-language scanner patterns are cached",
+    "covered_by": "",
+    "reason": "INTERNAL_MECHANISM",
+    "source": "greenlint/comments.py#_comment_scanners"
+   },
+   {
+    "candidate": "Blanking returns the original string when nothing to blank",
+    "covered_by": "",
+    "reason": "INTERNAL_MECHANISM",
+    "source": "greenlint/comments.py#_blank_spans"
+   },
+   {
+    "candidate": "Unterminated block comment blanks to end of file",
+    "covered_by": "",
+    "reason": "TRIVIAL",
+    "source": "greenlint/comments.py#_step_outside_string"
+   },
+   {
+    "candidate": "Languages without C-style quoting (e.g. YAML) keep string contents visible",
+    "covered_by": "",
+    "reason": "TRIVIAL",
+    "source": "greenlint/comments.py#_no_strings_to_blank"
+   },
+   {
+    "candidate": "Extensions with no known comment syntax are left unmasked",
+    "covered_by": "",
+    "reason": "TRIVIAL",
+    "source": "greenlint/comments.py#_blank_comments"
+   },
+   {
+    "candidate": "Every language with a rule has a comment syntax entry",
+    "covered_by": "",
+    "reason": "TECH_DEVTOOLING",
+    "source": "greenlint/comments.py#COMMENT_SYNTAX"
+   }
+  ],
+  "greenlint/config": [
+   {
+    "candidate": "Config file is decoded as UTF-8 by the TOML reader",
+    "covered_by": "",
+    "reason": "INTERNAL_MECHANISM",
+    "source": "greenlint/config.py#load_config"
+   },
+   {
+    "candidate": "List entries are coerced to strings (disable = [5] becomes \"5\")",
+    "covered_by": "",
+    "reason": "TRIVIAL",
+    "source": "greenlint/config.py#_as_list"
+   },
+   {
+    "candidate": "disable stored as a set, ignore kept as an ordered list",
+    "covered_by": "",
+    "reason": "INTERNAL_MECHANISM",
+    "source": "greenlint/config.py#load_config"
+   },
+   {
+    "candidate": "Ignore globs from the config and --exclude flags are merged",
+    "covered_by": "configuration/path-exclusion (owned by the CLI/path-exclusion module)",
+    "reason": "DUPLICATE_OF",
+    "source": "greenlint/cli.py#main"
+   },
+   {
+    "candidate": "Relative scan paths still match anchored ignore globs",
+    "covered_by": "configuration/path-exclusion (glob matching lives in scanning, not config)",
+    "reason": "DUPLICATE_OF",
+    "source": "tests/test_greenlint.py#test_relative_ignore_glob_applies"
+   },
+   {
+    "candidate": "VS Code server loads config through the same function",
+    "covered_by": "",
+    "reason": "INTERNAL_MECHANISM",
+    "source": "extensions/vscode/server/greenlint_server.py"
+   }
+  ],
+  "greenlint/discovery": [
+   {
+    "candidate": "Ignore globs shaped <base>/* prune the whole directory before descending",
+    "covered_by": "",
+    "reason": "INTERNAL_MECHANISM",
+    "source": "greenlint/discovery.py#prunable_bases"
+   },
+   {
+    "candidate": "Ignore list compiled once into a single cached regex",
+    "covered_by": "",
+    "reason": "INTERNAL_MECHANISM",
+    "source": "greenlint/discovery.py#_ignore_matcher"
+   },
+   {
+    "candidate": "Editor extension selects exactly the files the CLI does (shared iter_files)",
+    "covered_by": "",
+    "reason": "INTERNAL_MECHANISM",
+    "source": "greenlint/discovery.py#iter_files"
+   },
+   {
+    "candidate": "Scan results sorted by severity",
+    "covered_by": "",
+    "reason": "INTERNAL_MECHANISM",
+    "source": "greenlint/discovery.py#scan"
+   },
+   {
+    "candidate": "Paths carried as strings, Path built only for yielded files",
+    "covered_by": "",
+    "reason": "INTERNAL_MECHANISM",
+    "source": "greenlint/discovery.py#walk_files"
+   },
+   {
+    "candidate": "Default config used when none is supplied",
+    "covered_by": "",
+    "reason": "TRIVIAL",
+    "source": "greenlint/discovery.py#iter_files"
+   }
+  ],
+  "greenlint/dockerfile": [
+   {
+    "candidate": "Two-stage build: wheel built in a build stage, only the wheel copied into the runtime image",
+    "covered_by": "",
+    "reason": "TECH_BUILD",
+    "source": "Dockerfile#build stage"
+   },
+   {
+    "candidate": "Build backend installed from a hash-pinned requirements-build.txt with build isolation off, so the wheel build fetches nothing",
+    "covered_by": "",
+    "reason": "TECH_BUILD",
+    "source": "Dockerfile#build stage"
+   },
+   {
+    "candidate": "Base image pinned by sha256 digest (python:3.14-slim)",
+    "covered_by": "",
+    "reason": "TECH_BUILD",
+    "source": "Dockerfile#build stage"
+   },
+   {
+    "candidate": "pip --no-cache-dir and --no-deps, wheel removed from /tmp after install (small image, no extra packages)",
+    "covered_by": "",
+    "reason": "TECH_BUILD",
+    "source": "Dockerfile#runtime stage"
+   },
+   {
+    "candidate": "HEALTHCHECK that only confirms the Python interpreter starts",
+    "covered_by": "",
+    "reason": "TECH_BUILD",
+    "source": "Dockerfile#runtime stage"
+   },
+   {
+    "candidate": "Working directory /app in the runtime image",
+    "covered_by": "",
+    "reason": "INTERNAL_MECHANISM",
+    "source": "Dockerfile#runtime stage"
+   },
+   {
+    "candidate": "Advice to run with docker run --read-only (comment only, not enforced)",
+    "covered_by": "",
+    "reason": "UNVERIFIABLE",
+    "source": "Dockerfile#runtime stage"
+   }
+  ],
+  "greenlint/findings": [
+   {
+    "candidate": "Line index is built lazily, once per file, instead of recounting newlines per match",
+    "covered_by": "",
+    "reason": "INTERNAL_MECHANISM",
+    "source": "greenlint/findings.py#_LineIndex"
+   },
+   {
+    "candidate": "TEST_FILENAME regex re-exported from the package",
+    "covered_by": "",
+    "reason": "INTERNAL_MECHANISM",
+    "source": "greenlint/__init__.py"
+   },
+   {
+    "candidate": "Finding shape shared by JSON output, editor extension and baseline fingerprint",
+    "covered_by": "scanning.findings.complete-finding-fields",
+    "reason": "DUPLICATE_OF",
+    "source": "greenlint/findings.py#_finding"
+   }
+  ],
+  "greenlint/greenlint": [
+   {
+    "candidate": "The package re-exports internal names (index_python, _blank_strings, Matcher, RULES_BY_ID, scan_file, and so on) from greenlint/__init__.py with an __all__ list",
+    "covered_by": "",
+    "reason": "INTERNAL_MECHANISM",
+    "source": "greenlint/__init__.py"
+   },
+   {
+    "candidate": "The greenlint console script (greenlint:main) re-exported from cli",
+    "covered_by": "cli.entry.module-invocation-matches-command",
+    "reason": "DUPLICATE_OF",
+    "source": "greenlint/__init__.py"
+   },
+   {
+    "candidate": "The package docstring's usage examples (--list-rules, --format json, --exclude)",
+    "covered_by": "cli.entry.module-invocation-matches-command",
+    "reason": "DUPLICATE_OF",
+    "source": "greenlint/__init__.py"
+   },
+   {
+    "candidate": "The fail-on-findings gate itself (non-zero exit when findings exist)",
+    "covered_by": "cli.entry.module-invocation-propagates-exit-status",
+    "reason": "DUPLICATE_OF",
+    "source": "greenlint/cli.py#main"
+   },
+   {
+    "candidate": "The e2e harness runs each test in an empty directory with PYTHONPATH set to the repo",
+    "covered_by": "",
+    "reason": "TECH_DEVTOOLING",
+    "source": "tests/test_e2e.py#greenlint"
+   }
+  ],
+  "greenlint/infra": [
+   {
+    "candidate": "Terraform block end is approximated as the next line that starts with '}'",
+    "covered_by": "",
+    "reason": "INTERNAL_MECHANISM",
+    "source": "greenlint/infra.py#_tf_resource_blocks"
+   },
+   {
+    "candidate": "Workflows that cannot be split into jobs fall back to a whole-file exemption check",
+    "covered_by": "",
+    "reason": "INTERNAL_MECHANISM",
+    "source": "greenlint/infra.py#_job_span"
+   },
+   {
+    "candidate": ".tofu, .yaml and .dockerfile files get the same checks as .tf, .yml and Dockerfile",
+    "covered_by": "scanning/language-detection",
+    "reason": "DUPLICATE_OF",
+    "source": "greenlint/scanning.py#BLOCK_FINDERS"
+   },
+   {
+    "candidate": "Disabling a rule id skips its check",
+    "covered_by": "configuration/project-config",
+    "reason": "DUPLICATE_OF",
+    "source": "greenlint/scanning.py#_context_findings"
+   },
+   {
+    "candidate": "Block checks read comment-masked code, so commented-out resources are ignored",
+    "covered_by": "scanning/comment-and-string-masking",
+    "reason": "DUPLICATE_OF",
+    "source": "greenlint/scanning.py#_context_findings"
+   },
+   {
+    "candidate": "Only the first minReplicas/maxReplicas pair in a multi-HPA file is compared",
+    "covered_by": "infra.kubernetes.hpa-must-be-elastic",
+    "reason": "TRIVIAL",
+    "source": "greenlint/infra.py#_k8s_hpa_static_findings"
+   },
+   {
+    "candidate": "A quoted fetch-depth: '0' is not detected",
+    "covered_by": "",
+    "reason": "TRIVIAL",
+    "source": "greenlint/infra.py#_fetch_depth_findings"
+   }
+  ],
+  "greenlint/makefile": [
+   {
+    "candidate": "Running make with no target prints the grouped list of targets from their ## comments",
+    "covered_by": "",
+    "reason": "TECH_BUILD",
+    "source": "Makefile#help"
+   },
+   {
+    "candidate": "make setup installs the pre-commit hook",
+    "covered_by": "",
+    "reason": "TECH_BUILD",
+    "source": "Makefile#setup"
+   },
+   {
+    "candidate": "make dev / make install install greenlint (editable with dev extras, or plain)",
+    "covered_by": "",
+    "reason": "TECH_BUILD",
+    "source": "Makefile#dev"
+   },
+   {
+    "candidate": "make lint runs every pre-commit hook over all files; make test runs pytest -q",
+    "covered_by": "",
+    "reason": "TECH_BUILD",
+    "source": "Makefile#lint"
+   },
+   {
+    "candidate": "make bench prints scan cost, optionally over CORPUS",
+    "covered_by": "",
+    "reason": "TECH_DEVTOOLING",
+    "source": "Makefile#bench"
+   },
+   {
+    "candidate": "make build produces the sdist and wheel",
+    "covered_by": "",
+    "reason": "TECH_BUILD",
+    "source": "Makefile#build"
+   },
+   {
+    "candidate": "ext-build/ext-package compile and package the VS Code extension, naming the .vsix after the manifest version",
+    "covered_by": "",
+    "reason": "TECH_BUILD",
+    "source": "Makefile#ext-package"
+   },
+   {
+    "candidate": "ext-install refuses with guidance when the 'code' CLI is not on PATH",
+    "covered_by": "",
+    "reason": "TECH_BUILD",
+    "source": "Makefile#ext-install"
+   },
+   {
+    "candidate": "ext-publish pushes the .vsix to both marketplaces using VSCE_PAT and OVSX_PAT",
+    "covered_by": "",
+    "reason": "TECH_BUILD",
+    "source": "Makefile#ext-publish"
+   },
+   {
+    "candidate": "make run prints greenlint --help; make format rewrites Python and TypeScript; make analyze type-checks",
+    "covered_by": "",
+    "reason": "TECH_BUILD",
+    "source": "Makefile#run"
+   }
+  ],
+  "greenlint/pyrules": [
+   {
+    "candidate": "Turning off an AST rule (e.g. disable = [\"GL001\"]) suppresses its findings",
+    "covered_by": "enforced by scanning/config, not this module; belongs to configuration/project-config",
+    "reason": "INTERNAL_MECHANISM",
+    "source": "greenlint/scanning.py#_context_findings"
+   },
+   {
+    "candidate": "Python files with a syntax error get no AST-rule findings at all",
+    "covered_by": "belongs to scanning/python-structure-analysis",
+    "reason": "INTERNAL_MECHANISM",
+    "source": "greenlint/astindex.py#_parse_python"
+   },
+   {
+    "candidate": "Inner loop flagged once even when matched from several enclosing loops (seen-set dedupe)",
+    "covered_by": "",
+    "reason": "INTERNAL_MECHANISM",
+    "source": "greenlint/pyrules.py#_ast_nested_loop_findings"
+   },
+   {
+    "candidate": "GL007 skips scopes with no loop of their own and walks each scope once",
+    "covered_by": "",
+    "reason": "INTERNAL_MECHANISM",
+    "source": "greenlint/pyrules.py#_ast_quadratic_rebuild_findings"
+   },
+   {
+    "candidate": "Exported constants SCALAR_CALLS, SCALAR_OPS, NUMERIC_ONLY_OPS, PROBE_CALLS",
+    "covered_by": "",
+    "reason": "INTERNAL_MECHANISM",
+    "source": "greenlint/pyrules.py#SCALAR_CALLS"
+   },
+   {
+    "candidate": "Per-shape numeric classification permutations (unary minus, Decimal, timedelta, complex constants)",
+    "covered_by": "code-energy.algorithmic-waste.python-linear-accumulation-not-flagged",
+    "reason": "TRIVIAL",
+    "source": "greenlint/pyrules.py#_is_scalar_expr"
+   },
+   {
+    "candidate": "Order in which AST findings are produced per file",
+    "covered_by": "",
+    "reason": "INTERNAL_MECHANISM",
+    "source": "greenlint/scanning.py#AST_FINDERS"
+   }
+  ],
+  "greenlint/rules": [
+   {
+    "candidate": "GL001 `while True:` regex in the rule table",
+    "covered_by": "GL001 is in AST_RULE_IDS, so its regex is never run; the busy-loop check lives in greenlint/pyrules.py",
+    "reason": "INTERNAL_MECHANISM",
+    "source": "greenlint/rules.py#AST_RULE_IDS"
+   },
+   {
+    "candidate": "Whole-file / AST rules GL004, GL007, GL013, GL014, GL018, GL023, GL024, GL026, GL029, GL030, GL031, GL033, GL034 (detection logic)",
+    "covered_by": "pattern is None here; enforced in greenlint/infra.py and greenlint/pyrules.py, which specify them",
+    "reason": "UNVERIFIABLE",
+    "source": "greenlint/rules.py#RULES"
+   },
+   {
+    "candidate": "Pattern rules bucketed by language for lookup speed",
+    "covered_by": "",
+    "reason": "INTERNAL_MECHANISM",
+    "source": "greenlint/rules.py#_pattern_rules_by_lang"
+   },
+   {
+    "candidate": "Only files whose language some rule targets are scannable (e.g. photo.png is skipped)",
+    "covered_by": "scanning/file-discovery (greenlint/scanning.py#scannable)",
+    "reason": "INTERNAL_MECHANISM",
+    "source": "greenlint/rules.py#SCANNABLE_LANGS"
+   },
+   {
+    "candidate": "Rule lookup by id",
+    "covered_by": "",
+    "reason": "INTERNAL_MECHANISM",
+    "source": "greenlint/rules.py#RULES_BY_ID"
+   },
+   {
+    "candidate": "Every rule carries a suggestion and CO2e hint",
+    "covered_by": "repo convention checked by tests/test_greenlint.py#test_every_rule_states_its_energy_rationale; user-visible text belongs to reporting/rule-catalogue-listing",
+    "reason": "TECH_DEVTOOLING",
+    "source": "greenlint/rules.py#RULES"
+   },
+   {
+    "candidate": "Exact suggestion wording of each rule",
+    "covered_by": "",
+    "reason": "TRIVIAL",
+    "source": "greenlint/rules.py#RULES"
+   },
+   {
+    "candidate": "Short sleep in a test file is not flagged",
+    "covered_by": "test-file handling lives in scanning/finding-placement, not in this table",
+    "reason": "UNVERIFIABLE",
+    "source": "greenlint/rules.py#RULES"
+   },
+   {
+    "candidate": "Per-language variants of each regex (one scenario per language)",
+    "covered_by": "folded into the per-feature outlines",
+    "reason": "TRIVIAL",
+    "source": "greenlint/rules.py#RULES"
+   }
+  ],
+  "greenlint/scanning": [
+   {
+    "candidate": "Python is parsed and indexed once per file and shared by docstring blanking and syntax-aware rules",
+    "covered_by": "",
+    "reason": "INTERNAL_MECHANISM",
+    "source": "greenlint/scanning.py#scan_file"
+   },
+   {
+    "candidate": "String-blanked view built lazily only for code_only rules",
+    "covered_by": "",
+    "reason": "INTERNAL_MECHANISM",
+    "source": "greenlint/scanning.py#_pattern_findings"
+   },
+   {
+    "candidate": "Order of findings: syntax-aware and block rules before pattern rules",
+    "covered_by": "",
+    "reason": "INTERNAL_MECHANISM",
+    "source": "greenlint/scanning.py#scan_file"
+   },
+   {
+    "candidate": ".tofu/.yaml/.dockerfile alias their formats' block rules",
+    "covered_by": "",
+    "reason": "INTERNAL_MECHANISM",
+    "source": "greenlint/scanning.py#BLOCK_FINDERS"
+   },
+   {
+    "candidate": "GL004 full-history clone reads comments to detect the tool needing history",
+    "covered_by": "",
+    "reason": "INTERNAL_MECHANISM",
+    "source": "greenlint/scanning.py#_context_findings"
+   },
+   {
+    "candidate": "Syntax-aware rules skipped entirely when all are disabled",
+    "covered_by": "",
+    "reason": "INTERNAL_MECHANISM",
+    "source": "greenlint/scanning.py#_context_findings"
+   },
+   {
+    "candidate": "Line numbers computed via a lazily built line index",
+    "covered_by": "",
+    "reason": "INTERNAL_MECHANISM",
+    "source": "greenlint/scanning.py#_pattern_findings"
+   }
+  ]
+ },
+ "lifted": {
+  "examples/basic": [],
+  "extensions/nvim": [
+   {
+    "from_source": "extensions/nvim/lua/greenlint/store.lua#M.forget_under",
+    "rule": "nvim.triggers.project-scan-is-whole-truth"
+   }
+  ],
+  "greenlint/astindex": [],
+  "greenlint/base": [],
+  "greenlint/baselines": [],
+  "greenlint/carbon": [],
+  "greenlint/cli": [],
+  "greenlint/comments": [],
+  "greenlint/config": [],
+  "greenlint/discovery": [],
+  "greenlint/dockerfile": [
+   {
+    "from_source": "Dockerfile#runtime stage",
+    "rule": "distribution.container.runs-as-unprivileged-user"
+   }
+  ],
+  "greenlint/findings": [],
+  "greenlint/greenlint": [],
+  "greenlint/infra": [],
+  "greenlint/makefile": [],
+  "greenlint/pyrules": [],
+  "greenlint/rules": [],
+  "greenlint/scanning": []
+ },
+ "retired": [
+  "code-energy-rules.busy-waiting.006",
+  "configuration.baselines.009",
+  "configuration.baselines.010",
+  "configuration.baselines.011",
+  "developer-tooling.examples.001",
+  "scanning.finding-placement.007",
+  "scanning.finding-placement.008",
+  "scanning.finding-placement.009",
+  "scanning.python-structure-analysis.001",
+  "scanning.python-structure-analysis.002",
+  "scanning.python-structure-analysis.003"
+ ],
+ "scenarios": {
+  "code-energy-rules.algorithmic-waste.001": {
+   "file": "specs/code-energy-rules/algorithmic-waste/python-quadratic-work.feature",
+   "fingerprint": "32a1ab8191ee",
+   "human": false,
+   "rule": "code-energy.algorithmic-waste.python-sequence-rebuild-in-loop-flagged",
+   "source": "greenlint/pyrules.py#_ast_quadratic_rebuild_findings",
+   "status": "verified",
+   "test": "tests/test_greenlint.py#test_detects_string_concat_in_loop",
+   "tests": [
+    "tests/test_greenlint.py#test_detects_string_concat_in_loop",
+    "tests/test_greenlint.py#test_detects_quadratic_list_rebuild",
+    "tests/test_greenlint.py#test_bytes_accumulation_of_a_call_result_is_still_flagged",
+    "tests/test_greenlint.py#test_byte_accumulation_is_still_flagged",
+    "tests/test_greenlint.py#test_tuple_unpacked_list_still_detects_rebuild",
+    "tests/test_greenlint.py#test_assignment_of_a_list_expression_still_detects_rebuild",
+    "tests/test_greenlint.py#test_string_accumulator_is_still_flagged_when_the_scope_does_arithmetic"
+   ]
+  },
+  "code-energy-rules.algorithmic-waste.002": {
+   "file": "specs/code-energy-rules/algorithmic-waste/python-quadratic-work.feature",
+   "fingerprint": "34f0ea46e8ac",
+   "human": false,
+   "rule": "code-energy.algorithmic-waste.python-linear-accumulation-not-flagged",
+   "source": "greenlint/pyrules.py#_is_sequence_rebuild",
+   "status": "verified",
+   "test": "tests/test_greenlint.py#test_append_in_loop_is_not_flagged",
+   "tests": [
+    "tests/test_greenlint.py#test_append_in_loop_is_not_flagged",
+    "tests/test_greenlint.py#test_counter_increment_in_loop_is_not_flagged",
+    "tests/test_greenlint.py#test_numeric_accumulation_is_not_flagged",
+    "tests/test_greenlint.py#test_tuple_unpacked_counters_are_not_flagged",
+    "tests/test_greenlint.py#test_list_extend_via_augmented_assign_is_not_flagged",
+    "tests/test_greenlint.py#test_list_extend_with_comprehension_is_not_flagged",
+    "tests/test_greenlint.py#test_extend_of_a_name_known_to_be_a_list_is_not_flagged",
+    "tests/test_greenlint.py#test_cursor_seeded_from_arithmetic_is_not_flagged",
+    "tests/test_greenlint.py#test_coordinate_seeded_from_a_parameter_is_not_flagged",
+    "tests/test_greenlint.py#test_rebinding_from_other_names_is_not_flagged"
+   ]
+  },
+  "code-energy-rules.algorithmic-waste.003": {
+   "file": "specs/code-energy-rules/algorithmic-waste/python-quadratic-work.feature",
+   "fingerprint": "32a1ab8191ee",
+   "human": false,
+   "rule": "code-energy.algorithmic-waste.python-rebuild-evidence-is-per-function",
+   "source": "greenlint/pyrules.py#_ast_quadratic_rebuild_findings",
+   "status": "verified",
+   "test": "tests/test_greenlint.py#test_quadratic_rebuild_name_bindings_are_per_scope",
+   "tests": [
+    "tests/test_greenlint.py#test_quadratic_rebuild_name_bindings_are_per_scope",
+    "tests/test_greenlint.py#test_numeric_evidence_does_not_leak_across_scopes"
+   ]
+  },
+  "code-energy-rules.algorithmic-waste.004": {
+   "file": "specs/code-energy-rules/algorithmic-waste/python-quadratic-work.feature",
+   "fingerprint": "ae0133ae3a46",
+   "human": false,
+   "rule": "code-energy.algorithmic-waste.python-nested-scan-of-same-collection-flagged",
+   "source": "greenlint/pyrules.py#_ast_nested_loop_findings",
+   "status": "verified",
+   "test": "tests/test_greenlint.py#test_detects_nested_loop_over_same_collection",
+   "tests": [
+    "tests/test_greenlint.py#test_detects_nested_loop_over_same_collection",
+    "tests/test_greenlint.py#test_nested_loop_over_different_collections_not_flagged"
+   ]
+  },
+  "code-energy-rules.algorithmic-waste.005": {
+   "file": "specs/code-energy-rules/algorithmic-waste/python-quadratic-work.feature",
+   "fingerprint": "dcd9cb551e35",
+   "human": false,
+   "rule": "code-energy.algorithmic-waste.python-hand-written-swap-sort-flagged",
+   "source": "greenlint/pyrules.py#_ast_bubble_sort_findings",
+   "status": "verified",
+   "test": "tests/test_greenlint.py#test_detects_manual_bubble_sort",
+   "tests": [
+    "tests/test_greenlint.py#test_detects_manual_bubble_sort",
+    "tests/test_greenlint.py#test_builtin_sorted_not_flagged"
+   ]
+  },
+  "code-energy-rules.algorithmic-waste.006": {
+   "file": "specs/code-energy-rules/algorithmic-waste/heap-allocation-in-loops.feature",
+   "fingerprint": "f3475e765a4d",
+   "human": false,
+   "rule": "code-rules.algorithmic-waste.heap-allocation-in-loop-flagged",
+   "source": "greenlint/rules.py#RULES",
+   "status": "verified",
+   "test": "tests/test_greenlint.py#test_detects_malloc_in_loop",
+   "tests": [
+    "tests/test_greenlint.py#test_detects_malloc_in_loop"
+   ]
+  },
+  "code-energy-rules.algorithmic-waste.007": {
+   "file": "specs/code-energy-rules/algorithmic-waste/heap-allocation-in-loops.feature",
+   "fingerprint": "f3475e765a4d",
+   "human": false,
+   "rule": "code-rules.algorithmic-waste.allocation-hoisted-out-of-loop-allowed",
+   "source": "greenlint/rules.py#RULES",
+   "status": "verified",
+   "test": "tests/test_greenlint.py#test_malloc_outside_loop_not_flagged",
+   "tests": [
+    "tests/test_greenlint.py#test_malloc_outside_loop_not_flagged"
+   ]
+  },
+  "code-energy-rules.busy-waiting.001": {
+   "file": "specs/code-energy-rules/busy-waiting/python-busy-loops.feature",
+   "fingerprint": "ca5d5f053940",
+   "human": false,
+   "rule": "code-energy.busy-waiting.python-endless-loop-without-wait-flagged",
+   "source": "greenlint/pyrules.py#_ast_busy_loop_findings",
+   "status": "verified",
+   "test": "tests/test_greenlint.py#test_ast_busy_loop_ignores_unrelated_sleep_elsewhere_in_file",
+   "tests": [
+    "tests/test_greenlint.py#test_ast_busy_loop_ignores_unrelated_sleep_elsewhere_in_file",
+    "tests/test_greenlint.py#test_break_in_a_nested_loop_does_not_exonerate",
+    "tests/test_greenlint.py#test_busy_loop_found_despite_return_in_nested_function"
+   ]
+  },
+  "code-energy-rules.busy-waiting.002": {
+   "file": "specs/code-energy-rules/busy-waiting/python-busy-loops.feature",
+   "fingerprint": "ca5d5f053940",
+   "human": false,
+   "rule": "code-energy.busy-waiting.python-loop-that-waits-or-exits-not-flagged",
+   "source": "greenlint/pyrules.py#_ast_busy_loop_findings",
+   "status": "verified",
+   "test": "tests/test_greenlint.py#test_ast_busy_loop_not_flagged_when_loop_actually_sleeps",
+   "tests": [
+    "tests/test_greenlint.py#test_ast_busy_loop_not_flagged_when_loop_actually_sleeps",
+    "tests/test_greenlint.py#test_paginator_loop_not_flagged",
+    "tests/test_greenlint.py#test_read_until_eof_loop_not_flagged",
+    "tests/test_greenlint.py#test_loop_returning_a_value_not_flagged"
+   ]
+  },
+  "code-energy-rules.busy-waiting.003": {
+   "file": "specs/code-energy-rules/busy-waiting/python-busy-loops.feature",
+   "fingerprint": "ca5d5f053940",
+   "human": false,
+   "rule": "code-energy.busy-waiting.python-only-literal-true-loops-checked",
+   "source": "greenlint/pyrules.py#_ast_busy_loop_findings",
+   "status": "inferred",
+   "test": "",
+   "tests": []
+  },
+  "code-energy-rules.busy-waiting.004": {
+   "file": "specs/code-energy-rules/busy-waiting/busy-waiting-and-polling.feature",
+   "fingerprint": "f3475e765a4d",
+   "human": false,
+   "rule": "code-rules.busy-waiting.sub-100ms-polling-flagged",
+   "source": "greenlint/rules.py#RULES",
+   "status": "verified",
+   "test": "tests/test_greenlint.py#test_sleep_below_100ms_is_still_flagged",
+   "tests": [
+    "tests/test_greenlint.py#test_sleep_below_100ms_is_still_flagged",
+    "tests/test_greenlint.py#test_detects_sub_100ms_polling_across_languages",
+    "tests/test_greenlint.py#test_detects_kotlin_short_delay",
+    "tests/test_greenlint.py#test_detects_swift_short_timer_interval"
+   ]
+  },
+  "code-energy-rules.busy-waiting.005": {
+   "file": "specs/code-energy-rules/busy-waiting/busy-waiting-and-polling.feature",
+   "fingerprint": "f3475e765a4d",
+   "human": false,
+   "rule": "code-rules.busy-waiting.intervals-of-100ms-or-more-allowed",
+   "source": "greenlint/rules.py#RULES",
+   "status": "verified",
+   "test": "tests/test_greenlint.py#test_sleep_of_exactly_100ms_is_not_flagged",
+   "tests": [
+    "tests/test_greenlint.py#test_sleep_of_exactly_100ms_is_not_flagged",
+    "tests/test_greenlint.py#test_normal_sleep_intervals_across_languages_not_flagged",
+    "tests/test_greenlint.py#test_kotlin_long_delay_not_flagged",
+    "tests/test_greenlint.py#test_swift_long_timer_interval_not_flagged"
+   ]
+  },
+  "code-energy-rules.busy-waiting.007": {
+   "file": "specs/code-energy-rules/busy-waiting/busy-waiting-and-polling.feature",
+   "fingerprint": "f3475e765a4d",
+   "human": false,
+   "rule": "code-rules.busy-waiting.clock-spin-wait-flagged",
+   "source": "greenlint/rules.py#RULES",
+   "status": "inferred",
+   "test": "",
+   "tests": []
+  },
+  "code-energy-rules.busy-waiting.008": {
+   "file": "specs/code-energy-rules/busy-waiting/busy-waiting-and-polling.feature",
+   "fingerprint": "f3475e765a4d",
+   "human": false,
+   "rule": "code-rules.busy-waiting.waiting-loop-or-single-clock-read-not-spin",
+   "source": "greenlint/rules.py#RULES",
+   "status": "inferred",
+   "test": "",
+   "tests": []
+  },
+  "code-energy-rules.busy-waiting.009": {
+   "file": "specs/code-energy-rules/busy-waiting/busy-waiting-and-polling.feature",
+   "fingerprint": "f3475e765a4d",
+   "human": false,
+   "rule": "code-rules.busy-waiting.jsx-polling-not-checked",
+   "source": "greenlint/rules.py#RULES",
+   "status": "inferred",
+   "test": "",
+   "tests": []
+  },
+  "code-energy-rules.data-and-network-access.001": {
+   "file": "specs/code-energy-rules/data-and-network-access/data-and-network-access.feature",
+   "fingerprint": "f3475e765a4d",
+   "human": false,
+   "rule": "code-rules.data-access.select-star-flagged",
+   "source": "greenlint/rules.py#RULES",
+   "status": "verified",
+   "test": "tests/test_greenlint.py#test_detects_select_star_and_fat_base",
+   "tests": [
+    "tests/test_greenlint.py#test_detects_select_star_and_fat_base",
+    "tests/test_greenlint.py#test_select_star_detected_in_c_and_rust",
+    "tests/test_greenlint.py#test_embedded_content_rules_still_match_inside_strings"
+   ]
+  },
+  "code-energy-rules.data-and-network-access.002": {
+   "file": "specs/code-energy-rules/data-and-network-access/data-and-network-access.feature",
+   "fingerprint": "f3475e765a4d",
+   "human": false,
+   "rule": "code-rules.data-access.per-item-round-trip-in-loop-flagged",
+   "source": "greenlint/rules.py#RULES",
+   "status": "verified",
+   "test": "tests/test_greenlint.py#test_detects_query_in_loop",
+   "tests": [
+    "tests/test_greenlint.py#test_detects_query_in_loop",
+    "tests/test_greenlint.py#test_detects_http_request_in_loop",
+    "tests/test_greenlint.py#test_detects_file_open_in_loop"
+   ]
+  },
+  "code-energy-rules.data-and-network-access.003": {
+   "file": "specs/code-energy-rules/data-and-network-access/data-and-network-access.feature",
+   "fingerprint": "f3475e765a4d",
+   "human": false,
+   "rule": "code-rules.data-access.batched-access-allowed",
+   "source": "greenlint/rules.py#RULES",
+   "status": "verified",
+   "test": "tests/test_greenlint.py#test_batched_query_not_flagged_as_n_plus_1",
+   "tests": [
+    "tests/test_greenlint.py#test_batched_query_not_flagged_as_n_plus_1",
+    "tests/test_greenlint.py#test_batched_http_request_not_flagged",
+    "tests/test_greenlint.py#test_file_opened_outside_loop_not_flagged"
+   ]
+  },
+  "code-energy-rules.other-language-idioms.001": {
+   "file": "specs/code-energy-rules/other-language-idioms/other-language-idioms.feature",
+   "fingerprint": "f3475e765a4d",
+   "human": false,
+   "rule": "code-rules.other-languages.costly-idiom-flagged",
+   "source": "greenlint/rules.py#RULES",
+   "status": "verified",
+   "test": "tests/test_greenlint.py#test_detects_linq_count_zero_check",
+   "tests": [
+    "tests/test_greenlint.py#test_detects_linq_count_zero_check",
+    "tests/test_greenlint.py#test_detects_ruby_hash_keys_include",
+    "tests/test_greenlint.py#test_detects_ruby_select_map_chain",
+    "tests/test_greenlint.py#test_detects_inline_jsx_prop_allocation"
+   ]
+  },
+  "code-energy-rules.other-language-idioms.002": {
+   "file": "specs/code-energy-rules/other-language-idioms/other-language-idioms.feature",
+   "fingerprint": "f3475e765a4d",
+   "human": false,
+   "rule": "code-rules.other-languages.recommended-fix-allowed",
+   "source": "greenlint/rules.py#RULES",
+   "status": "verified",
+   "test": "tests/test_greenlint.py#test_linq_any_not_flagged",
+   "tests": [
+    "tests/test_greenlint.py#test_linq_any_not_flagged",
+    "tests/test_greenlint.py#test_ruby_hash_key_predicate_not_flagged",
+    "tests/test_greenlint.py#test_ruby_filter_map_not_flagged",
+    "tests/test_greenlint.py#test_hoisted_jsx_prop_not_flagged"
+   ]
+  },
+  "code-energy-rules.python-idioms.001": {
+   "file": "specs/code-energy-rules/python-idioms/python-wasteful-idioms.feature",
+   "fingerprint": "7f32b03bf7ff",
+   "human": false,
+   "rule": "code-energy.python-idioms.half-used-dict-items-flagged",
+   "source": "greenlint/pyrules.py#_ast_dict_iterator_findings",
+   "status": "verified",
+   "test": "tests/test_greenlint.py#test_detects_dict_items_discarding_key_or_value",
+   "tests": [
+    "tests/test_greenlint.py#test_detects_dict_items_discarding_key_or_value",
+    "tests/test_greenlint.py#test_dict_items_using_both_key_and_value_not_flagged"
+   ]
+  },
+  "code-energy-rules.python-idioms.002": {
+   "file": "specs/code-energy-rules/python-idioms/python-wasteful-idioms.feature",
+   "fingerprint": "1116249ff8ad",
+   "human": false,
+   "rule": "code-energy.python-idioms.exception-as-loop-control-flow-flagged",
+   "source": "greenlint/pyrules.py#_ast_try_in_loop_findings",
+   "status": "verified",
+   "test": "tests/test_greenlint.py#test_detects_lookup_guarded_by_except_in_loop",
+   "tests": [
+    "tests/test_greenlint.py#test_detects_lookup_guarded_by_except_in_loop",
+    "tests/test_greenlint.py#test_detects_int_conversion_used_as_a_type_test"
+   ]
+  },
+  "code-energy-rules.python-idioms.003": {
+   "file": "specs/code-energy-rules/python-idioms/python-wasteful-idioms.feature",
+   "fingerprint": "38a32e8fde71",
+   "human": false,
+   "rule": "code-energy.python-idioms.legitimate-error-handling-in-loops-not-flagged",
+   "source": "greenlint/pyrules.py#_has_cheap_alternative",
+   "status": "verified",
+   "test": "tests/test_greenlint.py#test_swallowed_io_error_in_loop_not_flagged",
+   "tests": [
+    "tests/test_greenlint.py#test_swallowed_io_error_in_loop_not_flagged",
+    "tests/test_greenlint.py#test_retry_loop_handler_not_flagged",
+    "tests/test_greenlint.py#test_per_item_error_collector_not_flagged",
+    "tests/test_greenlint.py#test_handler_that_breaks_not_flagged",
+    "tests/test_greenlint.py#test_try_except_around_loop_not_flagged"
+   ]
+  },
+  "code-energy-rules.python-idioms.004": {
+   "file": "specs/code-energy-rules/python-idioms/python-idioms.feature",
+   "fingerprint": "f3475e765a4d",
+   "human": false,
+   "rule": "code-rules.python-idioms.costly-idiom-flagged",
+   "source": "greenlint/rules.py#RULES",
+   "status": "verified",
+   "test": "tests/test_greenlint.py#test_detects_eager_logging_fstring",
+   "tests": [
+    "tests/test_greenlint.py#test_detects_eager_logging_fstring",
+    "tests/test_greenlint.py#test_detects_pandas_iterrows",
+    "tests/test_greenlint.py#test_detects_wildcard_import"
+   ]
+  },
+  "code-energy-rules.python-idioms.005": {
+   "file": "specs/code-energy-rules/python-idioms/python-idioms.feature",
+   "fingerprint": "f3475e765a4d",
+   "human": false,
+   "rule": "code-rules.python-idioms.efficient-idiom-allowed",
+   "source": "greenlint/rules.py#RULES",
+   "status": "verified",
+   "test": "tests/test_greenlint.py#test_lazy_logging_not_flagged",
+   "tests": [
+    "tests/test_greenlint.py#test_lazy_logging_not_flagged",
+    "tests/test_greenlint.py#test_vectorised_pandas_not_flagged",
+    "tests/test_greenlint.py#test_named_import_not_flagged"
+   ]
+  },
+  "code-energy-rules.web-assets.001": {
+   "file": "specs/code-energy-rules/web-assets/web-asset-delivery.feature",
+   "fingerprint": "f3475e765a4d",
+   "human": false,
+   "rule": "code-rules.web-assets.heavy-delivery-flagged",
+   "source": "greenlint/rules.py#RULES",
+   "status": "verified",
+   "test": "tests/test_greenlint.py#test_detects_img_missing_lazy_loading",
+   "tests": [
+    "tests/test_greenlint.py#test_detects_img_missing_lazy_loading",
+    "tests/test_greenlint.py#test_detects_gif_in_html_and_css",
+    "tests/test_greenlint.py#test_detects_express_static_without_cache"
+   ]
+  },
+  "code-energy-rules.web-assets.002": {
+   "file": "specs/code-energy-rules/web-assets/web-asset-delivery.feature",
+   "fingerprint": "f3475e765a4d",
+   "human": false,
+   "rule": "code-rules.web-assets.efficient-delivery-allowed",
+   "source": "greenlint/rules.py#RULES",
+   "status": "verified",
+   "test": "tests/test_greenlint.py#test_img_with_loading_attr_not_flagged",
+   "tests": [
+    "tests/test_greenlint.py#test_img_with_loading_attr_not_flagged",
+    "tests/test_greenlint.py#test_png_in_html_and_css_not_flagged",
+    "tests/test_greenlint.py#test_express_static_with_maxage_not_flagged"
+   ]
+  },
+  "configuration.baselines.001": {
+   "file": "specs/configuration/baselines/baselines.feature",
+   "fingerprint": "cc68e7f6080e",
+   "human": false,
+   "rule": "config.baselines.write-records-current-findings",
+   "source": "greenlint/baselines.py#write_baseline",
+   "status": "verified",
+   "test": "tests/test_greenlint.py#test_cli_writes_and_then_honours_a_baseline",
+   "tests": [
+    "tests/test_greenlint.py#test_cli_writes_and_then_honours_a_baseline",
+    "tests/test_e2e.py#test_a_written_baseline_silences_the_gate_on_the_next_run",
+    "tests/test_greenlint.py#test_baseline_accepts_current_findings_and_still_reports_new_ones"
+   ]
+  },
+  "configuration.baselines.002": {
+   "file": "specs/configuration/baselines/baselines.feature",
+   "fingerprint": "760be6ae38a4",
+   "human": false,
+   "rule": "config.baselines.accepted-findings-hidden",
+   "source": "greenlint/baselines.py#apply_baseline",
+   "status": "verified",
+   "test": "tests/test_greenlint.py#test_cli_writes_and_then_honours_a_baseline",
+   "tests": [
+    "tests/test_greenlint.py#test_cli_writes_and_then_honours_a_baseline",
+    "tests/test_e2e.py#test_a_written_baseline_silences_the_gate_on_the_next_run",
+    "tests/test_greenlint.py#test_baseline_accepts_current_findings_and_still_reports_new_ones"
+   ]
+  },
+  "configuration.baselines.003": {
+   "file": "specs/configuration/baselines/baselines.feature",
+   "fingerprint": "760be6ae38a4",
+   "human": false,
+   "rule": "config.baselines.new-findings-still-reported",
+   "source": "greenlint/baselines.py#apply_baseline",
+   "status": "verified",
+   "test": "tests/test_greenlint.py#test_baseline_accepts_current_findings_and_still_reports_new_ones",
+   "tests": [
+    "tests/test_greenlint.py#test_baseline_accepts_current_findings_and_still_reports_new_ones"
+   ]
+  },
+  "configuration.baselines.004": {
+   "file": "specs/configuration/baselines/baselines.feature",
+   "fingerprint": "3d645b1511b8",
+   "human": false,
+   "rule": "config.baselines.survives-line-moves",
+   "source": "greenlint/baselines.py#fingerprint",
+   "status": "verified",
+   "test": "tests/test_greenlint.py#test_fingerprint_survives_edits_above_the_finding",
+   "tests": [
+    "tests/test_greenlint.py#test_fingerprint_survives_edits_above_the_finding"
+   ]
+  },
+  "configuration.baselines.005": {
+   "file": "specs/configuration/baselines/baselines.feature",
+   "fingerprint": "3d645b1511b8",
+   "human": false,
+   "rule": "config.baselines.one-acceptance-per-file-and-rule",
+   "source": "greenlint/baselines.py#fingerprint",
+   "status": "inferred",
+   "test": "",
+   "tests": []
+  },
+  "configuration.baselines.006": {
+   "file": "specs/configuration/baselines/baselines.feature",
+   "fingerprint": "3d645b1511b8",
+   "human": false,
+   "rule": "config.baselines.shared-across-path-styles",
+   "source": "greenlint/baselines.py#fingerprint",
+   "status": "verified",
+   "test": "tests/test_greenlint.py#test_fingerprint_is_the_same_for_absolute_and_relative_paths",
+   "tests": [
+    "tests/test_greenlint.py#test_fingerprint_is_the_same_for_absolute_and_relative_paths"
+   ]
+  },
+  "configuration.baselines.007": {
+   "file": "specs/configuration/baselines/baselines.feature",
+   "fingerprint": "9069651a6e16",
+   "human": false,
+   "rule": "config.baselines.named-baseline-must-exist",
+   "source": "greenlint/cli.py#_resolve_baseline",
+   "status": "verified",
+   "test": "tests/test_greenlint.py#test_cli_rejects_a_baseline_path_that_is_not_there",
+   "tests": [
+    "tests/test_greenlint.py#test_cli_rejects_a_baseline_path_that_is_not_there"
+   ]
+  },
+  "configuration.baselines.008": {
+   "file": "specs/configuration/baselines/baselines.feature",
+   "fingerprint": "0fb59db530c3",
+   "human": false,
+   "rule": "config.baselines.unreadable-baseline-reports-everything",
+   "source": "greenlint/baselines.py#load_baseline",
+   "status": "verified",
+   "test": "tests/test_greenlint.py#test_a_missing_or_broken_baseline_reports_everything",
+   "tests": [
+    "tests/test_greenlint.py#test_a_missing_or_broken_baseline_reports_everything"
+   ]
+  },
+  "configuration.path-exclusion.001": {
+   "file": "specs/configuration/path-exclusion/ignore-glob-matching.feature",
+   "fingerprint": "6ddb4289bc95",
+   "human": false,
+   "rule": "configuration.exclusion.globs-match-relative-scan-paths",
+   "source": "greenlint/discovery.py#_matches_any",
+   "status": "verified",
+   "test": "tests/test_greenlint.py#test_relative_ignore_glob_applies",
+   "tests": [
+    "tests/test_greenlint.py#test_relative_ignore_glob_applies",
+    "tests/test_greenlint.py#test_config_ignores_path",
+    "tests/test_greenlint.py#test_multiline_ignore_array_is_parsed"
+   ]
+  },
+  "configuration.path-exclusion.002": {
+   "file": "specs/configuration/path-exclusion/ignore-glob-matching.feature",
+   "fingerprint": "13bbfc99e999",
+   "human": false,
+   "rule": "configuration.exclusion.explicit-file-still-excluded",
+   "source": "greenlint/discovery.py#is_ignored",
+   "status": "verified",
+   "test": "tests/test_greenlint.py#test_is_ignored_matches_the_walkers_own_filtering",
+   "tests": [
+    "tests/test_greenlint.py#test_is_ignored_matches_the_walkers_own_filtering",
+    "tests/test_greenlint.py#test_walk_files_prunes_virtualenvs_and_caches"
+   ]
+  },
+  "configuration.path-exclusion.003": {
+   "file": "specs/configuration/path-exclusion/ignore-glob-matching.feature",
+   "fingerprint": "9187cf1a52c4",
+   "human": false,
+   "rule": "configuration.exclusion.case-insensitive-on-windows",
+   "source": "greenlint/discovery.py#_ignore_matcher",
+   "status": "inferred",
+   "test": "",
+   "tests": []
+  },
+  "configuration.project-config.001": {
+   "file": "specs/configuration/project-config/project-config-file.feature",
+   "fingerprint": "11cb51af36ea",
+   "human": false,
+   "rule": "configuration.project-config.disabled-rules-not-reported",
+   "source": "greenlint/config.py#load_config",
+   "status": "verified",
+   "test": "tests/test_greenlint.py#test_config_disables_rule",
+   "tests": [
+    "tests/test_greenlint.py#test_config_disables_rule",
+    "tests/test_greenlint.py#test_ast_busy_loop_respects_disable"
+   ]
+  },
+  "configuration.project-config.002": {
+   "file": "specs/configuration/project-config/project-config-file.feature",
+   "fingerprint": "11cb51af36ea",
+   "human": false,
+   "rule": "configuration.project-config.ignore-list-honoured",
+   "source": "greenlint/config.py#load_config",
+   "status": "verified",
+   "test": "tests/test_greenlint.py#test_config_ignores_path",
+   "tests": [
+    "tests/test_greenlint.py#test_config_ignores_path",
+    "tests/test_greenlint.py#test_config_array_may_span_lines",
+    "tests/test_greenlint.py#test_multiline_ignore_actually_excludes_files",
+    "tests/test_greenlint.py#test_multiline_ignore_array_is_parsed"
+   ]
+  },
+  "configuration.project-config.003": {
+   "file": "specs/configuration/project-config/project-config-file.feature",
+   "fingerprint": "11cb51af36ea",
+   "human": false,
+   "rule": "configuration.project-config.absent-file-means-defaults",
+   "source": "greenlint/config.py#load_config",
+   "status": "verified",
+   "test": "tests/test_greenlint.py#test_missing_config_is_a_noop",
+   "tests": [
+    "tests/test_greenlint.py#test_missing_config_is_a_noop"
+   ]
+  },
+  "configuration.project-config.004": {
+   "file": "specs/configuration/project-config/project-config-file.feature",
+   "fingerprint": "11cb51af36ea",
+   "human": false,
+   "rule": "configuration.project-config.explicit-missing-config-ignored",
+   "source": "greenlint/config.py#load_config",
+   "status": "inferred",
+   "test": "",
+   "tests": []
+  },
+  "configuration.project-config.005": {
+   "file": "specs/configuration/project-config/project-config-file.feature",
+   "fingerprint": "11cb51af36ea",
+   "human": false,
+   "rule": "configuration.project-config.invalid-toml-aborts",
+   "source": "greenlint/config.py#load_config",
+   "status": "verified",
+   "test": "tests/test_greenlint.py#test_malformed_config_aborts",
+   "tests": [
+    "tests/test_greenlint.py#test_malformed_config_aborts"
+   ]
+  },
+  "configuration.project-config.006": {
+   "file": "specs/configuration/project-config/project-config-file.feature",
+   "fingerprint": "8d4792a32cba",
+   "human": false,
+   "rule": "configuration.project-config.string-instead-of-list-refused",
+   "source": "greenlint/config.py#_as_list",
+   "status": "verified",
+   "test": "tests/test_greenlint.py#test_string_instead_of_list_is_rejected",
+   "tests": [
+    "tests/test_greenlint.py#test_string_instead_of_list_is_rejected"
+   ]
+  },
+  "configuration.project-config.007": {
+   "file": "specs/configuration/project-config/project-config-file.feature",
+   "fingerprint": "8d4792a32cba",
+   "human": false,
+   "rule": "configuration.project-config.non-list-value-crashes",
+   "source": "greenlint/config.py#_as_list",
+   "status": "inferred",
+   "test": "",
+   "tests": []
+  },
+  "configuration.project-config.008": {
+   "file": "specs/configuration/project-config/project-config-file.feature",
+   "fingerprint": "11cb51af36ea",
+   "human": false,
+   "rule": "configuration.project-config.unknown-settings-ignored",
+   "source": "greenlint/config.py#load_config",
+   "status": "inferred",
+   "test": "",
+   "tests": []
+  },
+  "developer-tooling.command-line-entry.001": {
+   "file": "specs/developer-tooling/command-line-entry/cli-scan.feature",
+   "fingerprint": "d2899201150b",
+   "human": false,
+   "rule": "reporting.ci-gate.fail-on-findings-exit-code",
+   "source": "greenlint/cli.py#main",
+   "status": "verified",
+   "test": "tests/test_e2e.py#test_fail_on_findings_gates_a_dirty_tree_but_not_a_clean_one",
+   "tests": [
+    "tests/test_e2e.py#test_fail_on_findings_gates_a_dirty_tree_but_not_a_clean_one",
+    "tests/test_e2e.py#test_scanning_the_example_reports_what_its_readme_promises"
+   ]
+  },
+  "developer-tooling.command-line-entry.002": {
+   "file": "specs/developer-tooling/command-line-entry/cli-scan.feature",
+   "fingerprint": "4eaa3502ec09",
+   "human": false,
+   "rule": "reporting.text.human-report-with-summary",
+   "source": "greenlint/cli.py#_print_text",
+   "status": "verified",
+   "test": "tests/test_e2e.py#test_scanning_the_example_reports_what_its_readme_promises",
+   "tests": [
+    "tests/test_e2e.py#test_scanning_the_example_reports_what_its_readme_promises",
+    "tests/test_e2e.py#test_fail_on_findings_gates_a_dirty_tree_but_not_a_clean_one"
+   ]
+  },
+  "developer-tooling.command-line-entry.003": {
+   "file": "specs/developer-tooling/command-line-entry/cli-scan.feature",
+   "fingerprint": "d2899201150b",
+   "human": false,
+   "rule": "reporting.json.machine-readable-findings",
+   "source": "greenlint/cli.py#main",
+   "status": "verified",
+   "test": "tests/test_e2e.py#test_json_output_is_machine_readable",
+   "tests": [
+    "tests/test_e2e.py#test_json_output_is_machine_readable"
+   ]
+  },
+  "developer-tooling.command-line-entry.004": {
+   "file": "specs/developer-tooling/command-line-entry/cli-scan.feature",
+   "fingerprint": "b3d5b4d2d7a4",
+   "human": false,
+   "rule": "reporting.github.workflow-annotations-by-severity",
+   "source": "greenlint/cli.py#_print_github",
+   "status": "verified",
+   "test": "tests/test_e2e.py#test_json_output_is_machine_readable",
+   "tests": [
+    "tests/test_e2e.py#test_json_output_is_machine_readable"
+   ]
+  },
+  "developer-tooling.command-line-entry.005": {
+   "file": "specs/developer-tooling/command-line-entry/cli-scan.feature",
+   "fingerprint": "d2899201150b",
+   "human": false,
+   "rule": "configuration.path-exclusion.exclude-flag-adds-to-config",
+   "source": "greenlint/cli.py#main",
+   "status": "verified",
+   "test": "tests/test_greenlint.py#test_cli_exclude_is_repeatable_and_adds_to_the_config",
+   "tests": [
+    "tests/test_greenlint.py#test_cli_exclude_is_repeatable_and_adds_to_the_config",
+    "tests/test_greenlint.py#test_cli_exclude_flag_skips_matching_paths"
+   ]
+  },
+  "developer-tooling.command-line-entry.006": {
+   "file": "specs/developer-tooling/command-line-entry/cli-scan.feature",
+   "fingerprint": "15033b8df94b",
+   "human": false,
+   "rule": "reporting.rule-catalogue.list-rules-without-scanning",
+   "source": "greenlint/cli.py#_print_rules",
+   "status": "inferred",
+   "test": "",
+   "tests": []
+  },
+  "developer-tooling.command-line-entry.007": {
+   "file": "specs/developer-tooling/command-line-entry/run-as-python-module.feature",
+   "fingerprint": "734bb21393c6",
+   "human": false,
+   "rule": "cli.entry.module-invocation-matches-command",
+   "source": "greenlint/__main__.py#main",
+   "status": "verified",
+   "test": "tests/test_e2e.py#test_scanning_the_example_reports_what_its_readme_promises",
+   "tests": [
+    "tests/test_e2e.py#test_scanning_the_example_reports_what_its_readme_promises",
+    "tests/test_e2e.py#test_json_output_is_machine_readable"
+   ]
+  },
+  "developer-tooling.command-line-entry.008": {
+   "file": "specs/developer-tooling/command-line-entry/run-as-python-module.feature",
+   "fingerprint": "734bb21393c6",
+   "human": false,
+   "rule": "cli.entry.module-invocation-propagates-exit-status",
+   "source": "greenlint/__main__.py#main",
+   "status": "verified",
+   "test": "tests/test_e2e.py#test_fail_on_findings_gates_a_dirty_tree_but_not_a_clean_one",
+   "tests": [
+    "tests/test_e2e.py#test_fail_on_findings_gates_a_dirty_tree_but_not_a_clean_one",
+    "tests/test_e2e.py#test_a_written_baseline_silences_the_gate_on_the_next_run"
+   ]
+  },
+  "developer-tooling.container-distribution.001": {
+   "file": "specs/developer-tooling/container-distribution/container-image.feature",
+   "fingerprint": "296972047554",
+   "human": false,
+   "rule": "distribution.container.no-arguments-shows-help",
+   "source": "Dockerfile#runtime stage",
+   "status": "inferred",
+   "test": "",
+   "tests": []
+  },
+  "developer-tooling.container-distribution.002": {
+   "file": "specs/developer-tooling/container-distribution/container-image.feature",
+   "fingerprint": "296972047554",
+   "human": false,
+   "rule": "distribution.container.arguments-passed-to-greenlint",
+   "source": "Dockerfile#runtime stage",
+   "status": "inferred",
+   "test": "",
+   "tests": []
+  },
+  "developer-tooling.container-distribution.003": {
+   "file": "specs/developer-tooling/container-distribution/container-image.feature",
+   "fingerprint": "296972047554",
+   "human": false,
+   "rule": "distribution.container.runs-as-unprivileged-user",
+   "source": "Dockerfile#runtime stage",
+   "status": "inferred",
+   "test": "",
+   "tests": []
+  },
+  "infrastructure-checks.ci-pipelines.001": {
+   "file": "specs/infrastructure-checks/ci-pipelines/ci-full-history-clones.feature",
+   "fingerprint": "dba4029a63d4",
+   "human": false,
+   "rule": "infra.ci.full-history-clone-flagged",
+   "source": "greenlint/infra.py#_fetch_depth_findings",
+   "status": "verified",
+   "test": "tests/test_greenlint.py#test_detects_full_history_clone",
+   "tests": [
+    "tests/test_greenlint.py#test_detects_full_history_clone",
+    "tests/test_greenlint.py#test_full_history_clone_still_flagged_for_a_plain_build"
+   ]
+  },
+  "infrastructure-checks.ci-pipelines.002": {
+   "file": "specs/infrastructure-checks/ci-pipelines/ci-full-history-clones.feature",
+   "fingerprint": "579a4a3566ed",
+   "human": false,
+   "rule": "infra.ci.history-needing-tools-exempt",
+   "source": "greenlint/infra.py#NEEDS_FULL_HISTORY",
+   "status": "verified",
+   "test": "tests/test_greenlint.py#test_full_history_clone_not_flagged_when_a_scanner_needs_it",
+   "tests": [
+    "tests/test_greenlint.py#test_full_history_clone_not_flagged_when_a_scanner_needs_it",
+    "tests/test_greenlint.py#test_full_history_clone_not_flagged_for_release_tooling",
+    "tests/test_greenlint.py#test_full_history_clone_not_flagged_for_docs_date_plugins",
+    "tests/test_greenlint.py#test_full_history_clone_not_flagged_for_super_linter"
+   ]
+  },
+  "infrastructure-checks.ci-pipelines.003": {
+   "file": "specs/infrastructure-checks/ci-pipelines/ci-full-history-clones.feature",
+   "fingerprint": "89c3e4da921c",
+   "human": false,
+   "rule": "infra.ci.exemption-scoped-to-job",
+   "source": "greenlint/infra.py#_job_span",
+   "status": "verified",
+   "test": "tests/test_greenlint.py#test_fetch_depth_exemption_is_per_job",
+   "tests": [
+    "tests/test_greenlint.py#test_fetch_depth_exemption_is_per_job"
+   ]
+  },
+  "infrastructure-checks.ci-pipelines.004": {
+   "file": "specs/infrastructure-checks/ci-pipelines/ci-full-history-clones.feature",
+   "fingerprint": "dba4029a63d4",
+   "human": false,
+   "rule": "infra.ci.commented-setting-ignored",
+   "source": "greenlint/infra.py#_fetch_depth_findings",
+   "status": "verified",
+   "test": "tests/test_greenlint.py#test_full_history_clone_in_a_comment_not_flagged",
+   "tests": [
+    "tests/test_greenlint.py#test_full_history_clone_in_a_comment_not_flagged"
+   ]
+  },
+  "infrastructure-checks.ci-pipelines.005": {
+   "file": "specs/infrastructure-checks/ci-pipelines/every-minute-schedules.feature",
+   "fingerprint": "f3475e765a4d",
+   "human": false,
+   "rule": "infra.ci-pipelines.every-minute-cron-flagged",
+   "source": "greenlint/rules.py#RULES",
+   "status": "verified",
+   "test": "tests/test_greenlint.py#test_detects_every_minute_cron",
+   "tests": [
+    "tests/test_greenlint.py#test_detects_every_minute_cron",
+    "tests/test_greenlint.py#test_detects_k8s_cronjob_schedule_every_minute"
+   ]
+  },
+  "infrastructure-checks.ci-pipelines.006": {
+   "file": "specs/infrastructure-checks/ci-pipelines/every-minute-schedules.feature",
+   "fingerprint": "f3475e765a4d",
+   "human": false,
+   "rule": "infra.ci-pipelines.wider-schedules-allowed",
+   "source": "greenlint/rules.py#RULES",
+   "status": "inferred",
+   "test": "",
+   "tests": []
+  },
+  "infrastructure-checks.cloud-resources.001": {
+   "file": "specs/infrastructure-checks/cloud-resources/terraform-resource-checks.feature",
+   "fingerprint": "2fb92024edac",
+   "human": false,
+   "rule": "infra.terraform.s3-bucket-needs-lifecycle",
+   "source": "greenlint/infra.py#_tf_s3_lifecycle_findings",
+   "status": "verified",
+   "test": "tests/test_greenlint.py#test_detects_s3_bucket_without_lifecycle",
+   "tests": [
+    "tests/test_greenlint.py#test_detects_s3_bucket_without_lifecycle",
+    "tests/test_greenlint.py#test_s3_bucket_with_lifecycle_not_flagged"
+   ]
+  },
+  "infrastructure-checks.cloud-resources.002": {
+   "file": "specs/infrastructure-checks/cloud-resources/terraform-resource-checks.feature",
+   "fingerprint": "2fb92024edac",
+   "human": false,
+   "rule": "infra.terraform.separate-lifecycle-configuration-not-recognised",
+   "source": "greenlint/infra.py#_tf_s3_lifecycle_findings",
+   "status": "inferred",
+   "test": "",
+   "tests": []
+  },
+  "infrastructure-checks.cloud-resources.003": {
+   "file": "specs/infrastructure-checks/cloud-resources/terraform-resource-checks.feature",
+   "fingerprint": "a2412753246d",
+   "human": false,
+   "rule": "infra.terraform.log-group-needs-retention",
+   "source": "greenlint/infra.py#_tf_log_retention_findings",
+   "status": "verified",
+   "test": "tests/test_greenlint.py#test_detects_log_group_without_retention",
+   "tests": [
+    "tests/test_greenlint.py#test_detects_log_group_without_retention",
+    "tests/test_greenlint.py#test_log_group_with_retention_not_flagged"
+   ]
+  },
+  "infrastructure-checks.cloud-resources.004": {
+   "file": "specs/infrastructure-checks/cloud-resources/terraform-resource-checks.feature",
+   "fingerprint": "b18da4dedcff",
+   "human": false,
+   "rule": "infra.terraform.autoscaling-group-must-be-elastic",
+   "source": "greenlint/infra.py#_tf_asg_static_size_findings",
+   "status": "verified",
+   "test": "tests/test_greenlint.py#test_detects_fixed_size_autoscaling_group",
+   "tests": [
+    "tests/test_greenlint.py#test_detects_fixed_size_autoscaling_group",
+    "tests/test_greenlint.py#test_elastic_autoscaling_group_not_flagged"
+   ]
+  },
+  "infrastructure-checks.cloud-resources.005": {
+   "file": "specs/infrastructure-checks/cloud-resources/cloud-resource-checks.feature",
+   "fingerprint": "f3475e765a4d",
+   "human": false,
+   "rule": "infra.cloud-resources.inefficient-instance-or-volume-flagged",
+   "source": "greenlint/rules.py#RULES",
+   "status": "verified",
+   "test": "tests/test_greenlint.py#test_detects_very_large_instance_type",
+   "tests": [
+    "tests/test_greenlint.py#test_detects_very_large_instance_type",
+    "tests/test_greenlint.py#test_detects_non_graviton_instance_family",
+    "tests/test_greenlint.py#test_opentofu_files_use_the_same_terraform_rules",
+    "tests/test_greenlint.py#test_detects_gp2_volume"
+   ]
+  },
+  "infrastructure-checks.cloud-resources.006": {
+   "file": "specs/infrastructure-checks/cloud-resources/cloud-resource-checks.feature",
+   "fingerprint": "f3475e765a4d",
+   "human": false,
+   "rule": "infra.cloud-resources.right-sized-choices-allowed",
+   "source": "greenlint/rules.py#RULES",
+   "status": "verified",
+   "test": "tests/test_greenlint.py#test_modest_instance_type_not_flagged",
+   "tests": [
+    "tests/test_greenlint.py#test_modest_instance_type_not_flagged",
+    "tests/test_greenlint.py#test_graviton_instance_family_not_flagged",
+    "tests/test_greenlint.py#test_gp3_volume_not_flagged"
+   ]
+  },
+  "infrastructure-checks.cloud-resources.007": {
+   "file": "specs/infrastructure-checks/cloud-resources/cloud-resource-checks.feature",
+   "fingerprint": "f3475e765a4d",
+   "human": false,
+   "rule": "infra.cloud-resources.large-modern-families-unchecked",
+   "source": "greenlint/rules.py#RULES",
+   "status": "inferred",
+   "test": "",
+   "tests": []
+  },
+  "infrastructure-checks.container-images.001": {
+   "file": "specs/infrastructure-checks/container-images/dockerfile-install-layers.feature",
+   "fingerprint": "863d80027ddb",
+   "human": false,
+   "rule": "infra.dockerfile.one-install-layer-per-stage",
+   "source": "greenlint/infra.py#_dockerfile_layer_bloat_findings",
+   "status": "verified",
+   "test": "tests/test_greenlint.py#test_detects_multiple_dockerfile_install_layers",
+   "tests": [
+    "tests/test_greenlint.py#test_detects_multiple_dockerfile_install_layers",
+    "tests/test_greenlint.py#test_single_dockerfile_install_layer_not_flagged",
+    "tests/test_greenlint.py#test_detects_two_install_layers_in_one_stage"
+   ]
+  },
+  "infrastructure-checks.container-images.002": {
+   "file": "specs/infrastructure-checks/container-images/dockerfile-install-layers.feature",
+   "fingerprint": "863d80027ddb",
+   "human": false,
+   "rule": "infra.dockerfile-install-layers-counted-per-stage",
+   "source": "greenlint/infra.py#_dockerfile_layer_bloat_findings",
+   "status": "verified",
+   "test": "tests/test_greenlint.py#test_install_layers_in_separate_build_stages_not_flagged",
+   "tests": [
+    "tests/test_greenlint.py#test_install_layers_in_separate_build_stages_not_flagged"
+   ]
+  },
+  "infrastructure-checks.container-images.003": {
+   "file": "specs/infrastructure-checks/container-images/dockerfile-install-layers.feature",
+   "fingerprint": "863d80027ddb",
+   "human": false,
+   "rule": "infra.dockerfile.install-tools-recognised",
+   "source": "greenlint/infra.py#_dockerfile_layer_bloat_findings",
+   "status": "inferred",
+   "test": "",
+   "tests": []
+  },
+  "infrastructure-checks.container-images.004": {
+   "file": "specs/infrastructure-checks/container-images/container-image-checks.feature",
+   "fingerprint": "f3475e765a4d",
+   "human": false,
+   "rule": "infra.container-images.bloated-or-eol-base-flagged",
+   "source": "greenlint/rules.py#RULES",
+   "status": "verified",
+   "test": "tests/test_greenlint.py#test_detects_select_star_and_fat_base",
+   "tests": [
+    "tests/test_greenlint.py#test_detects_select_star_and_fat_base",
+    "tests/test_greenlint.py#test_detects_eol_docker_base_image"
+   ]
+  },
+  "infrastructure-checks.container-images.005": {
+   "file": "specs/infrastructure-checks/container-images/container-image-checks.feature",
+   "fingerprint": "f3475e765a4d",
+   "human": false,
+   "rule": "infra.container-images.slim-current-base-allowed",
+   "source": "greenlint/rules.py#RULES",
+   "status": "verified",
+   "test": "tests/test_greenlint.py#test_slim_base_not_flagged",
+   "tests": [
+    "tests/test_greenlint.py#test_slim_base_not_flagged",
+    "tests/test_greenlint.py#test_current_docker_base_image_not_flagged"
+   ]
+  },
+  "infrastructure-checks.container-images.006": {
+   "file": "specs/infrastructure-checks/container-images/container-image-checks.feature",
+   "fingerprint": "f3475e765a4d",
+   "human": false,
+   "rule": "infra.container-images.package-install-without-slimming-flag",
+   "source": "greenlint/rules.py#RULES",
+   "status": "verified",
+   "test": "tests/test_greenlint.py#test_detects_apt_and_pip_without_cleanup_flags",
+   "tests": [
+    "tests/test_greenlint.py#test_detects_apt_and_pip_without_cleanup_flags",
+    "tests/test_greenlint.py#test_apt_and_pip_cleanup_flags_not_flagged"
+   ]
+  },
+  "infrastructure-checks.workload-orchestration.001": {
+   "file": "specs/infrastructure-checks/workload-orchestration/workload-resource-bounds.feature",
+   "fingerprint": "a815e9fe1fe8",
+   "human": false,
+   "rule": "infra.kubernetes.workload-needs-resources",
+   "source": "greenlint/infra.py#_k8s_resources_findings",
+   "status": "verified",
+   "test": "tests/test_greenlint.py#test_detects_k8s_deployment_without_resources",
+   "tests": [
+    "tests/test_greenlint.py#test_detects_k8s_deployment_without_resources",
+    "tests/test_greenlint.py#test_k8s_deployment_with_resources_not_flagged"
+   ]
+  },
+  "infrastructure-checks.workload-orchestration.002": {
+   "file": "specs/infrastructure-checks/workload-orchestration/workload-resource-bounds.feature",
+   "fingerprint": "a815e9fe1fe8",
+   "human": false,
+   "rule": "infra.kubernetes.helm-templates-not-judged",
+   "source": "greenlint/infra.py#_k8s_resources_findings",
+   "status": "verified",
+   "test": "tests/test_greenlint.py#test_helm_template_not_flagged_for_missing_resources",
+   "tests": [
+    "tests/test_greenlint.py#test_helm_template_not_flagged_for_missing_resources"
+   ]
+  },
+  "infrastructure-checks.workload-orchestration.003": {
+   "file": "specs/infrastructure-checks/workload-orchestration/workload-resource-bounds.feature",
+   "fingerprint": "5c16c0e95851",
+   "human": false,
+   "rule": "infra.kubernetes.hpa-must-be-elastic",
+   "source": "greenlint/infra.py#_k8s_hpa_static_findings",
+   "status": "verified",
+   "test": "tests/test_greenlint.py#test_detects_fixed_range_hpa",
+   "tests": [
+    "tests/test_greenlint.py#test_detects_fixed_range_hpa",
+    "tests/test_greenlint.py#test_elastic_hpa_not_flagged"
+   ]
+  },
+  "infrastructure-checks.workload-orchestration.004": {
+   "file": "specs/infrastructure-checks/workload-orchestration/workload-resource-bounds.feature",
+   "fingerprint": "aa99a35096d9",
+   "human": false,
+   "rule": "infra.compose.services-need-limits",
+   "source": "greenlint/infra.py#_compose_resources_findings",
+   "status": "verified",
+   "test": "tests/test_greenlint.py#test_detects_compose_service_without_limits",
+   "tests": [
+    "tests/test_greenlint.py#test_detects_compose_service_without_limits",
+    "tests/test_greenlint.py#test_compose_service_with_mem_limit_not_flagged"
+   ]
+  },
+  "neovim-integration.editor-commands.001": {
+   "file": "specs/neovim-integration/editor-commands/nvim-editor-commands.feature",
+   "fingerprint": "9b29de58fd43",
+   "human": false,
+   "rule": "nvim.commands.report-grouped",
+   "source": "extensions/nvim/lua/greenlint/core.lua#M.report_lines",
+   "status": "verified",
+   "test": "extensions/nvim/tests/commands_spec.lua#opens a float that leads with the totals",
+   "tests": [
+    "extensions/nvim/tests/commands_spec.lua#opens a float that leads with the totals",
+    "extensions/nvim/tests/commands_spec.lua#scans the project first when nothing is known yet",
+    "extensions/nvim/tests/commands_spec.lua#regroups the report by what was chosen",
+    "extensions/nvim/tests/commands_spec.lua#offers the three groupings with a blurb each",
+    "extensions/nvim/tests/core_spec.lua#groups by file",
+    "extensions/nvim/tests/core_spec.lua#groups by rule",
+    "extensions/nvim/tests/core_spec.lua#groups by severity, worst first"
+   ]
+  },
+  "neovim-integration.editor-commands.002": {
+   "file": "specs/neovim-integration/editor-commands/nvim-editor-commands.feature",
+   "fingerprint": "7fe449ac09e0",
+   "human": false,
+   "rule": "nvim.commands.nothing-found",
+   "source": "extensions/nvim/lua/greenlint/commands.lua#M.list",
+   "status": "verified",
+   "test": "extensions/nvim/tests/commands_spec.lua#says so when there is nothing to report",
+   "tests": [
+    "extensions/nvim/tests/commands_spec.lua#says so when there is nothing to report",
+    "extensions/nvim/tests/commands_spec.lua#says so, and opens nothing, when there is nothing to list",
+    "extensions/nvim/tests/commands_spec.lua#says so, without an empty menu, when there is nothing to filter"
+   ]
+  },
+  "neovim-integration.editor-commands.003": {
+   "file": "specs/neovim-integration/editor-commands/nvim-editor-commands.feature",
+   "fingerprint": "7d875d99b9e2",
+   "human": false,
+   "rule": "nvim.commands.list-worst-first",
+   "source": "extensions/nvim/lua/greenlint/ui.lua#M.to_quickfix",
+   "status": "verified",
+   "test": "extensions/nvim/tests/commands_spec.lua#fills the quickfix list with every finding, worst first",
+   "tests": [
+    "extensions/nvim/tests/commands_spec.lua#fills the quickfix list with every finding, worst first",
+    "extensions/nvim/tests/ui_spec.lua#lists findings worst-first, with the rule and the suggestion on the line"
+   ]
+  },
+  "neovim-integration.editor-commands.004": {
+   "file": "specs/neovim-integration/editor-commands/nvim-editor-commands.feature",
+   "fingerprint": "ff948fb49e0d",
+   "human": false,
+   "rule": "nvim.commands.filter-by-severity",
+   "source": "extensions/nvim/lua/greenlint/commands.lua#M.filter",
+   "status": "verified",
+   "test": "extensions/nvim/tests/commands_spec.lua#offers only the severities that were actually found, with their counts",
+   "tests": [
+    "extensions/nvim/tests/commands_spec.lua#offers only the severities that were actually found, with their counts",
+    "extensions/nvim/tests/commands_spec.lua#lists only the chosen severity"
+   ]
+  },
+  "neovim-integration.editor-commands.005": {
+   "file": "specs/neovim-integration/editor-commands/nvim-editor-commands.feature",
+   "fingerprint": "59dd1a2e86df",
+   "human": false,
+   "rule": "nvim.commands.hover-explains-finding",
+   "source": "extensions/nvim/lua/greenlint/core.lua#M.hover_lines",
+   "status": "verified",
+   "test": "extensions/nvim/tests/core_spec.lua#shows the cost as prose, not as a number",
+   "tests": [
+    "extensions/nvim/tests/core_spec.lua#shows the cost as prose, not as a number",
+    "extensions/nvim/tests/core_spec.lua#leaves the cost line out when a rule has none",
+    "extensions/nvim/tests/core_spec.lua#builds the anchor the rules reference actually uses",
+    "extensions/nvim/tests/commands_spec.lua#says so when the cursor is not on a finding"
+   ]
+  },
+  "neovim-integration.editor-commands.006": {
+   "file": "specs/neovim-integration/editor-commands/nvim-editor-commands.feature",
+   "fingerprint": "f3dc277b7909",
+   "human": false,
+   "rule": "nvim.commands.baseline-write-needs-confirmation",
+   "source": "extensions/nvim/lua/greenlint/init.lua#M.write_baseline",
+   "status": "verified",
+   "test": "extensions/nvim/tests/commands_spec.lua#runs nothing at all unless the write is confirmed",
+   "tests": [
+    "extensions/nvim/tests/commands_spec.lua#runs nothing at all unless the write is confirmed",
+    "extensions/nvim/tests/core_spec.lua#drops --format when writing a baseline, which does not produce findings"
+   ]
+  },
+  "neovim-integration.editor-commands.007": {
+   "file": "specs/neovim-integration/editor-commands/nvim-editor-commands.feature",
+   "fingerprint": "5ef6199b4d46",
+   "human": false,
+   "rule": "nvim.commands.baseline-clear-needs-confirmation",
+   "source": "extensions/nvim/lua/greenlint/commands.lua#M.clear_baseline",
+   "status": "verified",
+   "test": "extensions/nvim/tests/commands_spec.lua#says so when there is no baseline to clear",
+   "tests": [
+    "extensions/nvim/tests/commands_spec.lua#says so when there is no baseline to clear"
+   ]
+  },
+  "neovim-integration.editor-commands.008": {
+   "file": "specs/neovim-integration/editor-commands/nvim-editor-commands.feature",
+   "fingerprint": "c229ec2f5474",
+   "human": false,
+   "rule": "nvim.commands.cancel-stops-scans",
+   "source": "extensions/nvim/lua/greenlint/init.lua#M.cancel",
+   "status": "verified",
+   "test": "extensions/nvim/tests/triggers_spec.lua#stops a debounced on-type scan that has not started",
+   "tests": [
+    "extensions/nvim/tests/triggers_spec.lua#stops a debounced on-type scan that has not started",
+    "extensions/nvim/tests/triggers_spec.lua#says nothing is running when no scan is waiting",
+    "extensions/nvim/tests/init_spec.lua#says so when there is nothing to stop"
+   ]
+  },
+  "neovim-integration.health-and-logging.001": {
+   "file": "specs/neovim-integration/health-and-logging/nvim-health-and-log.feature",
+   "fingerprint": "bbe158b1a87b",
+   "human": false,
+   "rule": "nvim.health.command-runs",
+   "source": "extensions/nvim/lua/greenlint/health.lua#check_command",
+   "status": "verified",
+   "test": "extensions/nvim/tests/health_spec.lua#errors, with the install advice, when the command is not executable",
+   "tests": [
+    "extensions/nvim/tests/health_spec.lua#errors, with the install advice, when the command is not executable",
+    "extensions/nvim/tests/health_spec.lua#errors with the exit code when the command runs and fails",
+    "extensions/nvim/tests/health_spec.lua#warns when the command runs but is not greenlint",
+    "extensions/nvim/tests/health_spec.lua#counts the rules the command reports, first line included"
+   ]
+  },
+  "neovim-integration.health-and-logging.002": {
+   "file": "specs/neovim-integration/health-and-logging/nvim-health-and-log.feature",
+   "fingerprint": "c7acef2e07f2",
+   "human": false,
+   "rule": "nvim.health.project-context",
+   "source": "extensions/nvim/lua/greenlint/health.lua#M.check",
+   "status": "verified",
+   "test": "extensions/nvim/tests/health_spec.lua#reports the project root it will scan",
+   "tests": [
+    "extensions/nvim/tests/health_spec.lua#reports the project root it will scan",
+    "extensions/nvim/tests/health_spec.lua#explains the temp-file cost of on_type only when on_type is set"
+   ]
+  },
+  "neovim-integration.health-and-logging.003": {
+   "file": "specs/neovim-integration/health-and-logging/nvim-health-and-log.feature",
+   "fingerprint": "48e1d4d65d28",
+   "human": false,
+   "rule": "nvim.log.recent-activity",
+   "source": "extensions/nvim/lua/greenlint/log.lua#M.add",
+   "status": "verified",
+   "test": "extensions/nvim/tests/commands_spec.lua#opens a float of the log, one timestamped line per event",
+   "tests": [
+    "extensions/nvim/tests/commands_spec.lua#opens a float of the log, one timestamped line per event",
+    "extensions/nvim/tests/commands_spec.lua#shows the run it logged once something has been scanned"
+   ]
+  },
+  "neovim-integration.in-editor-diagnostics.001": {
+   "file": "specs/neovim-integration/in-editor-diagnostics/nvim-diagnostics.feature",
+   "fingerprint": "1030d2f2303f",
+   "human": false,
+   "rule": "nvim.diagnostics.finding-on-its-line",
+   "source": "extensions/nvim/lua/greenlint/ui.lua#to_diagnostic",
+   "status": "verified",
+   "test": "extensions/nvim/tests/ui_spec.lua#traces the code, not the indentation",
+   "tests": [
+    "extensions/nvim/tests/ui_spec.lua#traces the code, not the indentation",
+    "extensions/nvim/tests/ui_spec.lua#carries the rule as the code and the suggestion in the message",
+    "extensions/nvim/tests/ui_spec.lua#publishes in severity order, worst first"
+   ]
+  },
+  "neovim-integration.in-editor-diagnostics.002": {
+   "file": "specs/neovim-integration/in-editor-diagnostics/nvim-diagnostics.feature",
+   "fingerprint": "a052395d59b0",
+   "human": false,
+   "rule": "nvim.diagnostics.severity-mapping",
+   "source": "extensions/nvim/lua/greenlint/ui.lua#build_diagnostics",
+   "status": "verified",
+   "test": "extensions/nvim/tests/ui_spec.lua#drops a severity the user mapped to false",
+   "tests": [
+    "extensions/nvim/tests/ui_spec.lua#drops a severity the user mapped to false",
+    "extensions/nvim/tests/config_spec.lua#lets a severity be silenced"
+   ]
+  },
+  "neovim-integration.in-editor-diagnostics.003": {
+   "file": "specs/neovim-integration/in-editor-diagnostics/nvim-diagnostics.feature",
+   "fingerprint": "a052395d59b0",
+   "human": false,
+   "rule": "nvim.diagnostics.past-end-dropped",
+   "source": "extensions/nvim/lua/greenlint/ui.lua#build_diagnostics",
+   "status": "verified",
+   "test": "extensions/nvim/tests/ui_spec.lua#drops a finding past the end of the buffer rather than clamping it",
+   "tests": [
+    "extensions/nvim/tests/ui_spec.lua#drops a finding past the end of the buffer rather than clamping it"
+   ]
+  },
+  "neovim-integration.in-editor-diagnostics.004": {
+   "file": "specs/neovim-integration/in-editor-diagnostics/nvim-diagnostics.feature",
+   "fingerprint": "d407d1157ba3",
+   "human": false,
+   "rule": "nvim.diagnostics.can-be-turned-off",
+   "source": "extensions/nvim/lua/greenlint/ui.lua#M.render",
+   "status": "verified",
+   "test": "extensions/nvim/tests/ui_spec.lua#publishes nothing at all when diagnostics are turned off",
+   "tests": [
+    "extensions/nvim/tests/ui_spec.lua#publishes nothing at all when diagnostics are turned off"
+   ]
+  },
+  "neovim-integration.in-editor-diagnostics.005": {
+   "file": "specs/neovim-integration/in-editor-diagnostics/nvim-diagnostics.feature",
+   "fingerprint": "8d9599da3f98",
+   "human": false,
+   "rule": "nvim.diagnostics.statusline-counts",
+   "source": "extensions/nvim/lua/greenlint/init.lua#M.statusline",
+   "status": "verified",
+   "test": "extensions/nvim/tests/init_spec.lua#is empty before setup and when nothing was found",
+   "tests": [
+    "extensions/nvim/tests/init_spec.lua#is empty before setup and when nothing was found",
+    "extensions/nvim/tests/init_spec.lua#shows high/medium/low once there is something to show"
+   ]
+  },
+  "neovim-integration.plugin-setup.001": {
+   "file": "specs/neovim-integration/plugin-setup/nvim-plugin-setup.feature",
+   "fingerprint": "94ec8303c899",
+   "human": false,
+   "rule": "nvim.setup.defaults-without-options",
+   "source": "extensions/nvim/lua/greenlint/config.lua#M.defaults",
+   "status": "verified",
+   "test": "extensions/nvim/tests/config_spec.lua#resolves without options",
+   "tests": [
+    "extensions/nvim/tests/config_spec.lua#resolves without options",
+    "extensions/nvim/tests/config_spec.lua#scans on save by default, not on every keystroke"
+   ]
+  },
+  "neovim-integration.plugin-setup.002": {
+   "file": "specs/neovim-integration/plugin-setup/nvim-plugin-setup.feature",
+   "fingerprint": "2d746908454a",
+   "human": false,
+   "rule": "nvim.setup.invalid-options-refused",
+   "source": "extensions/nvim/lua/greenlint/config.lua#M.validate",
+   "status": "verified",
+   "test": "extensions/nvim/tests/config_spec.lua#rejects an empty cmd",
+   "tests": [
+    "extensions/nvim/tests/config_spec.lua#rejects an empty cmd",
+    "extensions/nvim/tests/config_spec.lua#rejects a run mode it does not have",
+    "extensions/nvim/tests/config_spec.lua#rejects a debounce short enough to scan per keystroke",
+    "extensions/nvim/tests/config_spec.lua#rejects a grouping the report cannot do",
+    "extensions/nvim/tests/config_spec.lua#rejects a file cap below a kilobyte"
+   ]
+  },
+  "neovim-integration.plugin-setup.003": {
+   "file": "specs/neovim-integration/plugin-setup/nvim-plugin-setup.feature",
+   "fingerprint": "30b359532686",
+   "human": false,
+   "rule": "nvim.setup.disabled-plugin-stays-quiet",
+   "source": "extensions/nvim/lua/greenlint/init.lua#M.setup",
+   "status": "verified",
+   "test": "extensions/nvim/tests/init_spec.lua#does nothing at all when the plugin is disabled",
+   "tests": [
+    "extensions/nvim/tests/init_spec.lua#does nothing at all when the plugin is disabled",
+    "extensions/nvim/tests/init_spec.lua#leaves the autocmds it already attached inert once disabled"
+   ]
+  },
+  "neovim-integration.scan-triggers.001": {
+   "file": "specs/neovim-integration/scan-triggers/nvim-scan-triggers.feature",
+   "fingerprint": "daa379edaa9a",
+   "human": false,
+   "rule": "nvim.triggers.run-mode-decides-automatic-scans",
+   "source": "extensions/nvim/lua/greenlint/triggers.lua#on_open",
+   "status": "verified",
+   "test": "extensions/nvim/tests/triggers_spec.lua#scans a file nothing is known about",
+   "tests": [
+    "extensions/nvim/tests/triggers_spec.lua#scans a file nothing is known about",
+    "extensions/nvim/tests/triggers_spec.lua#leaves an unknown file alone when scanning is manual"
+   ]
+  },
+  "neovim-integration.scan-triggers.002": {
+   "file": "specs/neovim-integration/scan-triggers/nvim-scan-triggers.feature",
+   "fingerprint": "521a956bfe83",
+   "human": false,
+   "rule": "nvim.triggers.unsaved-text-scanned",
+   "source": "extensions/nvim/lua/greenlint/init.lua#M.scan_buffer",
+   "status": "inferred",
+   "test": "",
+   "tests": []
+  },
+  "neovim-integration.scan-triggers.003": {
+   "file": "specs/neovim-integration/scan-triggers/nvim-scan-triggers.feature",
+   "fingerprint": "daa379edaa9a",
+   "human": false,
+   "rule": "nvim.triggers.reopen-shows-known-findings",
+   "source": "extensions/nvim/lua/greenlint/triggers.lua#on_open",
+   "status": "verified",
+   "test": "extensions/nvim/tests/triggers_spec.lua#repaints what is already known rather than scanning again",
+   "tests": [
+    "extensions/nvim/tests/triggers_spec.lua#repaints what is already known rather than scanning again"
+   ]
+  },
+  "neovim-integration.scan-triggers.004": {
+   "file": "specs/neovim-integration/scan-triggers/nvim-scan-triggers.feature",
+   "fingerprint": "c8b5cce404f4",
+   "human": false,
+   "rule": "nvim.triggers.oversized-file-skipped",
+   "source": "extensions/nvim/lua/greenlint/init.lua#M.scan_file",
+   "status": "verified",
+   "test": "extensions/nvim/tests/init_spec.lua#skips a file over the byte cap without running greenlint",
+   "tests": [
+    "extensions/nvim/tests/init_spec.lua#skips a file over the byte cap without running greenlint"
+   ]
+  },
+  "neovim-integration.scan-triggers.005": {
+   "file": "specs/neovim-integration/scan-triggers/nvim-scan-triggers.feature",
+   "fingerprint": "2f467b3b993d",
+   "human": false,
+   "rule": "nvim.triggers.project-scan-is-whole-truth",
+   "source": "extensions/nvim/lua/greenlint/init.lua#M.scan_project",
+   "status": "verified",
+   "test": "extensions/nvim/tests/init_spec.lua#groups findings by file and drops what the walk no longer reports",
+   "tests": [
+    "extensions/nvim/tests/init_spec.lua#groups findings by file and drops what the walk no longer reports",
+    "extensions/nvim/tests/init_spec.lua#reports failure without disturbing what is already known"
+   ]
+  },
+  "neovim-integration.scan-triggers.006": {
+   "file": "specs/neovim-integration/scan-triggers/nvim-scan-triggers.feature",
+   "fingerprint": "cc866ca92b0c",
+   "human": false,
+   "rule": "nvim.triggers.project-settings-respected",
+   "source": "extensions/nvim/lua/greenlint/core.lua#M.scan_argv",
+   "status": "verified",
+   "test": "extensions/nvim/tests/core_spec.lua#passes the project config and baseline when they exist",
+   "tests": [
+    "extensions/nvim/tests/core_spec.lua#passes the project config and baseline when they exist",
+    "extensions/nvim/tests/core_spec.lua#repeats --exclude rather than joining, since a glob may contain a comma"
+   ]
+  },
+  "neovim-integration.scan-triggers.007": {
+   "file": "specs/neovim-integration/scan-triggers/nvim-scan-triggers.feature",
+   "fingerprint": "1694d1974d50",
+   "human": false,
+   "rule": "nvim.triggers.failed-scan-explained",
+   "source": "extensions/nvim/lua/greenlint/init.lua#decode",
+   "status": "verified",
+   "test": "extensions/nvim/tests/init_spec.lua#rejects valid JSON that is not a list of findings",
+   "tests": [
+    "extensions/nvim/tests/init_spec.lua#rejects valid JSON that is not a list of findings"
+   ]
+  },
+  "reporting.carbon-estimates.001": {
+   "file": "specs/reporting/carbon-estimates/carbon-estimates.feature",
+   "fingerprint": "d517d4f0692e",
+   "human": false,
+   "rule": "reporting.carbon-estimates.every-finding-carries-estimate",
+   "source": "greenlint/carbon.py#CO2E_HINTS",
+   "status": "verified",
+   "test": "tests/test_greenlint.py#test_findings_carry_a_co2e_estimate",
+   "tests": [
+    "tests/test_greenlint.py#test_findings_carry_a_co2e_estimate",
+    "tests/test_greenlint.py#test_every_rule_states_its_energy_rationale",
+    "tests/test_greenlint.py#test_cron_hint_multiplies_out_to_something_sane"
+   ]
+  },
+  "reporting.carbon-estimates.002": {
+   "file": "specs/reporting/carbon-estimates/carbon-estimates.feature",
+   "fingerprint": "d517d4f0692e",
+   "human": false,
+   "rule": "reporting.carbon-estimates.hot-path-states-scaling-not-grams",
+   "source": "greenlint/carbon.py#CO2E_HINTS",
+   "status": "verified",
+   "test": "tests/test_greenlint.py#test_no_hint_quotes_a_fictional_per_call_gram_figure",
+   "tests": [
+    "tests/test_greenlint.py#test_no_hint_quotes_a_fictional_per_call_gram_figure"
+   ]
+  },
+  "reporting.carbon-estimates.003": {
+   "file": "specs/reporting/carbon-estimates/carbon-estimates.feature",
+   "fingerprint": "4eaa3502ec09",
+   "human": false,
+   "rule": "reporting.carbon-estimates.text-report-shows-estimate",
+   "source": "greenlint/cli.py#_print_text",
+   "status": "inferred",
+   "test": "",
+   "tests": []
+  },
+  "reporting.output-formats.001": {
+   "file": "specs/reporting/output-formats/finding-order.feature",
+   "fingerprint": "3841cf3c6716",
+   "human": false,
+   "rule": "reporting.ordering.most-severe-first",
+   "source": "greenlint/baselines.py#finding_sort_key",
+   "status": "verified",
+   "test": "tests/test_greenlint.py#test_finding_sort_key_orders_high_severity_first",
+   "tests": [
+    "tests/test_greenlint.py#test_finding_sort_key_orders_high_severity_first"
+   ]
+  },
+  "scanning.comment-and-string-masking.001": {
+   "file": "specs/scanning/comment-and-string-masking/comment-and-string-masking.feature",
+   "fingerprint": "d80fbeb09d1c",
+   "human": false,
+   "rule": "scanning.masking.comments-never-produce-findings",
+   "source": "greenlint/comments.py#_blank_comments",
+   "status": "verified",
+   "test": "tests/test_greenlint.py#test_pattern_in_a_comment_is_not_a_finding",
+   "tests": [
+    "tests/test_greenlint.py#test_pattern_in_a_comment_is_not_a_finding",
+    "tests/test_greenlint.py#test_block_comment_is_blanked",
+    "tests/test_greenlint.py#test_commented_out_dockerfile_directive_not_flagged"
+   ]
+  },
+  "scanning.comment-and-string-masking.002": {
+   "file": "specs/scanning/comment-and-string-masking/comment-and-string-masking.feature",
+   "fingerprint": "d5f885a92f76",
+   "human": false,
+   "rule": "scanning.masking.python-docstrings-never-produce-findings",
+   "source": "greenlint/comments.py#_blank_python_docstrings",
+   "status": "verified",
+   "test": "tests/test_greenlint.py#test_pattern_in_a_docstring_is_not_a_finding",
+   "tests": [
+    "tests/test_greenlint.py#test_pattern_in_a_docstring_is_not_a_finding"
+   ]
+  },
+  "scanning.comment-and-string-masking.003": {
+   "file": "specs/scanning/comment-and-string-masking/comment-and-string-masking.feature",
+   "fingerprint": "d80fbeb09d1c",
+   "human": false,
+   "rule": "scanning.masking.queries-in-string-literals-still-reported",
+   "source": "greenlint/comments.py#_blank_comments",
+   "status": "verified",
+   "test": "tests/test_greenlint.py#test_pattern_in_a_real_string_is_still_a_finding",
+   "tests": [
+    "tests/test_greenlint.py#test_pattern_in_a_real_string_is_still_a_finding",
+    "tests/test_greenlint.py#test_hash_inside_a_string_is_not_a_comment",
+    "tests/test_greenlint.py#test_embedded_content_rules_still_match_inside_strings"
+   ]
+  },
+  "scanning.comment-and-string-masking.004": {
+   "file": "specs/scanning/comment-and-string-masking/comment-and-string-masking.feature",
+   "fingerprint": "d4c19e19c8fa",
+   "human": false,
+   "rule": "scanning.masking.code-shape-rules-ignore-quoted-samples",
+   "source": "greenlint/comments.py#_blank_strings",
+   "status": "verified",
+   "test": "tests/test_greenlint.py#test_code_shaped_rule_ignores_a_match_inside_a_string",
+   "tests": [
+    "tests/test_greenlint.py#test_code_shaped_rule_ignores_a_match_inside_a_string"
+   ]
+  },
+  "scanning.comment-and-string-masking.005": {
+   "file": "specs/scanning/comment-and-string-masking/comment-and-string-masking.feature",
+   "fingerprint": "2dddbc65d86a",
+   "human": false,
+   "rule": "scanning.masking.contractions-do-not-break-masking",
+   "source": "greenlint/comments.py#_is_apostrophe",
+   "status": "verified",
+   "test": "tests/test_greenlint.py#test_apostrophe_does_not_unblank_the_rest_of_the_file",
+   "tests": [
+    "tests/test_greenlint.py#test_apostrophe_does_not_unblank_the_rest_of_the_file",
+    "tests/test_greenlint.py#test_apostrophe_does_not_hide_a_real_finding"
+   ]
+  },
+  "scanning.comment-and-string-masking.006": {
+   "file": "specs/scanning/comment-and-string-masking/comment-and-string-masking.feature",
+   "fingerprint": "6163fc83e7a2",
+   "human": false,
+   "rule": "scanning.masking.line-numbers-unchanged",
+   "source": "greenlint/comments.py#_blank_spans",
+   "status": "inferred",
+   "test": "",
+   "tests": []
+  },
+  "scanning.comment-and-string-masking.007": {
+   "file": "specs/scanning/comment-and-string-masking/comment-and-string-masking.feature",
+   "fingerprint": "04dbc9bfdec4",
+   "human": false,
+   "rule": "scanning.masking.multiline-strings-stay-visible",
+   "source": "greenlint/comments.py#_string_end",
+   "status": "inferred",
+   "test": "",
+   "tests": []
+  },
+  "scanning.comment-and-string-masking.008": {
+   "file": "specs/scanning/comment-and-string-masking/comment-and-string-masking.feature",
+   "fingerprint": "5ea448146f9e",
+   "human": false,
+   "rule": "scanning.masking.css-urls-not-mistaken-for-comments",
+   "source": "greenlint/comments.py#COMMENT_SYNTAX",
+   "status": "inferred",
+   "test": "",
+   "tests": []
+  },
+  "scanning.file-discovery.001": {
+   "file": "specs/scanning/file-discovery/walking-scan-targets.feature",
+   "fingerprint": "186380b5c50d",
+   "human": false,
+   "rule": "scanning.discovery.dependency-and-tool-directories-skipped",
+   "source": "greenlint/discovery.py#walk_files",
+   "status": "verified",
+   "test": "tests/test_greenlint.py#test_walk_files_never_descends_into_pruned_directories",
+   "tests": [
+    "tests/test_greenlint.py#test_walk_files_never_descends_into_pruned_directories",
+    "tests/test_greenlint.py#test_walk_files_prunes_virtualenvs_and_caches"
+   ]
+  },
+  "scanning.file-discovery.002": {
+   "file": "specs/scanning/file-discovery/walking-scan-targets.feature",
+   "fingerprint": "186380b5c50d",
+   "human": false,
+   "rule": "scanning.discovery.symlinks",
+   "source": "greenlint/discovery.py#walk_files",
+   "status": "verified",
+   "test": "tests/test_greenlint.py#test_walk_files_matches_what_rglob_selected",
+   "tests": [
+    "tests/test_greenlint.py#test_walk_files_matches_what_rglob_selected"
+   ]
+  },
+  "scanning.file-discovery.003": {
+   "file": "specs/scanning/file-discovery/walking-scan-targets.feature",
+   "fingerprint": "186380b5c50d",
+   "human": false,
+   "rule": "scanning.discovery.unreadable-directory-skipped-silently",
+   "source": "greenlint/discovery.py#walk_files",
+   "status": "verified",
+   "test": "tests/test_greenlint.py#test_walk_files_survives_an_unreadable_directory",
+   "tests": [
+    "tests/test_greenlint.py#test_walk_files_survives_an_unreadable_directory"
+   ]
+  },
+  "scanning.file-discovery.004": {
+   "file": "specs/scanning/file-discovery/walking-scan-targets.feature",
+   "fingerprint": "53ad0f6a98fa",
+   "human": false,
+   "rule": "scanning.discovery.missing-path-yields-nothing",
+   "source": "greenlint/discovery.py#iter_files",
+   "status": "inferred",
+   "test": "",
+   "tests": []
+  },
+  "scanning.finding-placement.001": {
+   "file": "specs/scanning/finding-placement/finding-placement.feature",
+   "fingerprint": "9aef8b4e465a",
+   "human": false,
+   "rule": "scanning.findings.test-code-exempt-from-loop-rules",
+   "source": "greenlint/findings.py#_is_test_file",
+   "status": "verified",
+   "test": "tests/test_greenlint.py#test_short_sleep_in_a_test_file_is_not_flagged",
+   "tests": [
+    "tests/test_greenlint.py#test_short_sleep_in_a_test_file_is_not_flagged",
+    "tests/test_greenlint.py#test_short_sleep_in_production_code_is_still_flagged"
+   ]
+  },
+  "scanning.finding-placement.002": {
+   "file": "specs/scanning/finding-placement/finding-placement.feature",
+   "fingerprint": "f30920e79e73",
+   "human": false,
+   "rule": "scanning.findings.test-code-keeps-other-rules",
+   "source": "greenlint/scanning.py#scan_file",
+   "status": "inferred",
+   "test": "",
+   "tests": []
+  },
+  "scanning.finding-placement.003": {
+   "file": "specs/scanning/finding-placement/finding-placement.feature",
+   "fingerprint": "e1be8e7bd715",
+   "human": false,
+   "rule": "scanning.findings.complete-finding-fields",
+   "source": "greenlint/findings.py#_finding",
+   "status": "verified",
+   "test": "tests/test_greenlint.py#test_findings_carry_a_co2e_estimate",
+   "tests": [
+    "tests/test_greenlint.py#test_findings_carry_a_co2e_estimate"
+   ]
+  },
+  "scanning.finding-placement.004": {
+   "file": "specs/scanning/finding-placement/finding-placement.feature",
+   "fingerprint": "aba8bd8f5e2b",
+   "human": false,
+   "rule": "scanning.findings.line-of-match",
+   "source": "greenlint/findings.py#_LineIndex",
+   "status": "verified",
+   "test": "tests/test_greenlint.py#test_line_numbers_survive_a_match_at_the_start_of_a_line",
+   "tests": [
+    "tests/test_greenlint.py#test_line_numbers_survive_a_match_at_the_start_of_a_line",
+    "tests/test_greenlint.py#test_line_numbers_are_right_when_a_rule_fires_many_times"
+   ]
+  },
+  "scanning.finding-placement.005": {
+   "file": "specs/scanning/finding-placement/scanning-a-file.feature",
+   "fingerprint": "f30920e79e73",
+   "human": false,
+   "rule": "scanning.files.untargeted-language-yields-nothing",
+   "source": "greenlint/scanning.py#scan_file",
+   "status": "verified",
+   "test": "tests/test_greenlint.py#test_a_file_no_rule_targets_is_not_even_read",
+   "tests": [
+    "tests/test_greenlint.py#test_a_file_no_rule_targets_is_not_even_read",
+    "tests/test_greenlint.py#test_scan_file_text_override_still_picks_language_from_the_path",
+    "tests/test_greenlint.py#test_scannable_matches_whether_scan_file_can_find_anything"
+   ]
+  },
+  "scanning.finding-placement.006": {
+   "file": "specs/scanning/finding-placement/scanning-a-file.feature",
+   "fingerprint": "f30920e79e73",
+   "human": false,
+   "rule": "scanning.files.unsaved-contents-scanned-by-name",
+   "source": "greenlint/scanning.py#scan_file",
+   "status": "verified",
+   "test": "tests/test_greenlint.py#test_scan_file_accepts_text_instead_of_reading_the_file",
+   "tests": [
+    "tests/test_greenlint.py#test_scan_file_accepts_text_instead_of_reading_the_file",
+    "tests/test_greenlint.py#test_scan_file_text_override_still_picks_language_from_the_path"
+   ]
+  },
+  "scanning.finding-placement.010": {
+   "file": "specs/scanning/finding-placement/scanning-a-file.feature",
+   "fingerprint": "f30920e79e73",
+   "human": false,
+   "rule": "scanning.files.unreadable-file-silently-skipped",
+   "source": "greenlint/scanning.py#scan_file",
+   "status": "inferred",
+   "test": "",
+   "tests": []
+  },
+  "scanning.language-detection.001": {
+   "file": "specs/scanning/language-detection/dockerfile-recognised-by-name.feature",
+   "fingerprint": "3eb4f486974a",
+   "human": false,
+   "rule": "scanning.language.dockerfile-selected-by-exact-name-or-suffix",
+   "source": "greenlint/base.py#lang_key",
+   "status": "verified",
+   "test": "tests/test_greenlint.py#test_detects_select_star_and_fat_base",
+   "tests": [
+    "tests/test_greenlint.py#test_detects_select_star_and_fat_base"
+   ]
+  },
+  "scanning.language-detection.002": {
+   "file": "specs/scanning/language-detection/dockerfile-recognised-by-name.feature",
+   "fingerprint": "3eb4f486974a",
+   "human": false,
+   "rule": "scanning.language.dockerfile-name-variants-not-scanned",
+   "source": "greenlint/base.py#lang_key",
+   "status": "verified",
+   "test": "tests/test_greenlint.py#test_scannable_matches_whether_scan_file_can_find_anything",
+   "tests": [
+    "tests/test_greenlint.py#test_scannable_matches_whether_scan_file_can_find_anything"
+   ]
+  },
+  "scanning.python-structure-analysis.004": {
+   "file": "specs/scanning/python-structure-analysis/python-loop-and-scope-judgement.feature",
+   "fingerprint": "f5f72aed1e5e",
+   "human": false,
+   "rule": "scanning.python-structure.unparsable-file-gets-no-structural-findings",
+   "source": "greenlint/astindex.py#_parse_python",
+   "status": "inferred",
+   "test": "",
+   "tests": []
+  },
+  "scanning.python-structure-analysis.005": {
+   "file": "specs/scanning/python-structure-analysis/python-loop-and-scope-judgement.feature",
+   "fingerprint": "4a0efdbb0d0e",
+   "human": false,
+   "rule": "scanning.python-structure.async-loops-not-analysed",
+   "source": "greenlint/astindex.py#index_python",
+   "status": "inferred",
+   "test": "",
+   "tests": []
+  }
+ },
+ "taxonomy": {
+  "domains": [
+   {
+    "areas": [
+     {
+      "description": "Detects loops that spin a CPU core: busy loops without sleep, spin-waits on a clock and sub-100ms polling intervals.",
+      "slug": "busy-waiting",
+      "title": "Busy waiting and polling"
+     },
+     {
+      "description": "Flags quadratic work such as nested loops over the same collection, manual swap sorts, sequences rebuilt every iteration and allocations inside loops.",
+      "slug": "algorithmic-waste",
+      "title": "Algorithmic waste"
+     },
+     {
+      "description": "Flags SELECT * queries, database queries and HTTP requests inside loops (N+1), and files opened inside loops.",
+      "slug": "data-and-network-access",
+      "title": "Data and network access"
+     },
+     {
+      "description": "Python-specific rules such as eager logging f-strings, pandas row-wise iteration, wildcard imports, half-used dict .items() and exceptions used as control flow in loops.",
+      "slug": "python-idioms",
+      "title": "Python idioms"
+     },
+     {
+      "description": "Language-tagged rules for C#, Kotlin, Swift, Ruby and JavaScript/JSX, such as blocking on Tasks, GlobalScope coroutines, double-pass filter/map chains, per-call HTTP clients and inline JSX props.",
+      "slug": "other-language-idioms",
+      "title": "Other language idioms"
+     },
+     {
+      "description": "Flags heavy front-end delivery: images without lazy loading, GIF animations and static assets served without cache lifetimes.",
+      "slug": "web-assets",
+      "title": "Web assets"
+     }
+    ],
+    "description": "The catalogue of source-code patterns greenlint flags as energy-wasteful, each with a rationale and a cheaper alternative.",
+    "slug": "code-energy-rules",
+    "title": "Code Energy Rules"
+   },
+   {
+    "areas": [
+     {
+      "description": "Dockerfile checks for full-fat or end-of-life base images, apt installs without --no-install-recommends, pip installs without --no-cache-dir and separate install layers.",
+      "slug": "container-images",
+      "title": "Container images"
+     },
+     {
+      "description": "Terraform checks for oversized or x86-only instance types, S3 buckets without lifecycle rules, gp2 volumes, log groups without retention and fixed-size autoscaling groups.",
+      "slug": "cloud-resources",
+      "title": "Cloud resources"
+     },
+     {
+      "description": "Kubernetes and docker-compose checks for missing CPU/memory requests or limits and HorizontalPodAutoscalers that cannot scale.",
+      "slug": "workload-orchestration",
+      "title": "Workload orchestration"
+     },
+     {
+      "description": "Flags full-history git clones in CI jobs and cron schedules that run every minute.",
+      "slug": "ci-pipelines",
+      "title": "CI pipelines and schedules"
+     }
+    ],
+    "description": "Rules that find energy waste in container, cloud, orchestration and pipeline configuration files.",
+    "slug": "infrastructure-checks",
+    "title": "Infrastructure and CI Checks"
+   },
+   {
+    "areas": [
+     {
+      "description": "Walks the requested files and directories, pruning ignored subtrees and skipping files that are not scannable.",
+      "slug": "file-discovery",
+      "title": "File discovery"
+     },
+     {
+      "description": "Decides which language a file is in so that only the rules tagged for that language apply to it.",
+      "slug": "language-detection",
+      "title": "Language detection"
+     },
+     {
+      "description": "Blanks out comments, string literals, docstrings and templates so rules only match real code and line numbers stay correct.",
+      "slug": "comment-and-string-masking",
+      "title": "Comment and string masking"
+     },
+     {
+      "description": "Parses Python into an index of loops, scopes and exits that the syntax-aware rules use to judge context rather than matching text alone.",
+      "slug": "python-structure-analysis",
+      "title": "Python structure analysis"
+     },
+     {
+      "description": "Turns a rule match into a finding with its file, line and severity, and treats test files differently.",
+      "slug": "finding-placement",
+      "title": "Finding placement"
+     }
+    ],
+    "description": "How greenlint finds the files to check, works out what language each is, and reads it without being fooled by comments or strings.",
+    "slug": "scanning",
+    "title": "Scanning"
+   },
+   {
+    "areas": [
+     {
+      "description": "Reads .greenlint.toml for rule opt-outs and ignore globs, and refuses malformed or mistyped settings instead of silently ignoring them.",
+      "slug": "project-config",
+      "title": "Project config file"
+     },
+     {
+      "description": "Skips paths that match ignore globs from the config or repeatable --exclude flags, using the same matching for both.",
+      "slug": "path-exclusion",
+      "title": "Path exclusion"
+     },
+     {
+      "description": "Records the current findings as accepted, with fingerprints that survive line moves, and hides them on later scans so only new findings surface.",
+      "slug": "baselines",
+      "title": "Baselines"
+     }
+    ],
+    "description": "How a project tunes which rules run, which paths are skipped and which existing findings are accepted.",
+    "slug": "configuration",
+    "title": "Configuration and Suppression"
+   },
+   {
+    "areas": [
+     {
+      "description": "Prints findings as human-readable text, JSON for tools or GitHub workflow annotations, ordered by severity.",
+      "slug": "output-formats",
+      "title": "Output formats"
+     },
+     {
+      "description": "Lists every rule with its energy rationale on request.",
+      "slug": "rule-catalogue-listing",
+      "title": "Rule catalogue listing"
+     },
+     {
+      "description": "Attaches order-of-magnitude energy and CO2e hints to findings from published grid, transfer and storage figures.",
+      "slug": "carbon-estimates",
+      "title": "Carbon estimates"
+     },
+     {
+      "description": "Exits non-zero when findings exist if asked to, so a pipeline can fail on new waste.",
+      "slug": "ci-gate",
+      "title": "CI gate"
+     }
+    ],
+    "description": "What greenlint tells the user after a scan, and in which format.",
+    "slug": "reporting",
+    "title": "Reporting"
+   },
+   {
+    "areas": [
+     {
+      "description": "Defaults and validation for plugin options such as the command to run and when to scan.",
+      "slug": "plugin-setup",
+      "title": "Plugin setup"
+     },
+     {
+      "description": "Decides which editor events start a scan, such as save or a debounced edit, and runs the CLI and reads its JSON.",
+      "slug": "scan-triggers",
+      "title": "Scan triggers"
+     },
+     {
+      "description": "Shows findings as diagnostics, a report float and a quickfix list, refreshed whenever a file's findings change.",
+      "slug": "in-editor-diagnostics",
+      "title": "In-editor diagnostics"
+     },
+     {
+      "description": "User commands for reading, explaining and navigating the findings already found.",
+      "slug": "editor-commands",
+      "title": "Editor commands"
+     },
+     {
+      "description": "A :checkhealth report on whether greenlint can run, and a bounded activity log for troubleshooting.",
+      "slug": "health-and-logging",
+      "title": "Health check and log"
+     }
+    ],
+    "description": "The greenlint.nvim plugin that runs the CLI from the editor and shows its findings in place.",
+    "slug": "neovim-integration",
+    "title": "Neovim Integration"
+   },
+   {
+    "areas": [
+     {
+      "description": "The installed greenlint command and python -m greenlint entry, which wire arguments into a scan.",
+      "slug": "command-line-entry",
+      "title": "Command-line entry point"
+     },
+     {
+      "description": "Make targets for installing, linting, testing, benchmarking, building and packaging greenlint and its editor extensions.",
+      "slug": "build-and-release",
+      "title": "Build and release"
+     },
+     {
+      "description": "A minimal multi-stage container image that runs greenlint as a CLI, for example in CI.",
+      "slug": "container-distribution",
+      "title": "Container distribution"
+     },
+     {
+      "description": "Make targets that fetch test dependencies and run the Neovim plugin's specs and parse checks headless.",
+      "slug": "plugin-test-harness",
+      "title": "Plugin test harness"
+     },
+     {
+      "description": "Deliberately wasteful sample code that shows what greenlint flags.",
+      "slug": "examples",
+      "title": "Examples"
+     }
+    ],
+    "description": "Building, packaging, running and demonstrating greenlint outside the core scan.",
+    "slug": "developer-tooling",
+    "title": "Developer Tooling and Distribution"
+   }
+  ]
+ }
+}

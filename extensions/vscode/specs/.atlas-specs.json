@@ -1,0 +1,2279 @@
+{
+ "excluded": {
+  "server/greenlint-api": [
+   {
+    "candidate": "Previously imported greenlint is dropped from sys.modules before loading the configured path",
+    "covered_by": "",
+    "reason": "INTERNAL_MECHANISM",
+    "source": "extensions/vscode/server/greenlint_api.py#load_greenlint"
+   },
+   {
+    "candidate": "Configured directory is added to sys.path only once",
+    "covered_by": "",
+    "reason": "INTERNAL_MECHANISM",
+    "source": "extensions/vscode/server/greenlint_api.py#load_greenlint"
+   },
+   {
+    "candidate": "Installed greenlint is imported lazily inside the function",
+    "covered_by": "",
+    "reason": "INTERNAL_MECHANISM",
+    "source": "extensions/vscode/server/greenlint_api.py#load_greenlint"
+   },
+   {
+    "candidate": "One scenario per required capability name (BASELINE_FILENAME, RULES, is_ignored, load_baseline, ...)",
+    "covered_by": "engine.compatibility.refuse-outdated-greenlint",
+    "reason": "TRIVIAL",
+    "source": "extensions/vscode/server/greenlint_api.py#REQUIRED_API"
+   },
+   {
+    "candidate": "Compatibility is judged by capabilities present, not by a version floor",
+    "covered_by": "",
+    "reason": "INTERNAL_MECHANISM",
+    "source": "extensions/vscode/server/greenlint_api.py#missing_api"
+   }
+  ],
+  "server/greenlint-server": [
+   {
+    "candidate": "Findings cache is an LRU bounded to a fixed entry count",
+    "covered_by": "",
+    "reason": "INTERNAL_MECHANISM",
+    "source": "extensions/vscode/server/greenlint_server.py#Server.__init__"
+   },
+   {
+    "candidate": "A baseline change reuses findings for unchanged files instead of rescanning (stats.scanned == 0)",
+    "covered_by": "",
+    "reason": "INTERNAL_MECHANISM",
+    "source": "extensions/vscode/server/greenlint_server.py#Server.merged_config"
+   },
+   {
+    "candidate": "Unsaved buffer scans reuse findings for identical text by content digest",
+    "covered_by": "",
+    "reason": "INTERNAL_MECHANISM",
+    "source": "extensions/vscode/server/greenlint_server.py#Server.scan_text"
+   },
+   {
+    "candidate": "stdout redirected to stderr so stray prints cannot corrupt the protocol stream",
+    "covered_by": "",
+    "reason": "INTERNAL_MECHANISM",
+    "source": "extensions/vscode/server/greenlint_server.py#main"
+   },
+   {
+    "candidate": "stdin read on a background thread (Windows pipe compatibility)",
+    "covered_by": "",
+    "reason": "INTERNAL_MECHANISM",
+    "source": "extensions/vscode/server/greenlint_server.py#Server.read_stdin"
+   },
+   {
+    "candidate": "Output writes serialised by a lock",
+    "covered_by": "",
+    "reason": "INTERNAL_MECHANISM",
+    "source": "extensions/vscode/server/greenlint_server.py#Server.send"
+   },
+   {
+    "candidate": "Progress interval and interleave constants (0.5 s, every 16 files)",
+    "covered_by": "",
+    "reason": "INTERNAL_MECHANISM",
+    "source": "extensions/vscode/server/greenlint_server.py#walk"
+   },
+   {
+    "candidate": "Unreadable or vanished file drops its cache entry and is reported as skipped",
+    "covered_by": "",
+    "reason": "TRIVIAL",
+    "source": "extensions/vscode/server/greenlint_server.py#Server.scan_path"
+   },
+   {
+    "candidate": "Project scan stats block (files, reusedFromStat, reusedFromHash, scanned, skipped, ms, cache)",
+    "covered_by": "",
+    "reason": "INTERNAL_MECHANISM",
+    "source": "extensions/vscode/server/greenlint_server.py#Server.scan_project"
+   },
+   {
+    "candidate": "Op table mapping op names to handlers (ping, languages, configure, writeBaseline, invalidate, cancel implemented in server_ops)",
+    "covered_by": "",
+    "reason": "INTERNAL_MECHANISM",
+    "source": "extensions/vscode/server/greenlint_server.py#Server.OPS"
+   },
+   {
+    "candidate": "--greenlint flag / GREENLINT_MODULE env var choose which greenlint module to load",
+    "covered_by": "",
+    "reason": "INTERNAL_MECHANISM",
+    "source": "extensions/vscode/server/greenlint_server.py#main"
+   },
+   {
+    "candidate": "The scan server announces it is ready, with its protocol version, before it answers anything",
+    "covered_by": "",
+    "reason": "UNVERIFIABLE",
+    "source": "extensions/vscode/server/greenlint_server.py#Server.serve"
+   },
+   {
+    "candidate": "A request that fails, such as one hitting an invalid .greenlint.toml, is reported and the server keeps serving",
+    "covered_by": "",
+    "reason": "UNVERIFIABLE",
+    "source": "extensions/vscode/server/greenlint_server.py#Server.dispatch"
+   },
+   {
+    "candidate": "The scan server shuts down cleanly when the extension closes its connection",
+    "covered_by": "",
+    "reason": "UNVERIFIABLE",
+    "source": "extensions/vscode/server/greenlint_server.py#Server.read_stdin"
+   },
+   {
+    "candidate": "Every answer carries the id of the request it answers and whether it succeeded",
+    "covered_by": "",
+    "reason": "UNVERIFIABLE",
+    "source": "extensions/vscode/server/greenlint_server.py#Server.dispatch"
+   },
+   {
+    "candidate": "A request that is not JSON or names an unknown operation is refused with an error",
+    "covered_by": "",
+    "reason": "UNVERIFIABLE",
+    "source": "extensions/vscode/server/greenlint_server.py#Server.handle"
+   },
+   {
+    "candidate": "Requests from the editor are answered while a project scan is still running",
+    "covered_by": "",
+    "reason": "UNVERIFIABLE",
+    "source": "extensions/vscode/server/greenlint_server.py#Server.pump"
+   },
+   {
+    "candidate": "A second project scan requested mid-scan waits until the first one finishes",
+    "covered_by": "",
+    "reason": "UNVERIFIABLE",
+    "source": "extensions/vscode/server/greenlint_server.py#Server.pump"
+   },
+   {
+    "candidate": "A long project scan regularly reports how many files it has seen and how many findings it has made",
+    "covered_by": "",
+    "reason": "UNVERIFIABLE",
+    "source": "extensions/vscode/server/greenlint_server.py#Server.report_progress"
+   },
+   {
+    "candidate": "A streamed project scan delivers each finding exactly once, in progress batches, and ends with totals only",
+    "covered_by": "",
+    "reason": "UNVERIFIABLE",
+    "source": "extensions/vscode/server/greenlint_server.py#Server.scan_project"
+   },
+   {
+    "candidate": "A project scan without streaming returns every finding in its final answer, the same as the CLI",
+    "covered_by": "",
+    "reason": "UNVERIFIABLE",
+    "source": "extensions/vscode/server/greenlint_server.py#Server.scan_project"
+   },
+   {
+    "candidate": "The scan summary covers the whole scan, with the busiest rule listed first",
+    "covered_by": "",
+    "reason": "UNVERIFIABLE",
+    "source": "extensions/vscode/server/greenlint_server.py#Server.scan_project"
+   },
+   {
+    "candidate": "A cancelled project scan stops and returns no findings",
+    "covered_by": "",
+    "reason": "UNVERIFIABLE",
+    "source": "extensions/vscode/server/greenlint_server.py#Server.walk"
+   },
+   {
+    "candidate": "A project scan cancelled while still waiting its turn never scans anything",
+    "covered_by": "",
+    "reason": "UNVERIFIABLE",
+    "source": "extensions/vscode/server/greenlint_server.py#Server.scan_project"
+   },
+   {
+    "candidate": "A cancel that arrives after its scan has finished does not stop a later scan",
+    "covered_by": "",
+    "reason": "UNVERIFIABLE",
+    "source": "extensions/vscode/server/greenlint_server.py#Server.scan_project"
+   },
+   {
+    "candidate": "Paths matched by an ignore glob from .greenlint.toml or from the editor's excludes are never reported, even when opened",
+    "covered_by": "",
+    "reason": "UNVERIFIABLE",
+    "source": "extensions/vscode/server/greenlint_server.py#Server.merged_config"
+   },
+   {
+    "candidate": "Files no rule targets, and files over the size limit, are skipped without findings",
+    "covered_by": "",
+    "reason": "UNVERIFIABLE",
+    "source": "extensions/vscode/server/greenlint_server.py#Server.scan_path"
+   },
+   {
+    "candidate": "Findings accepted into the baseline are not reported, while new findings still are",
+    "covered_by": "",
+    "reason": "UNVERIFIABLE",
+    "source": "extensions/vscode/server/greenlint_server.py#Server.accepted"
+   },
+   {
+    "candidate": "A file scanned again is rescanned only when its content changed, and each answer says how it was produced",
+    "covered_by": "",
+    "reason": "UNVERIFIABLE",
+    "source": "extensions/vscode/server/greenlint_server.py#Server.scan_path"
+   },
+   {
+    "candidate": "Changing rule opt-outs or ignore globs changes the very next scan's findings, without a restart",
+    "covered_by": "",
+    "reason": "UNVERIFIABLE",
+    "source": "extensions/vscode/server/greenlint_server.py#Server.config_for"
+   }
+  ],
+  "server/scan-cache": [
+   {
+    "candidate": "Cache holds at most 4096 files and evicts the least recently used",
+    "covered_by": "",
+    "reason": "INTERNAL_MECHANISM",
+    "source": "extensions/vscode/server/scan_cache.py#FindingCache"
+   },
+   {
+    "candidate": "Identical unsaved buffer text is reused instead of rescanned (hashHits counter)",
+    "covered_by": "",
+    "reason": "INTERNAL_MECHANISM",
+    "source": "extensions/vscode/server/scan_cache.py#FindingCache"
+   },
+   {
+    "candidate": "Cache hit/miss counters (entries, statHits, hashHits, misses) in scan stats",
+    "covered_by": "",
+    "reason": "INTERNAL_MECHANISM",
+    "source": "extensions/vscode/server/scan_cache.py#FindingCache"
+   },
+   {
+    "candidate": "blake2b 16-byte content digest",
+    "covered_by": "",
+    "reason": "INTERNAL_MECHANISM",
+    "source": "extensions/vscode/server/scan_cache.py#digest"
+   },
+   {
+    "candidate": "Modification stamp is None when the path cannot be stated",
+    "covered_by": "",
+    "reason": "INTERNAL_MECHANISM",
+    "source": "extensions/vscode/server/scan_cache.py#mtime"
+   },
+   {
+    "candidate": "Forgetting a single file or clearing all results forces a fresh scan (drop/clear)",
+    "covered_by": "",
+    "reason": "INTERNAL_MECHANISM",
+    "source": "extensions/vscode/server/scan_cache.py#FindingCache"
+   },
+   {
+    "candidate": "Skipped files are remembered with no content fingerprint and reused on an unchanged stamp",
+    "covered_by": "",
+    "reason": "INTERNAL_MECHANISM",
+    "source": "extensions/vscode/server/scan_cache.py#Entry"
+   },
+   {
+    "candidate": "Scan with no paths and no root walks the current directory",
+    "covered_by": "",
+    "reason": "TRIVIAL",
+    "source": "extensions/vscode/server/scan_cache.py#ProjectScan"
+   },
+   {
+    "candidate": "Elapsed milliseconds and per-source counts (stat/hash/scan/skip) in the scan stats",
+    "covered_by": "scanning.result-caching.untouched-file-not-reread",
+    "reason": "DUPLICATE_OF",
+    "source": "extensions/vscode/server/scan_cache.py#ProjectScan"
+   }
+  ],
+  "server/server-ops": [
+   {
+    "candidate": "ping reports protocol version, greenlint version, rule count, Python version, module path and severity order",
+    "covered_by": "",
+    "reason": "INTERNAL_MECHANISM",
+    "source": "extensions/vscode/server/server_ops.py#op_ping"
+   },
+   {
+    "candidate": "languages op lists the file suffixes some rule targets",
+    "covered_by": "",
+    "reason": "INTERNAL_MECHANISM",
+    "source": "extensions/vscode/server/server_ops.py#op_languages"
+   },
+   {
+    "candidate": "scanText scans the unsaved buffer text the editor sends",
+    "covered_by": "",
+    "reason": "INTERNAL_MECHANISM",
+    "source": "extensions/vscode/server/server_ops.py#op_scan_text"
+   },
+   {
+    "candidate": "scanFile answers from remembered results and reports stat/hash/scan/skip source",
+    "covered_by": "",
+    "reason": "INTERNAL_MECHANISM",
+    "source": "extensions/vscode/server/server_ops.py#op_scan_file"
+   },
+   {
+    "candidate": "scanFile and scanProject default to a 1,000,000-byte file limit when none is sent",
+    "covered_by": "",
+    "reason": "TRIVIAL",
+    "source": "extensions/vscode/server/server_ops.py#op_scan_file"
+   },
+   {
+    "candidate": "invalidate drops named paths or everything from remembered results",
+    "covered_by": "",
+    "reason": "INTERNAL_MECHANISM",
+    "source": "extensions/vscode/server/server_ops.py#op_invalidate"
+   },
+   {
+    "candidate": "writeBaseline without a root scans the server's working directory",
+    "covered_by": "",
+    "reason": "INTERNAL_MECHANISM",
+    "source": "extensions/vscode/server/server_ops.py#op_write_baseline"
+   },
+   {
+    "candidate": "cancel without a target answers cancelling false",
+    "covered_by": "",
+    "reason": "TRIVIAL",
+    "source": "extensions/vscode/server/server_ops.py#op_cancel"
+   },
+   {
+    "candidate": "configure with an unchanged glob list keeps remembered results",
+    "covered_by": "",
+    "reason": "INTERNAL_MECHANISM",
+    "source": "extensions/vscode/server/server_ops.py#op_configure"
+   },
+   {
+    "candidate": "Server protocol typing the ops depend on",
+    "covered_by": "",
+    "reason": "INTERNAL_MECHANISM",
+    "source": "extensions/vscode/server/server_ops.py#Server"
+   },
+   {
+    "candidate": "Accepted findings stay quiet everywhere while new ones are still reported",
+    "covered_by": "",
+    "reason": "UNVERIFIABLE",
+    "source": "extensions/vscode/server/greenlint_server.py#Server.accepted"
+   }
+  ],
+  "server/types": [
+   {
+    "candidate": "Request/Response aliases: one newline-delimited JSON-RPC message as a dict",
+    "covered_by": "",
+    "reason": "INTERNAL_MECHANISM",
+    "source": "extensions/vscode/server/types_.py#Request"
+   },
+   {
+    "candidate": "Finding alias: a finding as greenlint produces it",
+    "covered_by": "",
+    "reason": "INTERNAL_MECHANISM",
+    "source": "extensions/vscode/server/types_.py#Finding"
+   },
+   {
+    "candidate": "Config alias: merged .greenlint.toml plus editor settings",
+    "covered_by": "",
+    "reason": "INTERNAL_MECHANISM",
+    "source": "extensions/vscode/server/types_.py#Config"
+   },
+   {
+    "candidate": "StatStamp alias: (mtime_ns, size) used to skip unchanged files",
+    "covered_by": "",
+    "reason": "INTERNAL_MECHANISM",
+    "source": "extensions/vscode/server/types_.py#StatStamp"
+   },
+   {
+    "candidate": "Findings ordered by severity, then file, then line, using the server-published severity order (asserted in src/test/types.test.ts)",
+    "covered_by": "",
+    "reason": "UNVERIFIABLE",
+    "source": "extensions/vscode/src/test/types.test.ts#orders by severity, then file, then line"
+   },
+   {
+    "candidate": "Rule documentation link built as a GitHub anchor into docs/rules.md (asserted in src/test/types.test.ts)",
+    "covered_by": "",
+    "reason": "UNVERIFIABLE",
+    "source": "extensions/vscode/src/test/types.test.ts#builds the GitHub anchor for a rule, doubled hyphen and all"
+   }
+  ],
+  "src/config": [
+   {
+    "candidate": "Settings type and RunMode union as a data shape",
+    "covered_by": "",
+    "reason": "INTERNAL_MECHANISM",
+    "source": "extensions/vscode/src/config.ts#Settings"
+   },
+   {
+    "candidate": "Severity mapping is not user-configurable",
+    "covered_by": "",
+    "reason": "TRIVIAL",
+    "source": "extensions/vscode/src/config.ts#SEVERITY_LEVELS"
+   },
+   {
+    "candidate": "debounceMs / maxFileBytes minimums from the manifest are not enforced when read",
+    "covered_by": "configuration.settings.unset-settings-use-documented-defaults",
+    "reason": "TRIVIAL",
+    "source": "extensions/vscode/src/config.ts#readSettings"
+   },
+   {
+    "candidate": "Disabling greenlint clears findings and stops the scan engine; any settings change triggers a project re-scan",
+    "covered_by": "",
+    "reason": "UNVERIFIABLE",
+    "source": "extensions/vscode/src/extension.ts#reconfigure"
+   }
+  ],
+  "src/diagnostics": [
+   {
+    "candidate": "Docs link URIs are reused per distinct rule and message instead of being parsed per finding",
+    "covered_by": "",
+    "reason": "INTERNAL_MECHANISM",
+    "source": "extensions/vscode/src/diagnostics.ts#docsTarget"
+   },
+   {
+    "candidate": "The open document is looked up once per file rather than once per finding",
+    "covered_by": "",
+    "reason": "INTERNAL_MECHANISM",
+    "source": "extensions/vscode/src/diagnostics.ts#toDiagnostics"
+   },
+   {
+    "candidate": "A finding reported on line 0 or below is placed on the first line",
+    "covered_by": "",
+    "reason": "TRIVIAL",
+    "source": "extensions/vscode/src/diagnostics.ts#rangeFor"
+   },
+   {
+    "candidate": "A finding beyond the end of an open document gets a whole-line range",
+    "covered_by": "editor.diagnostics.closed-file-whole-line",
+    "reason": "DUPLICATE_OF",
+    "source": "extensions/vscode/src/diagnostics.ts#rangeFor"
+   },
+   {
+    "candidate": "Hover markdown is trusted and renders theme icons",
+    "covered_by": "",
+    "reason": "INTERNAL_MECHANISM",
+    "source": "extensions/vscode/src/diagnostics.ts#describe"
+   },
+   {
+    "candidate": "Findings panel tooltip uses the same card as the hover",
+    "covered_by": "editor.hover.finding-card-content",
+    "reason": "DUPLICATE_OF",
+    "source": "extensions/vscode/src/diagnostics.ts#describe"
+   }
+  ],
+  "src/engine": [
+   {
+    "candidate": "Shared rule prose and file paths across findings (share)",
+    "covered_by": "",
+    "reason": "INTERNAL_MECHANISM",
+    "source": "extensions/vscode/src/engine.ts#ScanServer.scanText"
+   },
+   {
+    "candidate": "Interpreter candidate order (explicit pair only; workspace checkout before installed package)",
+    "covered_by": "",
+    "reason": "UNVERIFIABLE",
+    "source": "extensions/vscode/src/interpreters.ts#candidates"
+   },
+   {
+    "candidate": "invalidate is a no-op while the server is not running",
+    "covered_by": "",
+    "reason": "INTERNAL_MECHANISM",
+    "source": "extensions/vscode/src/engine.ts#ScanServer.invalidate"
+   },
+   {
+    "candidate": "languages() returns the file extensions targeted by rules",
+    "covered_by": "",
+    "reason": "UNVERIFIABLE",
+    "source": "extensions/vscode/src/engine.ts#ScanServer.languages"
+   },
+   {
+    "candidate": "configure() sends editor ignore globs to the server",
+    "covered_by": "",
+    "reason": "UNVERIFIABLE",
+    "source": "extensions/vscode/src/engine.ts#ScanServer.configure"
+   },
+   {
+    "candidate": "maxFileBytes passed with file and project scans",
+    "covered_by": "",
+    "reason": "UNVERIFIABLE",
+    "source": "extensions/vscode/src/engine.ts#ScanServer.scanFile"
+   },
+   {
+    "candidate": "Severity order adopted from the server at start-up",
+    "covered_by": "",
+    "reason": "INTERNAL_MECHANISM",
+    "source": "extensions/vscode/src/engine.ts#ScanServer.startOnce"
+   },
+   {
+    "candidate": "A losing candidate's late exit does not tear down the winning server",
+    "covered_by": "",
+    "reason": "INTERNAL_MECHANISM",
+    "source": "extensions/vscode/src/engine.ts#ScanServer.spawn"
+   },
+   {
+    "candidate": "Readiness proven by ping after ready line",
+    "covered_by": "",
+    "reason": "INTERNAL_MECHANISM",
+    "source": "extensions/vscode/src/engine.ts#ScanServer.spawn"
+   },
+   {
+    "candidate": "Server stopped on dispose; restart() stops then starts",
+    "covered_by": "",
+    "reason": "INTERNAL_MECHANISM",
+    "source": "extensions/vscode/src/engine.ts#ScanServer.dispose"
+   },
+   {
+    "candidate": "Protocol trace toggled by settings",
+    "covered_by": "",
+    "reason": "INTERNAL_MECHANISM",
+    "source": "extensions/vscode/src/engine.ts#ScanServer.updateSettings"
+   },
+   {
+    "candidate": "One scan server serves every scan in the window",
+    "covered_by": "",
+    "reason": "UNVERIFIABLE",
+    "source": "extensions/vscode/src/engine.ts#ScanServer.start"
+   },
+   {
+    "candidate": "A failed start is tried again on the next scan",
+    "covered_by": "",
+    "reason": "UNVERIFIABLE",
+    "source": "extensions/vscode/src/engine.ts#ScanServer.start"
+   },
+   {
+    "candidate": "A scan server that exits is restarted by the next scan",
+    "covered_by": "",
+    "reason": "UNVERIFIABLE",
+    "source": "extensions/vscode/src/engine.ts#ScanServer.spawn"
+   },
+   {
+    "candidate": "A scan server that never becomes ready is given up on after 20 seconds",
+    "covered_by": "",
+    "reason": "UNVERIFIABLE",
+    "source": "extensions/vscode/src/engine.ts#ScanServer.spawn"
+   },
+   {
+    "candidate": "When greenlint cannot be started, the user is told why and how to install it",
+    "covered_by": "",
+    "reason": "UNVERIFIABLE",
+    "source": "extensions/vscode/src/engine.ts#ScanServer.startOnce"
+   },
+   {
+    "candidate": "The output log records where greenlint was looked for and what the scan server said",
+    "covered_by": "",
+    "reason": "UNVERIFIABLE",
+    "source": "extensions/vscode/src/engine.ts#ScanServer.startOnce"
+   },
+   {
+    "candidate": "An open document is scanned as currently typed, before it is saved",
+    "covered_by": "",
+    "reason": "UNVERIFIABLE",
+    "source": "extensions/vscode/src/engine.ts#ScanServer.scanText"
+   },
+   {
+    "candidate": "A workspace scan delivers findings as it goes and ends with the totals",
+    "covered_by": "",
+    "reason": "UNVERIFIABLE",
+    "source": "extensions/vscode/src/engine.ts#ScanServer.scanProject"
+   },
+   {
+    "candidate": "Stopping a workspace scan halts it at the next batch of files",
+    "covered_by": "",
+    "reason": "UNVERIFIABLE",
+    "source": "extensions/vscode/src/engine.ts#ScanServer.cancelProjectScan"
+   },
+   {
+    "candidate": "A baseline silences the findings it accepted, and only those",
+    "covered_by": "",
+    "reason": "UNVERIFIABLE",
+    "source": "extensions/vscode/src/engine.ts#ScanServer.writeBaseline"
+   }
+  ],
+  "src/excludes": [
+   {
+    "candidate": "Each exclude emits both the entry glob and a '<base>/*' glob so the scanner can prune a directory without opening it",
+    "covered_by": "",
+    "reason": "INTERNAL_MECHANISM",
+    "source": "extensions/vscode/src/excludes.ts#toIgnoreGlobs"
+   },
+   {
+    "candidate": "'**' flattened to '*' because fnmatch '*' crosses '/'",
+    "covered_by": "",
+    "reason": "INTERNAL_MECHANISM",
+    "source": "extensions/vscode/src/excludes.ts#toIgnoreGlobs"
+   },
+   {
+    "candidate": "Workspace path converted to forward slashes on Windows",
+    "covered_by": "",
+    "reason": "INTERNAL_MECHANISM",
+    "source": "extensions/vscode/src/excludes.ts#posix"
+   },
+   {
+    "candidate": "Globs de-duplicated across files/search settings and sorted",
+    "covered_by": "",
+    "reason": "INTERNAL_MECHANISM",
+    "source": "extensions/vscode/src/excludes.ts#editorExcludeGlobs"
+   },
+   {
+    "candidate": "Leading './' stripped and trailing slashes trimmed before anchoring; empty pattern yields nothing",
+    "covered_by": "",
+    "reason": "TRIVIAL",
+    "source": "extensions/vscode/src/excludes.ts#toIgnoreGlobs"
+   },
+   {
+    "candidate": "Exclude globs re-sent to the server only when the set changes, and logged",
+    "covered_by": "",
+    "reason": "INTERNAL_MECHANISM",
+    "source": "extensions/vscode/src/extension.ts#applyExcludes"
+   }
+  ],
+  "src/extension": [
+   {
+    "candidate": "Every command listed in package.json is registered exactly once and unregistered on deactivate",
+    "covered_by": "",
+    "reason": "TECH_DEVTOOLING",
+    "source": "extensions/vscode/src/extension.ts#Controller.commands"
+   },
+   {
+    "candidate": "Deactivate disposes views, status bar, diagnostics, log, watchers and listeners; safe to call twice",
+    "covered_by": "",
+    "reason": "INTERNAL_MECHANISM",
+    "source": "extensions/vscode/src/extension.ts#Controller.dispose"
+   },
+   {
+    "candidate": "Unchanged document versions are not re-sent to the scan server on tab switch or reopen",
+    "covered_by": "",
+    "reason": "INTERNAL_MECHANISM",
+    "source": "extensions/vscode/src/extension.ts#Controller.scanDocument"
+   },
+   {
+    "candidate": "Diagnostics republished only for files the store changed; clean files' entries deleted",
+    "covered_by": "",
+    "reason": "INTERNAL_MECHANISM",
+    "source": "extensions/vscode/src/extension.ts#Controller.publishDiagnostics"
+   },
+   {
+    "candidate": "Opening a never-opened file republishes its diagnostics so the squiggle narrows to the code",
+    "covered_by": "",
+    "reason": "INTERNAL_MECHANISM",
+    "source": "extensions/vscode/src/extension.ts#Controller.documentListeners"
+   },
+   {
+    "candidate": "Only files with extensions some rule targets are scanned (languages fetched on first project scan; all files until then)",
+    "covered_by": "scanning/language-support (language module)",
+    "reason": "DUPLICATE_OF",
+    "source": "extensions/vscode/src/extension.ts#Controller.isScannable"
+   },
+   {
+    "candidate": "Scan log lines with per-severity totals and cache stats per folder",
+    "covered_by": "status-and-troubleshooting/output-log",
+    "reason": "DUPLICATE_OF",
+    "source": "extensions/vscode/src/extension.ts#Controller.logScan"
+   },
+   {
+    "candidate": "Status bar painting and click-to-focus Findings",
+    "covered_by": "status-and-troubleshooting/status-bar (status module)",
+    "reason": "DUPLICATE_OF",
+    "source": "extensions/vscode/src/extension.ts#Controller.repaint"
+   },
+   {
+    "candidate": "Report panel content: scope label, version, stats only in project scope",
+    "covered_by": "reporting/report-content (report module)",
+    "reason": "DUPLICATE_OF",
+    "source": "extensions/vscode/src/extension.ts#Controller.reportHtml"
+   },
+   {
+    "candidate": "Hover explanations registered for file documents",
+    "covered_by": "editor-feedback/hover-explanations (diagnostics module)",
+    "reason": "DUPLICATE_OF",
+    "source": "extensions/vscode/src/extension.ts#Controller.viewWiring"
+   },
+   {
+    "candidate": "Errors routed through ErrorNotifier",
+    "covered_by": "status-and-troubleshooting/error-notifications (notify module)",
+    "reason": "DUPLICATE_OF",
+    "source": "extensions/vscode/src/extension.ts#Controller.scanDocument"
+   },
+   {
+    "candidate": "Expand All Findings command and greenlint.expanded context key",
+    "covered_by": "findings-explorer/findings-tree (findingsView module)",
+    "reason": "DUPLICATE_OF",
+    "source": "extensions/vscode/src/extension.ts#Controller.setExpanded"
+   },
+   {
+    "candidate": "Scan Workspace while a scan is already running does nothing",
+    "covered_by": "",
+    "reason": "TRIVIAL",
+    "source": "extensions/vscode/src/extension.ts#Controller.scanProject"
+   },
+   {
+    "candidate": "Server restart only when requiresRestart reports a relevant setting change",
+    "covered_by": "configuration/extension-settings (config module requiresRestart)",
+    "reason": "DUPLICATE_OF",
+    "source": "extensions/vscode/src/extension.ts#Controller.reconfigure"
+   },
+   {
+    "candidate": "Closing a document cancels its pending scan",
+    "covered_by": "",
+    "reason": "INTERNAL_MECHANISM",
+    "source": "extensions/vscode/src/extension.ts#Controller.documentListeners"
+   },
+   {
+    "candidate": "The run setting decides which editor activity triggers a re-scan",
+    "covered_by": "",
+    "reason": "UNVERIFIABLE",
+    "source": "extensions/vscode/src/extension.ts#Controller.documentListeners"
+   },
+   {
+    "candidate": "Findings for an edited file describe the unsaved text, not the file on disk",
+    "covered_by": "",
+    "reason": "UNVERIFIABLE",
+    "source": "extensions/vscode/src/extension.ts#Controller.scanDocument"
+   },
+   {
+    "candidate": "A scan result for text that has since been edited is never shown",
+    "covered_by": "",
+    "reason": "UNVERIFIABLE",
+    "source": "extensions/vscode/src/extension.ts#Controller.scanDocument"
+   },
+   {
+    "candidate": "Scan Current File always re-scans, even if the file has not changed",
+    "covered_by": "",
+    "reason": "UNVERIFIABLE",
+    "source": "extensions/vscode/src/extension.ts#Controller.commands"
+   },
+   {
+    "candidate": "The workspace is scanned on startup when the startup-scan setting is on",
+    "covered_by": "",
+    "reason": "UNVERIFIABLE",
+    "source": "extensions/vscode/src/extension.ts#Controller.start"
+   },
+   {
+    "candidate": "A workspace scan does not replace findings for files with unsaved edits",
+    "covered_by": "",
+    "reason": "UNVERIFIABLE",
+    "source": "extensions/vscode/src/extension.ts#Controller.scanProject"
+   },
+   {
+    "candidate": "Cancelling a workspace scan keeps the findings for files it did not reach",
+    "covered_by": "",
+    "reason": "UNVERIFIABLE",
+    "source": "extensions/vscode/src/extension.ts#Controller.scanProject"
+   },
+   {
+    "candidate": "A clean workspace says so instead of showing an empty panel",
+    "covered_by": "",
+    "reason": "UNVERIFIABLE",
+    "source": "extensions/vscode/src/extension.ts#Controller.repaint"
+   },
+   {
+    "candidate": "Files changed outside the editor are re-scanned in one batch",
+    "covered_by": "",
+    "reason": "UNVERIFIABLE",
+    "source": "extensions/vscode/src/extension.ts#Controller.flushExternal"
+   },
+   {
+    "candidate": "Findings for a deleted file disappear",
+    "covered_by": "",
+    "reason": "UNVERIFIABLE",
+    "source": "extensions/vscode/src/extension.ts#Controller.watchers"
+   },
+   {
+    "candidate": "Disabling greenlint removes all its findings and stops scanning",
+    "covered_by": "",
+    "reason": "UNVERIFIABLE",
+    "source": "extensions/vscode/src/extension.ts#Controller.reconfigure"
+   },
+   {
+    "candidate": "Changing what greenlint checks re-scans the whole workspace",
+    "covered_by": "",
+    "reason": "UNVERIFIABLE",
+    "source": "extensions/vscode/src/extension.ts#Controller.reconfigure"
+   },
+   {
+    "candidate": "The workspace scan skips greenlint's exclude globs, plus the editor's excludes when that is turned on",
+    "covered_by": "",
+    "reason": "UNVERIFIABLE",
+    "source": "extensions/vscode/src/extension.ts#Controller.applyExcludes"
+   },
+   {
+    "candidate": "Restarting the scan server re-scans the workspace with fresh rules",
+    "covered_by": "",
+    "reason": "UNVERIFIABLE",
+    "source": "extensions/vscode/src/extension.ts#Controller.commands"
+   },
+   {
+    "candidate": "Writing a baseline needs explicit confirmation",
+    "covered_by": "",
+    "reason": "UNVERIFIABLE",
+    "source": "extensions/vscode/src/extension.ts#Controller.writeBaseline"
+   },
+   {
+    "candidate": "A confirmed baseline is written to the workspace and the accepted findings stop being shown",
+    "covered_by": "",
+    "reason": "UNVERIFIABLE",
+    "source": "extensions/vscode/src/extension.ts#Controller.writeBaseline"
+   },
+   {
+    "candidate": "The chosen grouping and scope are remembered for the workspace",
+    "covered_by": "",
+    "reason": "UNVERIFIABLE",
+    "source": "extensions/vscode/src/extension.ts#Controller.pickGrouping"
+   }
+  ],
+  "src/findingsview": [
+   {
+    "candidate": "Group ids include the generation, scope and grouping so VS Code redraws cleanly when the grouping changes",
+    "covered_by": "",
+    "reason": "INTERNAL_MECHANISM",
+    "source": "extensions/vscode/src/findingsView.ts#FindingsProvider.idFor"
+   },
+   {
+    "candidate": "Tooltip on a finding row is built only when it is hovered (lazy resolveTreeItem)",
+    "covered_by": "",
+    "reason": "INTERNAL_MECHANISM",
+    "source": "extensions/vscode/src/findingsView.ts#FindingsProvider.resolveTreeItem"
+   },
+   {
+    "candidate": "Finding row tooltip content (message, suggestion, CO2e)",
+    "covered_by": "content comes from diagnostics.describe, which belongs to the hover-explanations module",
+    "reason": "UNVERIFIABLE",
+    "source": "extensions/vscode/src/findingsView.ts#FindingsProvider.resolveTreeItem"
+   },
+   {
+    "candidate": "Severity icons and colours (flame red, warning yellow, info blue)",
+    "covered_by": "",
+    "reason": "TRIVIAL",
+    "source": "extensions/vscode/src/findingsView.ts#SEVERITY_THEME"
+   },
+   {
+    "candidate": "File groups show the file-type icon and resource decoration",
+    "covered_by": "",
+    "reason": "TRIVIAL",
+    "source": "extensions/vscode/src/findingsView.ts#FindingsProvider.groups"
+   },
+   {
+    "candidate": "Changing the active file while scoped to the whole project does not refresh the panel",
+    "covered_by": "",
+    "reason": "INTERNAL_MECHANISM",
+    "source": "extensions/vscode/src/findingsView.ts#FindingsProvider.setCurrentFile"
+   },
+   {
+    "candidate": "countBySeverity helper",
+    "covered_by": "findings.scope.title-summary",
+    "reason": "DUPLICATE_OF",
+    "source": "extensions/vscode/src/findingsView.ts#countBySeverity"
+   },
+   {
+    "candidate": "Event emitter disposal",
+    "covered_by": "",
+    "reason": "INTERNAL_MECHANISM",
+    "source": "extensions/vscode/src/findingsView.ts#FindingsProvider.dispose"
+   },
+   {
+    "candidate": "Selecting a finding opens its file at the flagged line",
+    "covered_by": "",
+    "reason": "UNVERIFIABLE",
+    "source": "extensions/vscode/src/findingsView.ts#FindingsProvider.getTreeItem"
+   },
+   {
+    "candidate": "A finding row names its rule and location, leaving out the path when the file is already known",
+    "covered_by": "",
+    "reason": "UNVERIFIABLE",
+    "source": "extensions/vscode/src/findingsView.ts#FindingsProvider.getTreeItem"
+   },
+   {
+    "candidate": "Expand all and collapse all apply to every group, including groups opened or closed by hand",
+    "covered_by": "",
+    "reason": "UNVERIFIABLE",
+    "source": "extensions/vscode/src/findingsView.ts#FindingsProvider.setExpanded"
+   },
+   {
+    "candidate": "Groups the developer opened stay open while a scan keeps updating the panel",
+    "covered_by": "",
+    "reason": "UNVERIFIABLE",
+    "source": "extensions/vscode/src/findingsView.ts#FindingsProvider.refresh"
+   },
+   {
+    "candidate": "Findings are grouped by file by default, one group per file even when names repeat",
+    "covered_by": "",
+    "reason": "UNVERIFIABLE",
+    "source": "extensions/vscode/src/findingsView.ts#FindingsProvider.groups"
+   },
+   {
+    "candidate": "Grouping by severity lists high, then medium, then low, and leaves out empty severities",
+    "covered_by": "",
+    "reason": "UNVERIFIABLE",
+    "source": "extensions/vscode/src/findingsView.ts#FindingsProvider.groups"
+   },
+   {
+    "candidate": "Grouping by rule shows each rule with its message and count, with the rule holding the worst finding first",
+    "covered_by": "",
+    "reason": "UNVERIFIABLE",
+    "source": "extensions/vscode/src/findingsView.ts#FindingsProvider.groups"
+   },
+   {
+    "candidate": "The current-file scope shows only the active file's findings and follows the editor",
+    "covered_by": "",
+    "reason": "UNVERIFIABLE",
+    "source": "extensions/vscode/src/findingsView.ts#FindingsProvider.getChildren"
+   },
+   {
+    "candidate": "The panel title says what is in view and how many findings there are at each severity",
+    "covered_by": "",
+    "reason": "UNVERIFIABLE",
+    "source": "extensions/vscode/src/findingsView.ts#FindingsProvider.describeScope"
+   },
+   {
+    "candidate": "With no file open, the current-file scope lists nothing",
+    "covered_by": "",
+    "reason": "UNVERIFIABLE",
+    "source": "extensions/vscode/src/findingsView.ts#FindingsProvider.findings"
+   }
+  ],
+  "src/interpreters": [
+   {
+    "candidate": "Duplicate interpreter names are removed from the candidate list (by string only, so /usr/bin/python3 and python3 can both appear)",
+    "covered_by": "",
+    "reason": "INTERNAL_MECHANISM",
+    "source": "extensions/vscode/src/interpreters.ts#dedupe"
+   },
+   {
+    "candidate": "The PATH lookup tries .exe, .cmd and .bat extensions on Windows and skips empty PATH entries",
+    "covered_by": "",
+    "reason": "INTERNAL_MECHANISM",
+    "source": "extensions/vscode/src/interpreters.ts#onPath"
+   },
+   {
+    "candidate": "The workspace candidate is the root that contains the package, not the package folder",
+    "covered_by": "",
+    "reason": "INTERNAL_MECHANISM",
+    "source": "extensions/vscode/src/interpreters.ts#workspaceGreenlintModules"
+   },
+   {
+    "candidate": "A candidate that fails or is too old is skipped and the next one is tried; if all fail, the error message lists them",
+    "covered_by": "belongs to scan-engine/install-and-compatibility (engine.ts), not this module",
+    "reason": "UNVERIFIABLE",
+    "source": "extensions/vscode/src/engine.ts#startOnce"
+   },
+   {
+    "candidate": "A Windows pipx venv is looked for under the home folder in pipx/venvs/greenlint/Scripts/python.exe",
+    "covered_by": "engine.discovery.finds-pipx-and-console-script-installs",
+    "reason": "TRIVIAL",
+    "source": "extensions/vscode/src/interpreters.ts#interpretersOwningGreenlint"
+   }
+  ],
+  "src/notify": [
+   {
+    "candidate": "Error values that are not Error objects are stringified for the message",
+    "covered_by": "",
+    "reason": "INTERNAL_MECHANISM",
+    "source": "extensions/vscode/src/notify.ts#ErrorNotifier"
+   },
+   {
+    "candidate": "Log lines are prefixed with [greenlint]",
+    "covered_by": "",
+    "reason": "TRIVIAL",
+    "source": "extensions/vscode/src/notify.ts#ErrorNotifier"
+   },
+   {
+    "candidate": "Show Log opens the log without stealing focus (preserveFocus)",
+    "covered_by": "",
+    "reason": "INTERNAL_MECHANISM",
+    "source": "extensions/vscode/src/notify.ts#ErrorNotifier"
+   },
+   {
+    "candidate": "Installing from the notification runs in a visible terminal and offers a restart",
+    "covered_by": "",
+    "reason": "UNVERIFIABLE",
+    "source": "extensions/vscode/src/notify.ts#ErrorNotifier.runInstall"
+   },
+   {
+    "candidate": "After restarting from the install prompt a still-failing start is reported again",
+    "covered_by": "",
+    "reason": "UNVERIFIABLE",
+    "source": "extensions/vscode/src/notify.ts#ErrorNotifier.runInstall"
+   }
+  ],
+  "src/protocol": [
+   {
+    "candidate": "Newline framing that resumes the newline search across chunks so large lines stay linear",
+    "covered_by": "",
+    "reason": "INTERNAL_MECHANISM",
+    "source": "extensions/vscode/src/protocol.ts#LineProtocol"
+   },
+   {
+    "candidate": "Requests carry an incrementing id and responses are matched to requests by id",
+    "covered_by": "",
+    "reason": "INTERNAL_MECHANISM",
+    "source": "extensions/vscode/src/protocol.ts#LineProtocol"
+   },
+   {
+    "candidate": "A response for an unknown or already timed-out id is silently dropped",
+    "covered_by": "",
+    "reason": "INTERNAL_MECHANISM",
+    "source": "extensions/vscode/src/protocol.ts#LineProtocol"
+   },
+   {
+    "candidate": "Ready event hands control to the caller to ping the server",
+    "covered_by": "",
+    "reason": "INTERNAL_MECHANISM",
+    "source": "extensions/vscode/src/protocol.ts#LineProtocol"
+   },
+   {
+    "candidate": "greenlint.trace logs each request's duration and scan stats to the output log",
+    "covered_by": "",
+    "reason": "INTERNAL_MECHANISM",
+    "source": "extensions/vscode/src/protocol.ts#LineProtocol"
+   },
+   {
+    "candidate": "Streamed batches share repeated rule text and paths",
+    "covered_by": "scan-engine/memory-footprint (share module)",
+    "reason": "INTERNAL_MECHANISM",
+    "source": "extensions/vscode/src/protocol.ts#LineProtocol"
+   },
+   {
+    "candidate": "reset forgets the half-read line and callbacks of a dead process",
+    "covered_by": "",
+    "reason": "INTERNAL_MECHANISM",
+    "source": "extensions/vscode/src/protocol.ts#LineProtocol"
+   }
+  ],
+  "src/report": [
+   {
+    "candidate": "Report styling follows the VS Code theme, contrast and font-size variables, with light/dark fallbacks",
+    "covered_by": "",
+    "reason": "INTERNAL_MECHANISM",
+    "source": "extensions/vscode/src/report.ts#STYLES"
+   },
+   {
+    "candidate": "Severity shown as coloured dot and badge per finding (high/medium/low colours)",
+    "covered_by": "",
+    "reason": "INTERNAL_MECHANISM",
+    "source": "extensions/vscode/src/report.ts#fileSection"
+   },
+   {
+    "candidate": "Footer text explaining CO2e figures are order-of-magnitude steers, project link and copyright",
+    "covered_by": "",
+    "reason": "TRIVIAL",
+    "source": "extensions/vscode/src/report.ts#renderReport"
+   },
+   {
+    "candidate": "Findings bucketed into per-file and per-rule maps preserving insertion order",
+    "covered_by": "",
+    "reason": "INTERNAL_MECHANISM",
+    "source": "extensions/vscode/src/report.ts#bucket"
+   },
+   {
+    "candidate": "File sections appear in the order findings were supplied",
+    "covered_by": "",
+    "reason": "INTERNAL_MECHANISM",
+    "source": "extensions/vscode/src/report.ts#renderReport"
+   },
+   {
+    "candidate": "Page title 'greenlint report' and viewport/charset metadata",
+    "covered_by": "",
+    "reason": "TRIVIAL",
+    "source": "extensions/vscode/src/report.ts#renderReport"
+   }
+  ],
+  "src/reportpanel": [
+   {
+    "candidate": "Closing the report cancels any pending re-render and a later Open Report creates a fresh panel",
+    "covered_by": "",
+    "reason": "INTERNAL_MECHANISM",
+    "source": "extensions/vscode/src/reportPanel.ts#ReportPanel.show"
+   },
+   {
+    "candidate": "Disposing the extension closes the report panel and clears its timer",
+    "covered_by": "",
+    "reason": "INTERNAL_MECHANISM",
+    "source": "extensions/vscode/src/reportPanel.ts#ReportPanel.dispose"
+   },
+   {
+    "candidate": "Report HTML content (sections per finding)",
+    "covered_by": "",
+    "reason": "UNVERIFIABLE",
+    "source": "extensions/vscode/src/extension.ts#reportHtml"
+   },
+   {
+    "candidate": "An open report catches up once findings stop changing",
+    "covered_by": "",
+    "reason": "UNVERIFIABLE",
+    "source": "extensions/vscode/src/reportPanel.ts#ReportPanel.refresh"
+   },
+   {
+    "candidate": "The report waits for a workspace scan to finish before updating",
+    "covered_by": "",
+    "reason": "UNVERIFIABLE",
+    "source": "extensions/vscode/src/reportPanel.ts#ReportPanel.refresh"
+   },
+   {
+    "candidate": "A report brought back into view shows the latest findings",
+    "covered_by": "",
+    "reason": "UNVERIFIABLE",
+    "source": "extensions/vscode/src/reportPanel.ts#ReportPanel.show"
+   }
+  ],
+  "src/share": [
+   {
+    "candidate": "Identical message/suggestion/CO2e strings are held as one shared copy per rule (memory saving)",
+    "covered_by": "",
+    "reason": "INTERNAL_MECHANISM",
+    "source": "extensions/vscode/src/share.ts#share"
+   },
+   {
+    "candidate": "A file path is shared only with the immediately preceding finding, so no path is retained after the batch",
+    "covered_by": "",
+    "reason": "INTERNAL_MECHANISM",
+    "source": "extensions/vscode/src/share.ts#share"
+   },
+   {
+    "candidate": "Stored rule prose is limited by the number of rules (one entry per rule id, kept for the life of the window)",
+    "covered_by": "",
+    "reason": "INTERNAL_MECHANISM",
+    "source": "extensions/vscode/src/share.ts#ruleProse"
+   }
+  ],
+  "src/status": [
+   {
+    "candidate": "Status bar item is shown on every refresh",
+    "covered_by": "",
+    "reason": "INTERNAL_MECHANISM",
+    "source": "extensions/vscode/src/status.ts#paintStatus"
+   },
+   {
+    "candidate": "Tooltip rendered as Markdown with theme icons enabled",
+    "covered_by": "",
+    "reason": "INTERNAL_MECHANISM",
+    "source": "extensions/vscode/src/status.ts#paintStatus"
+   },
+   {
+    "candidate": "Clicking the status bar focuses the findings view (set in extension.ts, not this module)",
+    "covered_by": "",
+    "reason": "UNVERIFIABLE",
+    "source": "extensions/vscode/src/extension.ts#constructor"
+   }
+  ],
+  "src/store": [
+   {
+    "candidate": "No change event when a file that had no findings is scanned clean again (no repaint per keystroke)",
+    "covered_by": "",
+    "reason": "INTERNAL_MECHANISM",
+    "source": "extensions/vscode/src/store.ts#FindingStore.setFile"
+   },
+   {
+    "candidate": "One change event per streaming batch naming the files it touched",
+    "covered_by": "",
+    "reason": "INTERNAL_MECHANISM",
+    "source": "extensions/vscode/src/store.ts#FindingStore.mergeBatch"
+   },
+   {
+    "candidate": "Memoised flattened list of all findings, invalidated on every change and shared by identity",
+    "covered_by": "",
+    "reason": "INTERNAL_MECHANISM",
+    "source": "extensions/vscode/src/store.ts#FindingStore.all"
+   },
+   {
+    "candidate": "Running total maintained incrementally instead of recounted",
+    "covered_by": "",
+    "reason": "INTERNAL_MECHANISM",
+    "source": "extensions/vscode/src/store.ts#FindingStore.size"
+   },
+   {
+    "candidate": "Per-file lists kept sorted on insert",
+    "covered_by": "",
+    "reason": "INTERNAL_MECHANISM",
+    "source": "extensions/vscode/src/store.ts#FindingStore.put"
+   },
+   {
+    "candidate": "A batch replaces rather than accumulates a file's findings",
+    "covered_by": "scanning.findings.rescan-replaces-only-that-file",
+    "reason": "DUPLICATE_OF",
+    "source": "extensions/vscode/src/store.ts#FindingStore.mergeBatch"
+   },
+   {
+    "candidate": "clear() empties all findings and announces a full refresh",
+    "covered_by": "",
+    "reason": "UNVERIFIABLE",
+    "source": "extensions/vscode/src/store.ts#FindingStore.clear"
+   },
+   {
+    "candidate": "forFile / entries accessors and dispose",
+    "covered_by": "",
+    "reason": "INTERNAL_MECHANISM",
+    "source": "extensions/vscode/src/store.ts#FindingStore"
+   },
+   {
+    "candidate": "A project scan does not overwrite the findings of a file with unsaved edits",
+    "covered_by": "",
+    "reason": "UNVERIFIABLE",
+    "source": "extensions/vscode/src/store.ts#FindingStore.mergeBatch"
+   },
+   {
+    "candidate": "When a workspace scan finishes, files it no longer flags drop out of the findings, except files with unsaved edits and files outside the folder",
+    "covered_by": "",
+    "reason": "UNVERIFIABLE",
+    "source": "extensions/vscode/src/store.ts#FindingStore.pruneUnder"
+   },
+   {
+    "candidate": "Project findings are listed worst severity first, then by file and line",
+    "covered_by": "",
+    "reason": "UNVERIFIABLE",
+    "source": "extensions/vscode/src/store.ts#FindingStore.all"
+   }
+  ],
+  "src/types": [
+   {
+    "candidate": "Finding, ScanStats, ServerInfo field shapes shared between extension and scan server",
+    "covered_by": "",
+    "reason": "INTERNAL_MECHANISM",
+    "source": "extensions/vscode/src/types.ts#Finding"
+   },
+   {
+    "candidate": "ScanSummary carries counts only, no summed CO2e figure",
+    "covered_by": "",
+    "reason": "INTERNAL_MECHANISM",
+    "source": "extensions/vscode/src/types.ts#ScanSummary"
+   },
+   {
+    "candidate": "Path comparison uses code-unit order rather than locale collation for speed",
+    "covered_by": "editor-feedback.ordering.severity-then-file-then-line",
+    "reason": "DUPLICATE_OF",
+    "source": "extensions/vscode/src/types.ts#compareFindings"
+   },
+   {
+    "candidate": "Lines are 1-based in findings",
+    "covered_by": "",
+    "reason": "INTERNAL_MECHANISM",
+    "source": "extensions/vscode/src/types.ts#Finding"
+   }
+  ],
+  "vscode/esbuild": [
+   {
+    "candidate": "The extension source is bundled into a single file (out/extension.js) from src/extension.ts",
+    "covered_by": "",
+    "reason": "TECH_BUILD",
+    "source": "extensions/vscode/esbuild.mjs#options"
+   },
+   {
+    "candidate": "The editor's own API module (vscode) is left out of the bundle and supplied by the editor at runtime",
+    "covered_by": "",
+    "reason": "TECH_BUILD",
+    "source": "extensions/vscode/esbuild.mjs#options"
+   },
+   {
+    "candidate": "The bundle targets Node 18 as CommonJS so it still loads in VS Code 1.85",
+    "covered_by": "",
+    "reason": "TECH_BUILD",
+    "source": "extensions/vscode/esbuild.mjs#options"
+   },
+   {
+    "candidate": "Release builds are minified with no source map; watch builds keep an inline source map and are not minified",
+    "covered_by": "",
+    "reason": "TECH_BUILD",
+    "source": "extensions/vscode/esbuild.mjs#options"
+   },
+   {
+    "candidate": "The --watch flag keeps rebuilding as sources change; without it the script builds once",
+    "covered_by": "",
+    "reason": "TECH_DEVTOOLING",
+    "source": "extensions/vscode/esbuild.mjs#watch"
+   }
+  ]
+ },
+ "lifted": {
+  "server/greenlint-api": [],
+  "server/greenlint-server": [
+   {
+    "from_source": "extensions/vscode/server/greenlint_server.py#Server.merged_config",
+    "rule": "scanning.exclusions.baselined-findings-quiet"
+   },
+   {
+    "from_source": "extensions/vscode/server/greenlint_server.py#Server.drop_cache_if_rules_moved",
+    "rule": "scanning.caching.settings-change-takes-effect-immediately"
+   }
+  ],
+  "server/scan-cache": [],
+  "server/server-ops": [
+   {
+    "from_source": "extensions/vscode/server/greenlint_server.py#Server.accepted",
+    "rule": "baselines.filtering.only-new-findings-reported"
+   }
+  ],
+  "server/types": [],
+  "src/config": [],
+  "src/diagnostics": [],
+  "src/engine": [
+   {
+    "from_source": "extensions/vscode/server/greenlint_server.py (baseline write/apply, driven via extensions/vscode/src/engine.ts#ScanServer.writeBaseline)",
+    "rule": "configuration.baselines.accept-current-findings"
+   }
+  ],
+  "src/excludes": [],
+  "src/extension": [],
+  "src/findingsview": [],
+  "src/interpreters": [],
+  "src/notify": [],
+  "src/protocol": [],
+  "src/report": [],
+  "src/reportpanel": [],
+  "src/share": [],
+  "src/status": [],
+  "src/store": [],
+  "src/types": [],
+  "vscode/esbuild": []
+ },
+ "retired": [
+  "vscode.editor-feedback.severity-levels.001",
+  "vscode.scan-engine.server-lifecycle.001"
+ ],
+ "scenarios": {
+  "vscode.configuration.baselines.001": {
+   "file": "extensions/vscode/specs/configuration/baselines/writing-a-baseline.feature",
+   "fingerprint": "b79a59d59008",
+   "human": false,
+   "rule": "baselines.writing.accepts-every-finding-in-folder",
+   "source": "extensions/vscode/server/server_ops.py#op_write_baseline",
+   "status": "verified",
+   "test": "tests/test_vscode_server.py#test_write_baseline_quietens_the_findings_it_recorded",
+   "tests": [
+    "tests/test_vscode_server.py#test_write_baseline_quietens_the_findings_it_recorded",
+    "extensions/vscode/src/test/engine.test.ts#a written baseline silences what it accepted on disk, and only that"
+   ]
+  },
+  "vscode.configuration.baselines.002": {
+   "file": "extensions/vscode/specs/configuration/baselines/writing-a-baseline.feature",
+   "fingerprint": "b79a59d59008",
+   "human": false,
+   "rule": "baselines.writing.records-files-on-disk",
+   "source": "extensions/vscode/server/server_ops.py#op_write_baseline",
+   "status": "inferred",
+   "test": "",
+   "tests": []
+  },
+  "vscode.configuration.baselines.003": {
+   "file": "extensions/vscode/specs/configuration/baselines/writing-a-baseline.feature",
+   "fingerprint": "b79a59d59008",
+   "human": false,
+   "rule": "baselines.writing.ignores-max-file-size-setting",
+   "source": "extensions/vscode/server/server_ops.py#op_write_baseline",
+   "status": "inferred",
+   "test": "",
+   "tests": []
+  },
+  "vscode.configuration.extension-settings.001": {
+   "file": "extensions/vscode/specs/configuration/extension-settings/extension-settings.feature",
+   "fingerprint": "a72526992440",
+   "human": false,
+   "rule": "configuration.settings.unset-settings-use-documented-defaults",
+   "source": "extensions/vscode/src/config.ts#readSettings",
+   "status": "inferred",
+   "test": "",
+   "tests": []
+  },
+  "vscode.configuration.extension-settings.002": {
+   "file": "extensions/vscode/specs/configuration/extension-settings/extension-settings.feature",
+   "fingerprint": "af3812e98873",
+   "human": false,
+   "rule": "configuration.settings.engine-paths-restart-scan-server",
+   "source": "extensions/vscode/src/config.ts#requiresRestart",
+   "status": "inferred",
+   "test": "",
+   "tests": []
+  },
+  "vscode.editor-feedback.hover-explanations.001": {
+   "file": "extensions/vscode/specs/editor-feedback/hover-explanations/hover-explanations.feature",
+   "fingerprint": "567acd6a41ab",
+   "human": false,
+   "rule": "editor.hover.finding-card-content",
+   "source": "extensions/vscode/src/diagnostics.ts#describe",
+   "status": "inferred",
+   "test": "",
+   "tests": []
+  },
+  "vscode.editor-feedback.hover-explanations.002": {
+   "file": "extensions/vscode/specs/editor-feedback/hover-explanations/hover-explanations.feature",
+   "fingerprint": "567acd6a41ab",
+   "human": false,
+   "rule": "editor.hover.cost-omitted-when-unknown",
+   "source": "extensions/vscode/src/diagnostics.ts#describe",
+   "status": "inferred",
+   "test": "",
+   "tests": []
+  },
+  "vscode.editor-feedback.hover-explanations.003": {
+   "file": "extensions/vscode/specs/editor-feedback/hover-explanations/hover-explanations.feature",
+   "fingerprint": "0e31c3cb8557",
+   "human": false,
+   "rule": "editor.hover.one-card-per-finding-on-line",
+   "source": "extensions/vscode/src/diagnostics.ts#GreenlintHoverProvider",
+   "status": "inferred",
+   "test": "",
+   "tests": []
+  },
+  "vscode.editor-feedback.inline-diagnostics.001": {
+   "file": "extensions/vscode/specs/editor-feedback/inline-diagnostics/problems-panel-diagnostics.feature",
+   "fingerprint": "de1a2cce8e25",
+   "human": false,
+   "rule": "editor.diagnostics.underline-traces-code-not-indentation",
+   "source": "extensions/vscode/src/diagnostics.ts#rangeFor",
+   "status": "inferred",
+   "test": "",
+   "tests": []
+  },
+  "vscode.editor-feedback.inline-diagnostics.002": {
+   "file": "extensions/vscode/specs/editor-feedback/inline-diagnostics/problems-panel-diagnostics.feature",
+   "fingerprint": "de1a2cce8e25",
+   "human": false,
+   "rule": "editor.diagnostics.closed-file-whole-line",
+   "source": "extensions/vscode/src/diagnostics.ts#rangeFor",
+   "status": "inferred",
+   "test": "",
+   "tests": []
+  },
+  "vscode.editor-feedback.inline-diagnostics.003": {
+   "file": "extensions/vscode/specs/editor-feedback/inline-diagnostics/problems-panel-diagnostics.feature",
+   "fingerprint": "a2dae5798ec6",
+   "human": false,
+   "rule": "editor.severity.greenlint-to-editor-severity",
+   "source": "extensions/vscode/src/config.ts#SEVERITY_LEVELS",
+   "status": "inferred",
+   "test": "",
+   "tests": []
+  },
+  "vscode.editor-feedback.inline-diagnostics.004": {
+   "file": "extensions/vscode/specs/editor-feedback/inline-diagnostics/problems-panel-diagnostics.feature",
+   "fingerprint": "9e5fd2c9784c",
+   "human": false,
+   "rule": "editor.rule-docs.problem-links-to-rule-reference",
+   "source": "extensions/vscode/src/diagnostics.ts#toDiagnostics",
+   "status": "inferred",
+   "test": "",
+   "tests": []
+  },
+  "vscode.editor-feedback.rule-documentation.001": {
+   "file": "extensions/vscode/specs/editor-feedback/rule-documentation/rule-documentation-links.feature",
+   "fingerprint": "b727b9d8f6e6",
+   "human": false,
+   "rule": "editor-feedback.rule-docs.link-to-rule-section",
+   "source": "extensions/vscode/src/types.ts#ruleDocsUrl",
+   "status": "verified",
+   "test": "extensions/vscode/src/test/types.test.ts#builds the GitHub anchor for a rule, doubled hyphen and all",
+   "tests": [
+    "extensions/vscode/src/test/types.test.ts#builds the GitHub anchor for a rule, doubled hyphen and all"
+   ]
+  },
+  "vscode.editor-feedback.severity-levels.002": {
+   "file": "extensions/vscode/specs/editor-feedback/severity-levels/finding-order.feature",
+   "fingerprint": "8a4be255bc31",
+   "human": false,
+   "rule": "editor-feedback.ordering.severity-then-file-then-line",
+   "source": "extensions/vscode/src/types.ts#compareFindings",
+   "status": "verified",
+   "test": "extensions/vscode/src/test/types.test.ts#orders by severity, then file, then line",
+   "tests": [
+    "extensions/vscode/src/test/types.test.ts#orders by severity, then file, then line"
+   ]
+  },
+  "vscode.editor-feedback.severity-levels.003": {
+   "file": "extensions/vscode/specs/editor-feedback/severity-levels/finding-order.feature",
+   "fingerprint": "9650aae6b9b4",
+   "human": false,
+   "rule": "editor-feedback.ordering.engine-published-severity-order",
+   "source": "extensions/vscode/src/types.ts#useSeverityOrder",
+   "status": "verified",
+   "test": "extensions/vscode/src/test/types.test.ts#sorts by the order the scan server published",
+   "tests": [
+    "extensions/vscode/src/test/types.test.ts#sorts by the order the scan server published"
+   ]
+  },
+  "vscode.editor-feedback.severity-levels.004": {
+   "file": "extensions/vscode/specs/editor-feedback/severity-levels/finding-order.feature",
+   "fingerprint": "8a4be255bc31",
+   "human": false,
+   "rule": "editor-feedback.ordering.unranked-severity-last",
+   "source": "extensions/vscode/src/types.ts#compareFindings",
+   "status": "verified",
+   "test": "extensions/vscode/src/test/types.test.ts#sorts a severity the server did not mention last, not at random",
+   "tests": [
+    "extensions/vscode/src/test/types.test.ts#sorts a severity the server did not mention last, not at random"
+   ]
+  },
+  "vscode.editor-feedback.severity-levels.005": {
+   "file": "extensions/vscode/specs/editor-feedback/severity-levels/finding-order.feature",
+   "fingerprint": "9650aae6b9b4",
+   "human": false,
+   "rule": "editor-feedback.ordering.default-severity-order",
+   "source": "extensions/vscode/src/types.ts#useSeverityOrder",
+   "status": "verified",
+   "test": "extensions/vscode/src/test/types.test.ts#keeps the fallback when the server publishes no order",
+   "tests": [
+    "extensions/vscode/src/test/types.test.ts#keeps the fallback when the server publishes no order"
+   ]
+  },
+  "vscode.findings-explorer.grouping.001": {
+   "file": "extensions/vscode/specs/findings-explorer/grouping/findings-panel-layout.feature",
+   "fingerprint": "676e4469b57c",
+   "human": false,
+   "rule": "findings.layout.defaults",
+   "source": "extensions/vscode/src/extension.ts#Controller",
+   "status": "verified",
+   "test": "extensions/vscode/src/test/extension.test.ts#seeds the context keys the menus and welcome view read",
+   "tests": [
+    "extensions/vscode/src/test/extension.test.ts#seeds the context keys the menus and welcome view read"
+   ]
+  },
+  "vscode.reporting.report-content.001": {
+   "file": "extensions/vscode/specs/reporting/report-content/report-content.feature",
+   "fingerprint": "f254b0285633",
+   "human": false,
+   "rule": "reporting.content.finding-shows-location-rule-advice-and-cost",
+   "source": "extensions/vscode/src/report.ts#fileSection",
+   "status": "verified",
+   "test": "extensions/vscode/src/test/report.test.ts#reports each finding with its rule, suggestion and cost",
+   "tests": [
+    "extensions/vscode/src/test/report.test.ts#reports each finding with its rule, suggestion and cost"
+   ]
+  },
+  "vscode.reporting.report-content.002": {
+   "file": "extensions/vscode/specs/reporting/report-content/report-content.feature",
+   "fingerprint": "972c3fb2a201",
+   "human": false,
+   "rule": "reporting.content.headline-scope-and-finding-count",
+   "source": "extensions/vscode/src/report.ts#renderReport",
+   "status": "verified",
+   "test": "extensions/vscode/src/test/report.test.ts#counts one finding without the plural",
+   "tests": [
+    "extensions/vscode/src/test/report.test.ts#counts one finding without the plural",
+    "extensions/vscode/src/test/report.test.ts#says so when there is nothing to report"
+   ]
+  },
+  "vscode.reporting.report-content.003": {
+   "file": "extensions/vscode/specs/reporting/report-content/report-content.feature",
+   "fingerprint": "972c3fb2a201",
+   "human": false,
+   "rule": "reporting.content.empty-report-says-nothing-found",
+   "source": "extensions/vscode/src/report.ts#renderReport",
+   "status": "verified",
+   "test": "extensions/vscode/src/test/report.test.ts#says so when there is nothing to report",
+   "tests": [
+    "extensions/vscode/src/test/report.test.ts#says so when there is nothing to report"
+   ]
+  },
+  "vscode.reporting.report-content.004": {
+   "file": "extensions/vscode/specs/reporting/report-content/report-content.feature",
+   "fingerprint": "59bde5ca2957",
+   "human": false,
+   "rule": "reporting.content.rule-summary-ordered-by-count",
+   "source": "extensions/vscode/src/report.ts#ruleSummary",
+   "status": "inferred",
+   "test": "",
+   "tests": []
+  },
+  "vscode.reporting.report-content.005": {
+   "file": "extensions/vscode/specs/reporting/report-content/report-content.feature",
+   "fingerprint": "d6bc58f63440",
+   "human": false,
+   "rule": "reporting.content.scan-metadata-line",
+   "source": "extensions/vscode/src/report.ts#scanCost",
+   "status": "inferred",
+   "test": "",
+   "tests": []
+  },
+  "vscode.reporting.report-content.006": {
+   "file": "extensions/vscode/specs/reporting/report-content/report-content.feature",
+   "fingerprint": "443bdff80d3a",
+   "human": false,
+   "rule": "reporting.content.finding-text-cannot-inject-markup",
+   "source": "extensions/vscode/src/report.ts#escapeHtml",
+   "status": "verified",
+   "test": "extensions/vscode/src/test/report.test.ts#escapes findings into the page rather than through it",
+   "tests": [
+    "extensions/vscode/src/test/report.test.ts#escapes findings into the page rather than through it"
+   ]
+  },
+  "vscode.reporting.report-content.007": {
+   "file": "extensions/vscode/specs/reporting/report-content/report-content.feature",
+   "fingerprint": "972c3fb2a201",
+   "human": false,
+   "rule": "reporting.content.report-runs-no-script",
+   "source": "extensions/vscode/src/report.ts#renderReport",
+   "status": "verified",
+   "test": "extensions/vscode/src/test/report.test.ts#ships no script, so the webview needs no script-src",
+   "tests": [
+    "extensions/vscode/src/test/report.test.ts#ships no script, so the webview needs no script-src"
+   ]
+  },
+  "vscode.reporting.report-panel.001": {
+   "file": "extensions/vscode/specs/reporting/report-panel/report-panel.feature",
+   "fingerprint": "ef16ea4cff4b",
+   "human": false,
+   "rule": "reporting.report-panel.single-panel-beside-editor",
+   "source": "extensions/vscode/src/reportPanel.ts#ReportPanel",
+   "status": "inferred",
+   "test": "",
+   "tests": []
+  },
+  "vscode.scan-engine.install-and-compatibility.001": {
+   "file": "extensions/vscode/specs/scan-engine/install-and-compatibility/greenlint-engine-compatibility.feature",
+   "fingerprint": "d0cfda294ccc",
+   "human": false,
+   "rule": "engine.loading.configured-checkout-preferred",
+   "source": "extensions/vscode/server/greenlint_api.py#load_greenlint",
+   "status": "inferred",
+   "test": "",
+   "tests": []
+  },
+  "vscode.scan-engine.install-and-compatibility.002": {
+   "file": "extensions/vscode/specs/scan-engine/install-and-compatibility/greenlint-engine-compatibility.feature",
+   "fingerprint": "0c17f0d76aca",
+   "human": false,
+   "rule": "engine.compatibility.refuse-outdated-greenlint",
+   "source": "extensions/vscode/server/greenlint_api.py#missing_api",
+   "status": "verified",
+   "test": "tests/test_vscode_server.py#test_missing_api_names_what_an_older_greenlint_lacks",
+   "tests": [
+    "tests/test_vscode_server.py#test_missing_api_names_what_an_older_greenlint_lacks",
+    "tests/test_vscode_server.py#test_an_old_greenlint_refuses_to_start_and_says_why"
+   ]
+  },
+  "vscode.scan-engine.install-and-compatibility.003": {
+   "file": "extensions/vscode/specs/scan-engine/install-and-compatibility/greenlint-engine-compatibility.feature",
+   "fingerprint": "746964b6cc26",
+   "human": false,
+   "rule": "engine.compatibility.reported-version",
+   "source": "extensions/vscode/server/greenlint_api.py#greenlint_version",
+   "status": "inferred",
+   "test": "",
+   "tests": []
+  },
+  "vscode.scan-engine.install-and-compatibility.004": {
+   "file": "extensions/vscode/specs/scan-engine/install-and-compatibility/install-greenlint-from-notification.feature",
+   "fingerprint": "d2f92187882e",
+   "human": false,
+   "rule": "engine.install.notification-offers-install-command",
+   "source": "extensions/vscode/src/notify.ts#ErrorNotifier",
+   "status": "verified",
+   "test": "extensions/vscode/src/test/engine.test.ts#a workspace greenlint checkout is tried before the installed package",
+   "tests": [
+    "extensions/vscode/src/test/engine.test.ts#a workspace greenlint checkout is tried before the installed package"
+   ]
+  },
+  "vscode.scan-engine.install-and-compatibility.005": {
+   "file": "extensions/vscode/specs/scan-engine/install-and-compatibility/install-greenlint-from-notification.feature",
+   "fingerprint": "d2f92187882e",
+   "human": false,
+   "rule": "engine.install.copy-command",
+   "source": "extensions/vscode/src/notify.ts#ErrorNotifier",
+   "status": "inferred",
+   "test": "",
+   "tests": []
+  },
+  "vscode.scan-engine.interpreter-discovery.001": {
+   "file": "extensions/vscode/specs/scan-engine/interpreter-discovery/interpreter-discovery.feature",
+   "fingerprint": "7fc6d1401872",
+   "human": false,
+   "rule": "engine.discovery.configured-greenlint-path-is-exclusive",
+   "source": "extensions/vscode/src/interpreters.ts#candidates",
+   "status": "inferred",
+   "test": "",
+   "tests": []
+  },
+  "vscode.scan-engine.interpreter-discovery.002": {
+   "file": "extensions/vscode/specs/scan-engine/interpreter-discovery/interpreter-discovery.feature",
+   "fingerprint": "1595697e5fd1",
+   "human": false,
+   "rule": "engine.discovery.workspace-checkout-before-installed-release",
+   "source": "extensions/vscode/src/interpreters.ts#workspaceGreenlintModules",
+   "status": "inferred",
+   "test": "",
+   "tests": []
+  },
+  "vscode.scan-engine.interpreter-discovery.003": {
+   "file": "extensions/vscode/specs/scan-engine/interpreter-discovery/interpreter-discovery.feature",
+   "fingerprint": "7fc6d1401872",
+   "human": false,
+   "rule": "engine.discovery.default-interpreters-per-platform",
+   "source": "extensions/vscode/src/interpreters.ts#candidates",
+   "status": "inferred",
+   "test": "",
+   "tests": []
+  },
+  "vscode.scan-engine.interpreter-discovery.004": {
+   "file": "extensions/vscode/specs/scan-engine/interpreter-discovery/interpreter-discovery.feature",
+   "fingerprint": "e4e87362686c",
+   "human": false,
+   "rule": "engine.discovery.finds-pipx-and-console-script-installs",
+   "source": "extensions/vscode/src/interpreters.ts#interpretersOwningGreenlint",
+   "status": "inferred",
+   "test": "",
+   "tests": []
+  },
+  "vscode.scan-engine.interpreter-discovery.005": {
+   "file": "extensions/vscode/specs/scan-engine/interpreter-discovery/interpreter-discovery.feature",
+   "fingerprint": "e4e87362686c",
+   "human": false,
+   "rule": "engine.discovery.shell-shims-are-not-interpreters",
+   "source": "extensions/vscode/src/interpreters.ts#interpretersOwningGreenlint",
+   "status": "inferred",
+   "test": "",
+   "tests": []
+  },
+  "vscode.scan-engine.interpreter-discovery.006": {
+   "file": "extensions/vscode/specs/scan-engine/interpreter-discovery/interpreter-discovery.feature",
+   "fingerprint": "7fc6d1401872",
+   "human": false,
+   "rule": "engine.discovery.configured-interpreter-is-exclusive",
+   "source": "extensions/vscode/src/interpreters.ts#candidates",
+   "status": "inferred",
+   "test": "",
+   "tests": []
+  },
+  "vscode.scan-engine.memory-footprint.001": {
+   "file": "extensions/vscode/specs/scan-engine/memory-footprint/shared-finding-text.feature",
+   "fingerprint": "949815ef13d7",
+   "human": false,
+   "rule": "engine.memory.finding-keeps-own-rule-text-and-file",
+   "source": "extensions/vscode/src/share.ts#share",
+   "status": "verified",
+   "test": "extensions/vscode/src/test/engine.test.ts#does not put one rule's prose on another rule",
+   "tests": [
+    "extensions/vscode/src/test/engine.test.ts#does not put one rule's prose on another rule",
+    "extensions/vscode/src/test/engine.test.ts#keeps each path when findings from two files are interleaved",
+    "extensions/vscode/src/test/engine.test.ts#holds one copy of a rule prose and one of a repeated path"
+   ]
+  },
+  "vscode.scan-engine.memory-footprint.002": {
+   "file": "extensions/vscode/specs/scan-engine/memory-footprint/shared-finding-text.feature",
+   "fingerprint": "b3316f1615b3",
+   "human": false,
+   "rule": "engine.memory.rule-wording-follows-running-greenlint",
+   "source": "extensions/vscode/src/share.ts#forgetRuleProse",
+   "status": "inferred",
+   "test": "",
+   "tests": []
+  },
+  "vscode.scan-engine.request-protocol.001": {
+   "file": "extensions/vscode/specs/scan-engine/request-protocol/scan-request-protocol.feature",
+   "fingerprint": "fc16397e1125",
+   "human": false,
+   "rule": "scan-engine.request-protocol.timeout-measures-silence",
+   "source": "extensions/vscode/src/protocol.ts#LineProtocol",
+   "status": "inferred",
+   "test": "",
+   "tests": []
+  },
+  "vscode.scan-engine.request-protocol.002": {
+   "file": "extensions/vscode/specs/scan-engine/request-protocol/scan-request-protocol.feature",
+   "fingerprint": "fc16397e1125",
+   "human": false,
+   "rule": "scan-engine.request-protocol.findings-stream-during-project-scan",
+   "source": "extensions/vscode/src/protocol.ts#LineProtocol",
+   "status": "verified",
+   "test": "extensions/vscode/src/test/engine.test.ts#a project scan streams its findings and ends with the totals",
+   "tests": [
+    "extensions/vscode/src/test/engine.test.ts#a project scan streams its findings and ends with the totals"
+   ]
+  },
+  "vscode.scan-engine.request-protocol.003": {
+   "file": "extensions/vscode/specs/scan-engine/request-protocol/scan-request-protocol.feature",
+   "fingerprint": "b59230aa98ec",
+   "human": false,
+   "rule": "scan-engine.request-protocol.server-error-reported-verbatim",
+   "source": "extensions/vscode/src/protocol.ts#ScanServerError",
+   "status": "inferred",
+   "test": "",
+   "tests": []
+  },
+  "vscode.scan-engine.request-protocol.004": {
+   "file": "extensions/vscode/specs/scan-engine/request-protocol/scan-request-protocol.feature",
+   "fingerprint": "fc16397e1125",
+   "human": false,
+   "rule": "scan-engine.request-protocol.start-refusal-reason-surfaces",
+   "source": "extensions/vscode/src/protocol.ts#LineProtocol",
+   "status": "inferred",
+   "test": "",
+   "tests": []
+  },
+  "vscode.scan-engine.request-protocol.005": {
+   "file": "extensions/vscode/specs/scan-engine/request-protocol/scan-request-protocol.feature",
+   "fingerprint": "fc16397e1125",
+   "human": false,
+   "rule": "scan-engine.request-protocol.outstanding-requests-fail-when-server-goes",
+   "source": "extensions/vscode/src/protocol.ts#LineProtocol",
+   "status": "inferred",
+   "test": "",
+   "tests": []
+  },
+  "vscode.scan-engine.request-protocol.006": {
+   "file": "extensions/vscode/specs/scan-engine/request-protocol/scan-request-protocol.feature",
+   "fingerprint": "fc16397e1125",
+   "human": false,
+   "rule": "scan-engine.request-protocol.garbled-output-logged-and-ignored",
+   "source": "extensions/vscode/src/protocol.ts#LineProtocol",
+   "status": "inferred",
+   "test": "",
+   "tests": []
+  },
+  "vscode.scanning.exclusions.001": {
+   "file": "extensions/vscode/specs/scanning/exclusions/editor-excludes.feature",
+   "fingerprint": "222a9f3e8143",
+   "human": false,
+   "rule": "scanning.exclusions.editor-excludes-hide-findings",
+   "source": "extensions/vscode/server/server_ops.py#op_configure",
+   "status": "verified",
+   "test": "tests/test_vscode_server.py#test_configure_adds_ignore_globs_on_top_of_the_config",
+   "tests": [
+    "tests/test_vscode_server.py#test_configure_adds_ignore_globs_on_top_of_the_config",
+    "tests/test_vscode_server.py#test_configure_applies_to_a_single_buffer_too"
+   ]
+  },
+  "vscode.scanning.exclusions.002": {
+   "file": "extensions/vscode/specs/scanning/exclusions/editor-excludes.feature",
+   "fingerprint": "222a9f3e8143",
+   "human": false,
+   "rule": "scanning.exclusions.exclude-changes-apply-without-restart",
+   "source": "extensions/vscode/server/server_ops.py#op_configure",
+   "status": "verified",
+   "test": "tests/test_vscode_server.py#test_configure_invalidates_what_was_cached_under_the_old_excludes",
+   "tests": [
+    "tests/test_vscode_server.py#test_configure_invalidates_what_was_cached_under_the_old_excludes"
+   ]
+  },
+  "vscode.scanning.exclusions.003": {
+   "file": "extensions/vscode/specs/scanning/exclusions/editor-excludes-excludes.feature",
+   "fingerprint": "77224dd4cc60",
+   "human": false,
+   "rule": "scanning.exclusions.editor-excluded-paths-not-scanned",
+   "source": "extensions/vscode/src/excludes.ts#editorExcludeGlobs",
+   "status": "verified",
+   "test": "extensions/vscode/src/test/excludes.test.ts#emits both the entry and everything under it",
+   "tests": [
+    "extensions/vscode/src/test/excludes.test.ts#emits both the entry and everything under it",
+    "extensions/vscode/src/test/excludes.test.ts#treats a trailing globstar as the directory itself",
+    "extensions/vscode/src/test/excludes.test.ts#takes both exclude settings, and only the plain true ones"
+   ]
+  },
+  "vscode.scanning.exclusions.004": {
+   "file": "extensions/vscode/specs/scanning/exclusions/editor-excludes-excludes.feature",
+   "fingerprint": "30d36a88a80a",
+   "human": false,
+   "rule": "scanning.exclusions.root-relative-excludes-anchored-to-workspace",
+   "source": "extensions/vscode/src/excludes.ts#toIgnoreGlobs",
+   "status": "verified",
+   "test": "extensions/vscode/src/test/excludes.test.ts#anchors a root-relative pattern to the real workspace path",
+   "tests": [
+    "extensions/vscode/src/test/excludes.test.ts#anchors a root-relative pattern to the real workspace path"
+   ]
+  },
+  "vscode.scanning.exclusions.005": {
+   "file": "extensions/vscode/specs/scanning/exclusions/editor-excludes-excludes.feature",
+   "fingerprint": "77224dd4cc60",
+   "human": false,
+   "rule": "scanning.exclusions.only-plainly-enabled-excludes-honoured",
+   "source": "extensions/vscode/src/excludes.ts#editorExcludeGlobs",
+   "status": "verified",
+   "test": "extensions/vscode/src/test/excludes.test.ts#takes both exclude settings, and only the plain true ones",
+   "tests": [
+    "extensions/vscode/src/test/excludes.test.ts#takes both exclude settings, and only the plain true ones"
+   ]
+  },
+  "vscode.scanning.exclusions.006": {
+   "file": "extensions/vscode/specs/scanning/exclusions/editor-excludes-excludes.feature",
+   "fingerprint": "f97fccf76503",
+   "human": false,
+   "rule": "scanning.exclusions.brace-alternatives-each-excluded",
+   "source": "extensions/vscode/src/excludes.ts#expandBraces",
+   "status": "verified",
+   "test": "extensions/vscode/src/test/excludes.test.ts#expands brace alternatives, which fnmatch has no syntax for",
+   "tests": [
+    "extensions/vscode/src/test/excludes.test.ts#expands brace alternatives, which fnmatch has no syntax for"
+   ]
+  },
+  "vscode.scanning.exclusions.007": {
+   "file": "extensions/vscode/specs/scanning/exclusions/editor-excludes-excludes.feature",
+   "fingerprint": "12d92de1964a",
+   "human": false,
+   "rule": "scanning.exclusions.editor-excludes-can-be-turned-off",
+   "source": "extensions/vscode/src/extension.ts#applyExcludes",
+   "status": "inferred",
+   "test": "",
+   "tests": []
+  },
+  "vscode.scanning.result-caching.001": {
+   "file": "extensions/vscode/specs/scanning/result-caching/reusing-unchanged-results.feature",
+   "fingerprint": "495ccaa48372",
+   "human": false,
+   "rule": "scanning.result-caching.untouched-file-not-reread",
+   "source": "extensions/vscode/server/scan_cache.py#FindingCache",
+   "status": "verified",
+   "test": "tests/test_vscode_server.py#test_second_project_scan_reads_nothing",
+   "tests": [
+    "tests/test_vscode_server.py#test_second_project_scan_reads_nothing",
+    "tests/test_vscode_server.py#test_scan_file_reuses_findings_while_the_stat_is_unchanged",
+    "tests/test_vscode_server.py#test_one_warm_process_answers_over_real_pipes"
+   ]
+  },
+  "vscode.scanning.result-caching.002": {
+   "file": "extensions/vscode/specs/scanning/result-caching/reusing-unchanged-results.feature",
+   "fingerprint": "495ccaa48372",
+   "human": false,
+   "rule": "scanning.result-caching.identical-content-not-rescanned",
+   "source": "extensions/vscode/server/scan_cache.py#FindingCache",
+   "status": "verified",
+   "test": "tests/test_vscode_server.py#test_rewriting_a_file_with_the_same_bytes_costs_a_read_not_a_scan",
+   "tests": [
+    "tests/test_vscode_server.py#test_rewriting_a_file_with_the_same_bytes_costs_a_read_not_a_scan"
+   ]
+  },
+  "vscode.scanning.result-caching.003": {
+   "file": "extensions/vscode/specs/scanning/result-caching/reusing-unchanged-results.feature",
+   "fingerprint": "495ccaa48372",
+   "human": false,
+   "rule": "scanning.result-caching.edited-file-rescanned",
+   "source": "extensions/vscode/server/scan_cache.py#FindingCache",
+   "status": "verified",
+   "test": "tests/test_vscode_server.py#test_editing_a_file_rescans_it",
+   "tests": [
+    "tests/test_vscode_server.py#test_editing_a_file_rescans_it"
+   ]
+  },
+  "vscode.scanning.scan-cancellation.001": {
+   "file": "extensions/vscode/specs/scanning/scan-cancellation/cancelling-a-scan.feature",
+   "fingerprint": "fb96c214d1c2",
+   "human": false,
+   "rule": "scanning.cancellation.cancelled-scan-reports-nothing",
+   "source": "extensions/vscode/server/server_ops.py#op_cancel",
+   "status": "verified",
+   "test": "tests/test_vscode_server.py#test_cancelling_a_project_scan_stops_the_walk",
+   "tests": [
+    "tests/test_vscode_server.py#test_cancelling_a_project_scan_stops_the_walk",
+    "tests/test_vscode_server.py#test_a_scan_cancelled_while_it_is_still_queued_never_walks"
+   ]
+  },
+  "vscode.scanning.scan-cancellation.002": {
+   "file": "extensions/vscode/specs/scanning/scan-cancellation/cancelling-a-scan.feature",
+   "fingerprint": "fb96c214d1c2",
+   "human": false,
+   "rule": "scanning.cancellation.late-cancel-has-no-effect",
+   "source": "extensions/vscode/server/server_ops.py#op_cancel",
+   "status": "verified",
+   "test": "tests/test_vscode_server.py#test_a_cancel_for_a_scan_that_already_finished_is_not_remembered",
+   "tests": [
+    "tests/test_vscode_server.py#test_a_cancel_for_a_scan_that_already_finished_is_not_remembered"
+   ]
+  },
+  "vscode.scanning.workspace-scan.001": {
+   "file": "extensions/vscode/specs/scanning/workspace-scan/workspace-scan-summary.feature",
+   "fingerprint": "6bde7a5c33f9",
+   "human": false,
+   "rule": "scanning.workspace-scan.summary-covers-whole-scan",
+   "source": "extensions/vscode/server/scan_cache.py#RunningSummary",
+   "status": "verified",
+   "test": "tests/test_vscode_server.py#test_the_summary_is_the_whole_scan_not_a_batch",
+   "tests": [
+    "tests/test_vscode_server.py#test_the_summary_is_the_whole_scan_not_a_batch"
+   ]
+  },
+  "vscode.scanning.workspace-scan.002": {
+   "file": "extensions/vscode/specs/scanning/workspace-scan/workspace-scan-summary.feature",
+   "fingerprint": "6bde7a5c33f9",
+   "human": false,
+   "rule": "scanning.workspace-scan.summary-has-no-co2e-total",
+   "source": "extensions/vscode/server/scan_cache.py#RunningSummary",
+   "status": "inferred",
+   "test": "",
+   "tests": []
+  },
+  "vscode.scanning.workspace-scan.003": {
+   "file": "extensions/vscode/specs/scanning/workspace-scan/workspace-scan-summary.feature",
+   "fingerprint": "63e48140c629",
+   "human": false,
+   "rule": "scanning.workspace-scan.findings-delivered-once",
+   "source": "extensions/vscode/server/scan_cache.py#ProjectScan",
+   "status": "verified",
+   "test": "tests/test_vscode_server.py#test_streaming_delivers_findings_in_batches_as_they_are_made",
+   "tests": [
+    "tests/test_vscode_server.py#test_streaming_delivers_findings_in_batches_as_they_are_made",
+    "tests/test_vscode_server.py#test_a_non_streaming_scan_still_returns_everything"
+   ]
+  },
+  "vscode.scanning.workspace-scan.004": {
+   "file": "extensions/vscode/specs/scanning/workspace-scan/keeping-findings-current.feature",
+   "fingerprint": "9fc1b0ec8e70",
+   "human": false,
+   "rule": "scanning.findings.rescan-replaces-only-that-file",
+   "source": "extensions/vscode/src/store.ts#FindingStore",
+   "status": "verified",
+   "test": "extensions/vscode/src/test/store.test.ts#replaces one file without touching the rest",
+   "tests": [
+    "extensions/vscode/src/test/store.test.ts#replaces one file without touching the rest"
+   ]
+  },
+  "vscode.status-and-troubleshooting.error-notifications.001": {
+   "file": "extensions/vscode/specs/status-and-troubleshooting/error-notifications/scan-failure-notifications.feature",
+   "fingerprint": "d2f92187882e",
+   "human": false,
+   "rule": "troubleshooting.errors.repeat-failure-shown-once",
+   "source": "extensions/vscode/src/notify.ts#ErrorNotifier",
+   "status": "inferred",
+   "test": "",
+   "tests": []
+  },
+  "vscode.status-and-troubleshooting.error-notifications.002": {
+   "file": "extensions/vscode/specs/status-and-troubleshooting/error-notifications/scan-failure-notifications.feature",
+   "fingerprint": "d2f92187882e",
+   "human": false,
+   "rule": "troubleshooting.errors.alternating-failures-reshown",
+   "source": "extensions/vscode/src/notify.ts#ErrorNotifier",
+   "status": "inferred",
+   "test": "",
+   "tests": []
+  },
+  "vscode.status-and-troubleshooting.error-notifications.003": {
+   "file": "extensions/vscode/specs/status-and-troubleshooting/error-notifications/scan-failure-notifications.feature",
+   "fingerprint": "d2f92187882e",
+   "human": false,
+   "rule": "troubleshooting.errors.toast-shows-headline-with-log-link",
+   "source": "extensions/vscode/src/notify.ts#ErrorNotifier",
+   "status": "inferred",
+   "test": "",
+   "tests": []
+  },
+  "vscode.status-and-troubleshooting.status-bar.001": {
+   "file": "extensions/vscode/specs/status-and-troubleshooting/status-bar/status-bar-summary.feature",
+   "fingerprint": "d7c6323ab9aa",
+   "human": false,
+   "rule": "status.status-bar.idle-state-distinguishes-clean-from-unscanned",
+   "source": "extensions/vscode/src/status.ts#paintStatus",
+   "status": "inferred",
+   "test": "",
+   "tests": []
+  },
+  "vscode.status-and-troubleshooting.status-bar.002": {
+   "file": "extensions/vscode/specs/status-and-troubleshooting/status-bar/status-bar-summary.feature",
+   "fingerprint": "d7c6323ab9aa",
+   "human": false,
+   "rule": "status.status-bar.counts-follow-panel-scope",
+   "source": "extensions/vscode/src/status.ts#paintStatus",
+   "status": "inferred",
+   "test": "",
+   "tests": []
+  },
+  "vscode.status-and-troubleshooting.status-bar.003": {
+   "file": "extensions/vscode/specs/status-and-troubleshooting/status-bar/status-bar-summary.feature",
+   "fingerprint": "d7c6323ab9aa",
+   "human": false,
+   "rule": "status.status-bar.clean-file-in-dirty-project-shows-zero-counts",
+   "source": "extensions/vscode/src/status.ts#paintStatus",
+   "status": "inferred",
+   "test": "",
+   "tests": []
+  },
+  "vscode.status-and-troubleshooting.status-bar.004": {
+   "file": "extensions/vscode/specs/status-and-troubleshooting/status-bar/status-bar-summary.feature",
+   "fingerprint": "d7c6323ab9aa",
+   "human": false,
+   "rule": "status.status-bar.tooltip-shows-scope-and-whole-project-summary",
+   "source": "extensions/vscode/src/status.ts#paintStatus",
+   "status": "inferred",
+   "test": "",
+   "tests": []
+  },
+  "vscode.status-and-troubleshooting.status-bar.005": {
+   "file": "extensions/vscode/specs/status-and-troubleshooting/status-bar/status-bar-summary.feature",
+   "fingerprint": "d7c6323ab9aa",
+   "human": false,
+   "rule": "status.status-bar.tooltip-shows-last-scan-cost",
+   "source": "extensions/vscode/src/status.ts#paintStatus",
+   "status": "inferred",
+   "test": "",
+   "tests": []
+  }
+ },
+ "taxonomy": {
+  "domains": [
+   {
+    "areas": [
+     {
+      "description": "Re-scanning open documents as they are opened, edited and saved, using the unsaved buffer text.",
+      "slug": "live-scanning",
+      "title": "Live scanning"
+     },
+     {
+      "description": "Scanning the current file or every file in the workspace on demand, with progress and a running summary.",
+      "slug": "workspace-scan",
+      "title": "Workspace scan"
+     },
+     {
+      "description": "Stopping a running scan and discarding its stale results.",
+      "slug": "scan-cancellation",
+      "title": "Scan cancellation"
+     },
+     {
+      "description": "Skipping unchanged files by content digest and modification time, and invalidating cached results when files or settings change.",
+      "slug": "result-caching",
+      "title": "Result caching"
+     },
+     {
+      "description": "Honouring editor file/search excludes and ignore globs so excluded paths are never scanned.",
+      "slug": "exclusions",
+      "title": "Exclusions"
+     },
+     {
+      "description": "Knowing which file languages greenlint has rules for and scanning only those.",
+      "slug": "language-support",
+      "title": "Language support"
+     }
+    ],
+    "description": "Finding energy-wasteful patterns in the code the user is editing, file by file or across the whole workspace.",
+    "slug": "scanning",
+    "title": "Scanning"
+   },
+   {
+    "areas": [
+     {
+      "description": "Turning findings into squiggles and Problems-panel entries on the affected lines.",
+      "slug": "inline-diagnostics",
+      "title": "Inline diagnostics"
+     },
+     {
+      "description": "Showing the rule's message, suggestion and CO2e estimate when hovering over a flagged line.",
+      "slug": "hover-explanations",
+      "title": "Hover explanations"
+     },
+     {
+      "description": "Linking each finding to the documentation page for its rule.",
+      "slug": "rule-documentation",
+      "title": "Rule documentation links"
+     },
+     {
+      "description": "Mapping greenlint severities to editor severities and ordering findings by severity.",
+      "slug": "severity-levels",
+      "title": "Severity levels"
+     }
+    ],
+    "description": "Showing each finding where the code is, with an explanation of the waste and how to fix it.",
+    "slug": "editor-feedback",
+    "title": "In-editor feedback"
+   },
+   {
+    "areas": [
+     {
+      "description": "Listing findings in a tree with workspace-relative paths, navigation to source and expand-all.",
+      "slug": "findings-tree",
+      "title": "Findings tree"
+     },
+     {
+      "description": "Grouping findings by file, rule or severity at the user's choice.",
+      "slug": "grouping",
+      "title": "Grouping"
+     },
+     {
+      "description": "Switching the view between findings for the current file and for the whole project.",
+      "slug": "scope-switching",
+      "title": "Scope switching"
+     },
+     {
+      "description": "Summarising how many findings exist at each severity.",
+      "slug": "severity-counts",
+      "title": "Severity counts"
+     }
+    ],
+    "description": "A sidebar view for browsing every finding in the current file or the whole project.",
+    "slug": "findings-explorer",
+    "title": "Findings explorer"
+   },
+   {
+    "areas": [
+     {
+      "description": "Rendering findings and scan metadata into an HTML report.",
+      "slug": "report-content",
+      "title": "Report content"
+     },
+     {
+      "description": "Opening, refreshing and closing the report inside an editor panel.",
+      "slug": "report-panel",
+      "title": "Report panel"
+     }
+    ],
+    "description": "Producing a readable report of the workspace's findings.",
+    "slug": "reporting",
+    "title": "Reporting"
+   },
+   {
+    "areas": [
+     {
+      "description": "Reading the extension's settings and deciding whether a change needs the scan server restarted.",
+      "slug": "extension-settings",
+      "title": "Extension settings"
+     },
+     {
+      "description": "Passing rule opt-outs, ignore globs and other options to the scanner.",
+      "slug": "project-configuration",
+      "title": "Project configuration"
+     },
+     {
+      "description": "Writing a baseline that accepts current findings so only new ones are reported.",
+      "slug": "baselines",
+      "title": "Baselines"
+     }
+    ],
+    "description": "Letting users tune what greenlint flags and accept the findings they already have.",
+    "slug": "configuration",
+    "title": "Configuration and baselines"
+   },
+   {
+    "areas": [
+     {
+      "description": "Choosing which Python interpreter and greenlint module to try, from settings and common locations.",
+      "slug": "interpreter-discovery",
+      "title": "Interpreter discovery"
+     },
+     {
+      "description": "Loading greenlint, checking its version and API, and guiding the user to install or upgrade when it is missing or incompatible.",
+      "slug": "install-and-compatibility",
+      "title": "Installation and compatibility"
+     },
+     {
+      "description": "Starting, health-checking, restarting and shutting down the long-running scan server along with the extension.",
+      "slug": "server-lifecycle",
+      "title": "Scan server lifecycle"
+     },
+     {
+      "description": "Sending line-delimited requests to the scan server and handling its responses and errors.",
+      "slug": "request-protocol",
+      "title": "Request protocol"
+     },
+     {
+      "description": "Sharing repeated rule text and file paths across findings so large projects stay light in memory.",
+      "slug": "memory-footprint",
+      "title": "Memory footprint"
+     }
+    ],
+    "description": "Finding, starting and talking to the greenlint installation that does the actual analysis.",
+    "slug": "scan-engine",
+    "title": "Scan engine connection"
+   },
+   {
+    "areas": [
+     {
+      "description": "Showing scan progress, finding counts and engine state in the status bar.",
+      "slug": "status-bar",
+      "title": "Status bar"
+     },
+     {
+      "description": "Raising errors to the user once without flooding them with repeats.",
+      "slug": "error-notifications",
+      "title": "Error notifications"
+     },
+     {
+      "description": "Recording server and scan activity in a log the user can open.",
+      "slug": "output-log",
+      "title": "Output log"
+     }
+    ],
+    "description": "Keeping the user informed about what greenlint is doing and why something went wrong.",
+    "slug": "status-and-troubleshooting",
+    "title": "Status and troubleshooting"
+   },
+   {
+    "areas": [
+     {
+      "description": "Compiling and bundling the extension's code for packaging and publishing.",
+      "slug": "extension-bundling",
+      "title": "Extension bundling"
+     },
+     {
+      "description": "The finding, request and response shapes shared by the extension and the scan server.",
+      "slug": "shared-data-model",
+      "title": "Shared data model"
+     }
+    ],
+    "description": "Building and packaging the extension itself.",
+    "slug": "developer-tooling",
+    "title": "Developer tooling"
+   }
+  ]
+ }
+}
