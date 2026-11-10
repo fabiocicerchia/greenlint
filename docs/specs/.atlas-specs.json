@@ -54,44 +54,18 @@
  "lifted": {
   "stylesheets/extra": []
  },
- "retired": [],
+ "retired": [
+  "docs.documentation.site-theme.001",
+  "docs.documentation.site-theme.003",
+  "docs.documentation.site-theme.004"
+ ],
  "scenarios": {
-  "docs.documentation.site-theme.001": {
-   "file": "docs/specs/documentation/site-theme/docs-site-theme.feature",
-   "fingerprint": "d8424b84d164",
-   "human": false,
-   "rule": "docs.theme.greenops-accent-palette",
-   "source": "docs/stylesheets/extra.css#:root",
-   "status": "inferred",
-   "test": "",
-   "tests": []
-  },
   "docs.documentation.site-theme.002": {
    "file": "docs/specs/documentation/site-theme/docs-site-theme.feature",
    "fingerprint": "d8424b84d164",
    "human": false,
    "rule": "docs.theme.no-network-assets",
    "source": "docs/stylesheets/extra.css#:root",
-   "status": "inferred",
-   "test": "",
-   "tests": []
-  },
-  "docs.documentation.site-theme.003": {
-   "file": "docs/specs/documentation/site-theme/docs-site-theme.feature",
-   "fingerprint": "433084a194b6",
-   "human": false,
-   "rule": "docs.theme.dark-scheme-legible",
-   "source": "docs/stylesheets/extra.css#[data-md-color-scheme=\"slate\"]",
-   "status": "inferred",
-   "test": "",
-   "tests": []
-  },
-  "docs.documentation.site-theme.004": {
-   "file": "docs/specs/documentation/site-theme/docs-site-theme.feature",
-   "fingerprint": "c702704e5aae",
-   "human": false,
-   "rule": "docs.theme.no-placeholder-logo",
-   "source": "docs/stylesheets/extra.css#.md-header__button.md-logo",
    "status": "inferred",
    "test": "",
    "tests": []

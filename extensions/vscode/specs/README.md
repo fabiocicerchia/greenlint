@@ -15,7 +15,7 @@ Showing each finding where the code is, with an explanation of the waste and how
 - **Hover explanations**: [Explaining a finding on hover](editor-feedback/hover-explanations/hover-explanations.feature) (3)
 - **Inline diagnostics**: [Showing greenlint findings as editor problems](editor-feedback/inline-diagnostics/problems-panel-diagnostics.feature) (4)
 - **Rule documentation links**: [Linking findings to their rule documentation](editor-feedback/rule-documentation/rule-documentation-links.feature) (1)
-- **Severity levels**: [Ordering findings by severity](editor-feedback/severity-levels/finding-order.feature) (4), [Showing finding severities in the editor](editor-feedback/severity-levels/severity-levels.feature) (1)
+- **Severity levels**: [Ordering findings by severity](editor-feedback/severity-levels/finding-order.feature) (4)
 
 ## Findings explorer
 A sidebar view for browsing every finding in the current file or the whole project.
@@ -35,7 +35,6 @@ Finding, starting and talking to the greenlint installation that does the actual
 - **Interpreter discovery**: [Finding the Python and greenlint to scan with](scan-engine/interpreter-discovery/interpreter-discovery.feature) (6)
 - **Memory footprint**: [Keeping large result sets light without changing what findings say](scan-engine/memory-footprint/shared-finding-text.feature) (2)
 - **Request protocol**: [Talking to the scan server](scan-engine/request-protocol/scan-request-protocol.feature) (6)
-- **Scan server lifecycle**: [Running the scan server for an editor session](scan-engine/server-lifecycle/scan-server-lifecycle.feature) (1)
 
 ## Scanning
 Finding energy-wasteful patterns in the code the user is editing, file by file or across the whole workspace.

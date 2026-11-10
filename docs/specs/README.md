@@ -6,4 +6,4 @@ Tags: `@verified` a test asserts it · `@inferred` read from the code only · `@
 ## Documentation site
 The published docs and landing page that explain greenlint.
 
-- **Site theme and branding**: [Branding the documentation site](documentation/site-theme/docs-site-theme.feature) (4)
+- **Site theme and branding**: [Branding the documentation site](documentation/site-theme/docs-site-theme.feature) (1)

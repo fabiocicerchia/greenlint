@@ -35,12 +35,6 @@ Feature: Flagging busy waiting and tight polling
       | Poll.kt    | suspend fun good() { while (true) { delay(5000) } }                        |
       | Poll.swift | Timer.scheduledTimer(withTimeInterval: 5.0, repeats: true) { _ in tick() } |
 
-  @id:code-energy-rules.busy-waiting.006 @rule:code-rules.busy-waiting.polling-quoted-in-a-string-ignored @verified @source:greenlint/rules.py#RULES @test:tests/test_greenlint.py#test_code_shaped_rule_ignores_a_match_inside_a_string
-  Scenario: A polling call that only appears inside a string is not a finding
-    Given a project containing poll.go whose only short sleep is written inside a string literal: msg := "time.Sleep(10 * time.Millisecond)"
-    When the developer scans the project
-    Then greenlint does not report GL002
-
   @id:code-energy-rules.busy-waiting.007 @rule:code-rules.busy-waiting.clock-spin-wait-flagged @inferred @source:greenlint/rules.py#RULES
   Scenario Outline: A loop that only re-reads the clock until a deadline is flagged as a spin-wait
     Given a project containing <file> with a loop whose condition is <loop>

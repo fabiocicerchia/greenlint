@@ -30,6 +30,7 @@ Feature: Flagging Python busy loops
       | `while True:` draining a paginated API that breaks when there is no next page |
       | `while True:` reading a socket that breaks at end of input                    |
       | `while True:` that returns a value once a condition holds                     |
+      | `while True:` that raises an error on an unexpected response                  |
 
   @id:code-energy-rules.busy-waiting.003 @rule:code-energy.busy-waiting.python-only-literal-true-loops-checked @inferred @source:greenlint/pyrules.py#_ast_busy_loop_findings @questionable
   Scenario Outline: Only loops written as `while True:` are checked for busy waiting

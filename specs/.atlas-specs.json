@@ -793,7 +793,19 @@
   "greenlint/rules": [],
   "greenlint/scanning": []
  },
- "retired": [],
+ "retired": [
+  "code-energy-rules.busy-waiting.006",
+  "configuration.baselines.009",
+  "configuration.baselines.010",
+  "configuration.baselines.011",
+  "developer-tooling.examples.001",
+  "scanning.finding-placement.007",
+  "scanning.finding-placement.008",
+  "scanning.finding-placement.009",
+  "scanning.python-structure-analysis.001",
+  "scanning.python-structure-analysis.002",
+  "scanning.python-structure-analysis.003"
+ ],
  "scenarios": {
   "code-energy-rules.algorithmic-waste.001": {
    "file": "specs/code-energy-rules/algorithmic-waste/python-quadratic-work.feature",
@@ -964,18 +976,6 @@
     "tests/test_greenlint.py#test_normal_sleep_intervals_across_languages_not_flagged",
     "tests/test_greenlint.py#test_kotlin_long_delay_not_flagged",
     "tests/test_greenlint.py#test_swift_long_timer_interval_not_flagged"
-   ]
-  },
-  "code-energy-rules.busy-waiting.006": {
-   "file": "specs/code-energy-rules/busy-waiting/busy-waiting-and-polling.feature",
-   "fingerprint": "f3475e765a4d",
-   "human": false,
-   "rule": "code-rules.busy-waiting.polling-quoted-in-a-string-ignored",
-   "source": "greenlint/rules.py#RULES",
-   "status": "verified",
-   "test": "tests/test_greenlint.py#test_code_shaped_rule_ignores_a_match_inside_a_string",
-   "tests": [
-    "tests/test_greenlint.py#test_code_shaped_rule_ignores_a_match_inside_a_string"
    ]
   },
   "code-energy-rules.busy-waiting.007": {
@@ -1276,44 +1276,6 @@
     "tests/test_greenlint.py#test_a_missing_or_broken_baseline_reports_everything"
    ]
   },
-  "configuration.baselines.009": {
-   "file": "specs/configuration/baselines/cli-baselines.feature",
-   "fingerprint": "d2899201150b",
-   "human": false,
-   "rule": "configuration.baselines.write-records-current-findings",
-   "source": "greenlint/cli.py#main",
-   "status": "verified",
-   "test": "tests/test_greenlint.py#test_cli_writes_and_then_honours_a_baseline",
-   "tests": [
-    "tests/test_greenlint.py#test_cli_writes_and_then_honours_a_baseline",
-    "tests/test_e2e.py#test_a_written_baseline_silences_the_gate_on_the_next_run"
-   ]
-  },
-  "configuration.baselines.010": {
-   "file": "specs/configuration/baselines/cli-baselines.feature",
-   "fingerprint": "d2899201150b",
-   "human": false,
-   "rule": "configuration.baselines.accepted-findings-hidden",
-   "source": "greenlint/cli.py#main",
-   "status": "verified",
-   "test": "tests/test_e2e.py#test_a_written_baseline_silences_the_gate_on_the_next_run",
-   "tests": [
-    "tests/test_e2e.py#test_a_written_baseline_silences_the_gate_on_the_next_run",
-    "tests/test_greenlint.py#test_cli_writes_and_then_honours_a_baseline"
-   ]
-  },
-  "configuration.baselines.011": {
-   "file": "specs/configuration/baselines/cli-baselines.feature",
-   "fingerprint": "9069651a6e16",
-   "human": false,
-   "rule": "configuration.baselines.named-baseline-must-exist",
-   "source": "greenlint/cli.py#_resolve_baseline",
-   "status": "verified",
-   "test": "tests/test_greenlint.py#test_cli_rejects_a_baseline_path_that_is_not_there",
-   "tests": [
-    "tests/test_greenlint.py#test_cli_rejects_a_baseline_path_that_is_not_there"
-   ]
-  },
   "configuration.path-exclusion.001": {
    "file": "specs/configuration/path-exclusion/ignore-glob-matching.feature",
    "fingerprint": "6ddb4289bc95",
@@ -1573,19 +1535,6 @@
    "status": "inferred",
    "test": "",
    "tests": []
-  },
-  "developer-tooling.examples.001": {
-   "file": "specs/developer-tooling/examples/basic-example.feature",
-   "fingerprint": "6884e67f28bd",
-   "human": false,
-   "rule": "examples.basic.reports-promised-findings",
-   "source": "examples/basic/sample.py#poll_forever",
-   "status": "verified",
-   "test": "tests/test_e2e.py#test_scanning_the_example_reports_what_its_readme_promises",
-   "tests": [
-    "tests/test_e2e.py#test_scanning_the_example_reports_what_its_readme_promises",
-    "tests/test_e2e.py#test_json_output_is_machine_readable"
-   ]
   },
   "infrastructure-checks.ci-pipelines.001": {
    "file": "specs/infrastructure-checks/ci-pipelines/ci-full-history-clones.feature",
@@ -2485,46 +2434,6 @@
     "tests/test_greenlint.py#test_scan_file_text_override_still_picks_language_from_the_path"
    ]
   },
-  "scanning.finding-placement.007": {
-   "file": "specs/scanning/finding-placement/scanning-a-file.feature",
-   "fingerprint": "f30920e79e73",
-   "human": false,
-   "rule": "scanning.files.test-code-exempt-from-loop-rules",
-   "source": "greenlint/scanning.py#scan_file",
-   "status": "verified",
-   "test": "tests/test_greenlint.py#test_short_sleep_in_a_test_file_is_not_flagged",
-   "tests": [
-    "tests/test_greenlint.py#test_short_sleep_in_a_test_file_is_not_flagged",
-    "tests/test_greenlint.py#test_short_sleep_in_production_code_is_still_flagged"
-   ]
-  },
-  "scanning.finding-placement.008": {
-   "file": "specs/scanning/finding-placement/scanning-a-file.feature",
-   "fingerprint": "f30920e79e73",
-   "human": false,
-   "rule": "scanning.rules.disabled-rule-never-reported",
-   "source": "greenlint/scanning.py#scan_file",
-   "status": "verified",
-   "test": "tests/test_greenlint.py#test_config_disables_rule",
-   "tests": [
-    "tests/test_greenlint.py#test_config_disables_rule",
-    "tests/test_greenlint.py#test_ast_busy_loop_respects_disable"
-   ]
-  },
-  "scanning.finding-placement.009": {
-   "file": "specs/scanning/finding-placement/scanning-a-file.feature",
-   "fingerprint": "f30920e79e73",
-   "human": false,
-   "rule": "scanning.matching.prose-is-not-code",
-   "source": "greenlint/scanning.py#scan_file",
-   "status": "verified",
-   "test": "tests/test_greenlint.py#test_pattern_in_a_comment_is_not_a_finding",
-   "tests": [
-    "tests/test_greenlint.py#test_pattern_in_a_comment_is_not_a_finding",
-    "tests/test_greenlint.py#test_pattern_in_a_docstring_is_not_a_finding",
-    "tests/test_greenlint.py#test_pattern_in_a_real_string_is_still_a_finding"
-   ]
-  },
   "scanning.finding-placement.010": {
    "file": "specs/scanning/finding-placement/scanning-a-file.feature",
    "fingerprint": "f30920e79e73",
@@ -2557,45 +2466,6 @@
    "test": "tests/test_greenlint.py#test_scannable_matches_whether_scan_file_can_find_anything",
    "tests": [
     "tests/test_greenlint.py#test_scannable_matches_whether_scan_file_can_find_anything"
-   ]
-  },
-  "scanning.python-structure-analysis.001": {
-   "file": "specs/scanning/python-structure-analysis/python-loop-and-scope-judgement.feature",
-   "fingerprint": "1807b47e254a",
-   "human": false,
-   "rule": "scanning.python-structure.loop-with-data-dependent-exit-is-not-busy",
-   "source": "greenlint/astindex.py#_loop_can_exit",
-   "status": "verified",
-   "test": "tests/test_greenlint.py#test_paginator_loop_not_flagged",
-   "tests": [
-    "tests/test_greenlint.py#test_paginator_loop_not_flagged",
-    "tests/test_greenlint.py#test_read_until_eof_loop_not_flagged",
-    "tests/test_greenlint.py#test_loop_returning_a_value_not_flagged"
-   ]
-  },
-  "scanning.python-structure-analysis.002": {
-   "file": "specs/scanning/python-structure-analysis/python-loop-and-scope-judgement.feature",
-   "fingerprint": "336621c70e18",
-   "human": false,
-   "rule": "scanning.python-structure.only-the-loops-own-exits-count",
-   "source": "greenlint/astindex.py#_nearest_loop",
-   "status": "verified",
-   "test": "tests/test_greenlint.py#test_break_in_a_nested_loop_does_not_exonerate",
-   "tests": [
-    "tests/test_greenlint.py#test_break_in_a_nested_loop_does_not_exonerate",
-    "tests/test_greenlint.py#test_busy_loop_found_despite_return_in_nested_function"
-   ]
-  },
-  "scanning.python-structure-analysis.003": {
-   "file": "specs/scanning/python-structure-analysis/python-loop-and-scope-judgement.feature",
-   "fingerprint": "86c24ce8d04b",
-   "human": false,
-   "rule": "scanning.python-structure.names-judged-per-function",
-   "source": "greenlint/astindex.py#_walk_own_loops",
-   "status": "verified",
-   "test": "tests/test_greenlint.py#test_quadratic_rebuild_name_bindings_are_per_scope",
-   "tests": [
-    "tests/test_greenlint.py#test_quadratic_rebuild_name_bindings_are_per_scope"
    ]
   },
   "scanning.python-structure-analysis.004": {

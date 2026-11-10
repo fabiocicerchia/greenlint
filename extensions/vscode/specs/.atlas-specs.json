@@ -1303,7 +1303,10 @@
   "src/types": [],
   "vscode/esbuild": []
  },
- "retired": [],
+ "retired": [
+  "vscode.editor-feedback.severity-levels.001",
+  "vscode.scan-engine.server-lifecycle.001"
+ ],
  "scenarios": {
   "vscode.configuration.baselines.001": {
    "file": "extensions/vscode/specs/configuration/baselines/writing-a-baseline.feature",
@@ -1439,16 +1442,6 @@
    "tests": [
     "extensions/vscode/src/test/types.test.ts#builds the GitHub anchor for a rule, doubled hyphen and all"
    ]
-  },
-  "vscode.editor-feedback.severity-levels.001": {
-   "file": "extensions/vscode/specs/editor-feedback/severity-levels/severity-levels.feature",
-   "fingerprint": "a2dae5798ec6",
-   "human": false,
-   "rule": "editor-feedback.severity.greenlint-severity-maps-to-editor-severity",
-   "source": "extensions/vscode/src/config.ts#SEVERITY_LEVELS",
-   "status": "inferred",
-   "test": "",
-   "tests": []
   },
   "vscode.editor-feedback.severity-levels.002": {
    "file": "extensions/vscode/specs/editor-feedback/severity-levels/finding-order.feature",
@@ -1801,18 +1794,6 @@
    "status": "inferred",
    "test": "",
    "tests": []
-  },
-  "vscode.scan-engine.server-lifecycle.001": {
-   "file": "extensions/vscode/specs/scan-engine/server-lifecycle/scan-server-lifecycle.feature",
-   "fingerprint": "6a55d3adf85a",
-   "human": false,
-   "rule": "scan-engine.server.refuses-incompatible-greenlint",
-   "source": "extensions/vscode/server/greenlint_server.py#main",
-   "status": "verified",
-   "test": "tests/test_vscode_server.py#test_an_old_greenlint_refuses_to_start_and_says_why",
-   "tests": [
-    "tests/test_vscode_server.py#test_an_old_greenlint_refuses_to_start_and_says_why"
-   ]
   },
   "vscode.scanning.exclusions.001": {
    "file": "extensions/vscode/specs/scanning/exclusions/editor-excludes.feature",

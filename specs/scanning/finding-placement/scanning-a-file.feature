@@ -29,46 +29,6 @@ Feature: Scanning a file for energy waste
       | q.sql    | GL005 |
       | notes.md | none  |
 
-  @id:scanning.finding-placement.007 @rule:scanning.files.test-code-exempt-from-loop-rules @verified @source:greenlint/scanning.py#scan_file @test:tests/test_greenlint.py#test_short_sleep_in_a_test_file_is_not_flagged @test:tests/test_greenlint.py#test_short_sleep_in_production_code_is_still_flagged
-  Scenario Outline: Test code is not flagged for tight waits, busy loops or per-iteration rebuilds
-    Given the project contains "<file>" with a 10 ms sleep
-    When the developer scans the project
-    Then no GL002 sub-100ms polling finding is reported for "<file>"
-    And the busy-loop rule GL001 and the rebuild-in-loop rule GL007 are likewise not applied to "<file>"
-
-    Examples:
-      | file           |
-      | proxy_test.go  |
-      | test_proxy.py  |
-      | tests/proxy.go |
-      | spec/proxy.py  |
-      | proxy.spec.js  |
-
-  @id:scanning.finding-placement.008 @rule:scanning.rules.disabled-rule-never-reported @verified @source:greenlint/scanning.py#scan_file @test:tests/test_greenlint.py#test_config_disables_rule @test:tests/test_greenlint.py#test_ast_busy_loop_respects_disable
-  Scenario Outline: A rule the project opted out of is never reported
-    Given the project opts out of rule "<rule>"
-    And the project contains "<file>" that would trigger "<rule>"
-    When the developer scans the project
-    Then no "<rule>" finding is reported
-
-    Examples:
-      | rule  | file                                            |
-      | GL005 | q.sql containing SELECT * FROM users;           |
-      | GL001 | a.py containing a while True loop without sleep |
-
-  @id:scanning.finding-placement.009 @rule:scanning.matching.prose-is-not-code @verified @source:greenlint/scanning.py#scan_file @test:tests/test_greenlint.py#test_pattern_in_a_comment_is_not_a_finding @test:tests/test_greenlint.py#test_pattern_in_a_docstring_is_not_a_finding @test:tests/test_greenlint.py#test_pattern_in_a_real_string_is_still_a_finding
-  Scenario Outline: A pattern written in a comment or docstring is not a finding, but one in a string literal is
-    Given the project contains "<file>" with "<contents>"
-    When the developer scans the project
-    Then the GL005 finding is "<reported>"
-
-    Examples:
-      | file  | contents                                | reported |
-      | b.sql | -- bad: SELECT * FROM users;            | absent   |
-      | a.py  | # never write SELECT * FROM users       | absent   |
-      | a.py  | """Never write SELECT * FROM orders.""" | absent   |
-      | a.py  | q = "SELECT * FROM users"               | present  |
-
   @id:scanning.finding-placement.010 @rule:scanning.files.unreadable-file-silently-skipped @inferred @source:greenlint/scanning.py#scan_file @questionable
   Scenario: A file that cannot be read is left out of the report without a warning
     Given the project contains "q.sql" with "SELECT * FROM users;" that the scanning user cannot read
