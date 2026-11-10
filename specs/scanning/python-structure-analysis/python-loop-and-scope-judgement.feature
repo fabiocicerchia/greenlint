@@ -5,7 +5,7 @@ Feature: Judging Python loops and scopes by their structure
   Background:
     Given a project containing Python source files
 
-  @id:scanning.python-structure-analysis.004 @rule:scanning.python-structure.unparseable-file-gets-no-structural-findings @inferred @source:greenlint/astindex.py#_parse_python @questionable
+  @id:scanning.python-structure-analysis.004 @rule:scanning.python-structure.unparsable-file-gets-no-structural-findings @inferred @source:greenlint/astindex.py#_parse_python @questionable
   Scenario: A Python file that does not parse gets no structure-based findings
     Given a Python file with a syntax error that also contains a `while True:` loop without a sleep
     When the developer scans the project

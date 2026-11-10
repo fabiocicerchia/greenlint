@@ -4,6 +4,7 @@ What this code does, one atomic Gherkin scenario per behaviour, read from the co
 Tags: `@verified` a test asserts it · `@inferred` read from the code only · `@gap` an entry point no test covers · `@human` written or amended by a person, never rewritten.
 
 ## Code Energy Rules
+
 The catalogue of source-code patterns greenlint flags as energy-wasteful, each with a rationale and a cheaper alternative.
 
 - **Algorithmic waste**: [Flagging heap allocation inside C and C++ loops](code-energy-rules/algorithmic-waste/heap-allocation-in-loops.feature) (2), [Flagging quadratic work in Python](code-energy-rules/algorithmic-waste/python-quadratic-work.feature) (5)
@@ -14,6 +15,7 @@ The catalogue of source-code patterns greenlint flags as energy-wasteful, each w
 - **Web assets**: [Flagging heavy front-end asset delivery](code-energy-rules/web-assets/web-asset-delivery.feature) (2)
 
 ## Configuration and Suppression
+
 How a project tunes which rules run, which paths are skipped and which existing findings are accepted.
 
 - **Baselines**: [Accepting existing findings with a baseline](configuration/baselines/baselines.feature) (8)
@@ -21,12 +23,14 @@ How a project tunes which rules run, which paths are skipped and which existing 
 - **Project config file**: [Tuning a scan with .greenlint.toml](configuration/project-config/project-config-file.feature) (8)
 
 ## Developer Tooling and Distribution
+
 Building, packaging, running and demonstrating greenlint outside the core scan.
 
 - **Command-line entry point**: [Running a scan from the command line](developer-tooling/command-line-entry/cli-scan.feature) (6), [Running greenlint from a checkout](developer-tooling/command-line-entry/run-as-python-module.feature) (2)
 - **Container distribution**: [Running greenlint from its container image](developer-tooling/container-distribution/container-image.feature) (3)
 
 ## Infrastructure and CI Checks
+
 Rules that find energy waste in container, cloud, orchestration and pipeline configuration files.
 
 - **CI pipelines and schedules**: [Flagging full-history clones in CI](infrastructure-checks/ci-pipelines/ci-full-history-clones.feature) (4), [Flagging schedules that run every minute](infrastructure-checks/ci-pipelines/every-minute-schedules.feature) (2)
@@ -35,6 +39,7 @@ Rules that find energy waste in container, cloud, orchestration and pipeline con
 - **Workload orchestration**: [Flagging unbounded and non-elastic workloads](infrastructure-checks/workload-orchestration/workload-resource-bounds.feature) (4)
 
 ## Neovim Integration
+
 The greenlint.nvim plugin that runs the CLI from the editor and shows its findings in place.
 
 - **Editor commands**: [Reviewing and managing findings from Neovim](neovim-integration/editor-commands/nvim-editor-commands.feature) (8)
@@ -44,12 +49,14 @@ The greenlint.nvim plugin that runs the CLI from the editor and shows its findin
 - **Scan triggers**: [Scanning files as you edit](neovim-integration/scan-triggers/nvim-scan-triggers.feature) (7)
 
 ## Reporting
+
 What greenlint tells the user after a scan, and in which format.
 
 - **Carbon estimates**: [Rough carbon cost of each finding](reporting/carbon-estimates/carbon-estimates.feature) (3)
 - **Output formats**: [Ordering findings by what is worth fixing first](reporting/output-formats/finding-order.feature) (1)
 
 ## Scanning
+
 How greenlint finds the files to check, works out what language each is, and reads it without being fooled by comments or strings.
 
 - **Comment and string masking**: [Ignoring prose, comments and quoted examples when scanning](scanning/comment-and-string-masking/comment-and-string-masking.feature) (8)

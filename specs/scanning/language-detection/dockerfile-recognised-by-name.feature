@@ -1,6 +1,6 @@
 @domain:scanning @area:language-detection @from:greenlint/base
 Feature: Recognising Dockerfiles and other files by name or extension
-  Lets an operator know which files greenlint treats as Dockerfiles, so container-image checks run on the files they expect and not on look-alikes.
+  Lets an operator know which files greenlint treats as Dockerfiles, so container-image checks run on the files they expect and not on files that merely resemble them.
 
   Background:
     Given a project containing a file whose base image line is "FROM ubuntu:24.04"

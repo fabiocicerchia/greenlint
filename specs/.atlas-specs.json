@@ -2472,7 +2472,7 @@
    "file": "specs/scanning/python-structure-analysis/python-loop-and-scope-judgement.feature",
    "fingerprint": "f5f72aed1e5e",
    "human": false,
-   "rule": "scanning.python-structure.unparseable-file-gets-no-structural-findings",
+   "rule": "scanning.python-structure.unparsable-file-gets-no-structural-findings",
    "source": "greenlint/astindex.py#_parse_python",
    "status": "inferred",
    "test": "",
