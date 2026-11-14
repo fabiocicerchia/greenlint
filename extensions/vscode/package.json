@@ -276,9 +276,9 @@
     "publish": "npx --yes @vscode/vsce@3.9.2 publish --no-dependencies"
   },
   "devDependencies": {
-    "@types/node": "^20.11.30",
-    "@types/vscode": "^1.85.0",
-    "typescript": "^5.4.5",
-    "esbuild": "^0.28.1"
+    "@types/node": "^26.6.6",
+    "@types/vscode": "~1.85.0",
+    "esbuild": "^0.28.2",
+    "typescript": "^7.0.2"
   }
 }
