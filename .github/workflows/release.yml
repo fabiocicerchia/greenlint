@@ -63,6 +63,10 @@ jobs:
           # with GITHUB_TOKEN has failed on every push since #97 merged with
           # "Resource not accessible by integration" on create-a-release, which
           # is the error an app installation token gets. A PAT is not one.
+          # Cutting a release at a commit whose .github/workflows/ differs from
+          # main's also needs the "Workflows" permission, which GITHUB_TOKEN can
+          # never hold — so RELEASE_PLEASE_TOKEN needs Contents, Pull requests
+          # *and* Workflows read/write (classic PAT: `repo` + `workflow`).
           token: ${{ secrets.RELEASE_PLEASE_TOKEN || secrets.GITHUB_TOKEN }}
           skip-github-pull-request: true  # phase 2 opens it, once the tag exists
 
@@ -152,7 +156,9 @@ jobs:
     steps:
       - name: Publish the draft release
         env:
-          GH_TOKEN: ${{ github.token }}
+          # Publishing creates the tag, at the release's commit rather than
+          # main's HEAD — the same Workflows check phase 1 hits, so the same token.
+          GH_TOKEN: ${{ secrets.RELEASE_PLEASE_TOKEN || github.token }}
           GH_REPO: ${{ github.repository }}
           TAG: ${{ needs.release-please.outputs.tag_name }}
         run: gh release edit "$TAG" --draft=false
