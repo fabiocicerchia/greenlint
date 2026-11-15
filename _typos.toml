@@ -2,3 +2,6 @@
 # misspelling of "note".
 [default.extend-words]
 noet = "noet"
+# The certifi package, named in CHANGELOG.md by release-please from commit
+# messages, which the release PR's typos check reads as "certify".
+certifi = "certifi"
