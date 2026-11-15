@@ -1,5 +1,35 @@
 # Changelog
 
+## [0.9.2](https://github.com/fabiocicerchia/greenlint/compare/v0.9.1...v0.9.2) (2026-11-15)
+
+
+### Bug Fixes
+
+* 10 issues found by code-atlas (quality gates) ([#176](https://github.com/fabiocicerchia/greenlint/issues/176)) ([1efd6cc](https://github.com/fabiocicerchia/greenlint/commit/1efd6ccf34193267d1acd8688af694c7cc3e8af4))
+* 3 issues found by code-atlas (ci that cannot fail) ([#187](https://github.com/fabiocicerchia/greenlint/issues/187)) ([15236bd](https://github.com/fabiocicerchia/greenlint/commit/15236bd143f60ce4f9bd591fce7c6340b893460d))
+* 6 issues found by code-atlas (code design) ([#188](https://github.com/fabiocicerchia/greenlint/issues/188)) ([546cd83](https://github.com/fabiocicerchia/greenlint/commit/546cd83a058dd83b33019f9bd813c87da3b8f049))
+* 9 issues found by code-atlas (test suites) ([#189](https://github.com/fabiocicerchia/greenlint/issues/189)) ([71880e3](https://github.com/fabiocicerchia/greenlint/commit/71880e3296d6ae1077bb93a0ca025c0141548d0c))
+* **ci:** keep actions: read on the job that uploads sarif ([#136](https://github.com/fabiocicerchia/greenlint/issues/136)) ([d4c3e1a](https://github.com/fabiocicerchia/greenlint/commit/d4c3e1a508a82933f5f77e34bd21879b2563153a))
+* close the loose ends left by the package split ([#116](https://github.com/fabiocicerchia/greenlint/issues/116)) ([3231e12](https://github.com/fabiocicerchia/greenlint/commit/3231e12299bd24ef6e8afeb4311fdde856660d34))
+* Neovim CI still targets greenlint.py, which the package split removed ([#183](https://github.com/fabiocicerchia/greenlint/issues/183)) ([d493d05](https://github.com/fabiocicerchia/greenlint/commit/d493d05ead63e392ab96d81464ad44a2de16fab6))
+* Node.js 22 reaches end of life on 2027-04-30 ([#185](https://github.com/fabiocicerchia/greenlint/issues/185)) ([0fd7394](https://github.com/fabiocicerchia/greenlint/commit/0fd7394bc1458061628f888a451caf0844ca6ffd))
+* Pay down 7 silenced checks in greenlint/cli.py ([#186](https://github.com/fabiocicerchia/greenlint/issues/186)) ([e773528](https://github.com/fabiocicerchia/greenlint/commit/e7735287de25d073d8cdf3a852c29684f719d503))
+* **release:** cut the release with the same token phase 2 uses ([#138](https://github.com/fabiocicerchia/greenlint/issues/138)) ([07ed78b](https://github.com/fabiocicerchia/greenlint/commit/07ed78bdea4a17a779766ac71d3a9c4d2bddacb3))
+* **release:** grant id-token on the job that calls the signing workflow ([#118](https://github.com/fabiocicerchia/greenlint/issues/118)) ([b78cf44](https://github.com/fabiocicerchia/greenlint/commit/b78cf444736e9774253cc06a5d86b0336558ec11))
+* **release:** let the release PR carry a token that isn't GITHUB_TOKEN ([#121](https://github.com/fabiocicerchia/greenlint/issues/121)) ([e1d091c](https://github.com/fabiocicerchia/greenlint/commit/e1d091c872bee977d23127025c3df5b11bc876db))
+* **release:** publish the draft with the token that can cut it ([#198](https://github.com/fabiocicerchia/greenlint/issues/198)) ([36928b5](https://github.com/fabiocicerchia/greenlint/commit/36928b5513547374322b4db398130ff03c11a228))
+* Update 3 dependencies in pyproject.toml ([#184](https://github.com/fabiocicerchia/greenlint/issues/184)) ([d4f9b41](https://github.com/fabiocicerchia/greenlint/commit/d4f9b41cf8cc891190bb34c6eb82aa32eadea802))
+* Upgrade certifi 2026.7.22 → 2026.10.18 ([#174](https://github.com/fabiocicerchia/greenlint/issues/174)) ([7a5d460](https://github.com/fabiocicerchia/greenlint/commit/7a5d46002ca5bd2fc4f0caacae2aae3f88212dad))
+* Upgrade certifi 2026.7.22 → 2026.10.18 ([#175](https://github.com/fabiocicerchia/greenlint/issues/175)) ([b249d7a](https://github.com/fabiocicerchia/greenlint/commit/b249d7a6ac33eaf8623d00b983da041d7af2fcb4))
+* **vscode:** expect the checkout directory, not greenlint.py ([#137](https://github.com/fabiocicerchia/greenlint/issues/137)) ([bc0f2ed](https://github.com/fabiocicerchia/greenlint/commit/bc0f2ed6953e30b2ee82cd322346d53aebe9861b))
+
+
+### Documentation
+
+* add a Features section to the README ([#122](https://github.com/fabiocicerchia/greenlint/issues/122)) ([f506d96](https://github.com/fabiocicerchia/greenlint/commit/f506d966f1f80c4d713660b175b089085729bc9f))
+* regenerate ARCHITECTURE.md for the package layout ([#119](https://github.com/fabiocicerchia/greenlint/issues/119)) ([87e2446](https://github.com/fabiocicerchia/greenlint/commit/87e24462609f9a97de225b2ad4c9de6cb0b6b076))
+* **todo:** drop the four items that have shipped ([#145](https://github.com/fabiocicerchia/greenlint/issues/145)) ([2c7f545](https://github.com/fabiocicerchia/greenlint/commit/2c7f54567fa7a9b0388d2a83be34b50085917680))
+
 ## [0.9.1](https://github.com/fabiocicerchia/greenlint/compare/v0.9.0...v0.9.1) (2026-09-09)
 
 
